@@ -29,8 +29,17 @@ function sharedTable(name, { ring = false, legends = false, under = false } = {}
   return t.variants[[ring && 'ring', legends && 'legends', under && 'under'].filter(Boolean).join(',')];
 }
 const isTable = e => typeof e[0] === 'string' && e[0].startsWith('~');
-// (an item as the bank counts it: every herb from the herb table is the one Unid herb)
-const banked = (slug, table) => (table === 'randomherb' && SHARED_DROPS.randomherb.bank ? SHARED_DROPS.randomherb.bank : slug);
+// An item as the bank counts it. The herb table's herbs are all "Herb" until
+// they're identified: kept grimy they're the one Unid herb, cleaned (v3.1) each
+// is the herb it turns out to be (a Ranarr weed), with its own chance.
+const banked = (slug, table, opts = {}) => {
+  if (table !== 'randomherb') return slug;
+  const t = SHARED_DROPS.randomherb;
+  if (opts.herbs === 'clean' && t.clean?.[slug]) return t.clean[slug].herb;
+  return t.bank || slug;
+};
+// What identifying a cleaned herb takes and gives: herb -> { unid, level, xp (tenths) }
+export const CLEAN_HERBS = new Map(Object.entries(SHARED_DROPS.randomherb?.clean || {}).map(([unid, c]) => [c.herb, { unid, level: c.level, xp: c.xp }]));
 
 // The amount one entry gives: { mean, m2 } of a number or a range (each whole number as likely)
 function amount(count) {
@@ -55,7 +64,7 @@ function rollOf(table, opts, from, depth = 0) {
     if (!entries.length) continue;
     const row = new Map();          // slug -> { q, m2var, none, one, parts }
     for (const e of entries) {
-      const items = isTable(e) ? rollOf(sharedTable(e[0].slice(1), opts), opts, e[0].slice(1), depth + 1) : single(e, from);
+      const items = isTable(e) ? rollOf(sharedTable(e[0].slice(1), opts), opts, e[0].slice(1), depth + 1) : single(e, from, opts);
       for (const [slug, d] of items) {
         const r = row.get(slug) || { q: 0, varSum: 0, none: 1, one: d.one, parts: [] };
         r.q += d.q;
@@ -78,14 +87,15 @@ function rollOf(table, opts, from, depth = 0) {
   }
   return out;
 }
-function single([slug, count, noted], from) {
+function single([slug, count, noted], from, opts) {
   const a = amount(count);
-  const key = banked(slug, from);
+  const key = banked(slug, from, opts);
   return new Map([[key, { q: a.mean, m2: a.m2, p: 1, one: a.fixed, parts: [{ from, slug, p: 1, count, ...(noted ? { noted: true } : {}) }] }]]);
 }
 
 // ── A kill ──────────────────────────────────────────────────────────────────
-// opts: { ring: a ring of wealth worn, legends: Legends' Quest done }
+// opts: { ring: a ring of wealth worn, legends: Legends' Quest done, herbs: 'clean'
+// for each herb its own item (else the one Unid herb) }
 // Map(slug -> { q, m2, p, one, parts }), most valuable first is up to the caller.
 export function killDrops(monsterId, opts = {}) {
   const info = NPC_INFO[monsterId];
@@ -93,7 +103,7 @@ export function killDrops(monsterId, opts = {}) {
   const t = DROP_TABLES[info.drops];
   const o = { ...opts, under: !!info.under };
   const parts = [];
-  for (const e of t.always || []) parts.push(isTable(e) ? rollOf(sharedTable(e[0].slice(1), o), o, e[0].slice(1)) : single(e, 'always'));
+  for (const e of t.always || []) parts.push(isTable(e) ? rollOf(sharedTable(e[0].slice(1), o), o, e[0].slice(1)) : single(e, 'always', o));
   if (t.rows) parts.push(rollOf(t, o, 'main'));
   if (t.clue) {
     const slug = `clue_scroll_${t.clue[0]}`;
@@ -233,4 +243,44 @@ export function styleOfSkillGoal(skill, styleOpt) {
   if (skill === 'defence') return styleOpt === 'controlled' ? 'controlled' : styleOpt === 'longrange' ? 'longrange' : 'defensive';
   if (skill === 'ranged') return styleOpt === 'longrange' ? 'longrange' : 'rapid';
   return 'accurate';
+}
+
+// ── Kills from XP (v3.1) ────────────────────────────────────────────────────
+// A session's kills, counted from the XP the hiscores show: whatever you fight
+// in, a point of damage is 1.33 Hitpoints XP, so a monster's kills are the
+// Hitpoints XP gained over what a kill of it gives. The XP of the style's own
+// skills says which style it was.
+export const COUNTED_SKILLS = ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic'];
+// XP gained since a mark: { skill: tenths }, only what went up.
+export function xpGained(mark, now) {
+  const out = {};
+  for (const k of COUNTED_SKILLS) {
+    const d = (now?.[k] ?? 0) - (mark?.[k] ?? 0);
+    if (d > 0 && mark?.[k] != null && now?.[k] != null) out[k] = d;
+  }
+  return out;
+}
+// The XP kills come to: rows [{ npc, style, kills }] -> { skill: tenths }
+export function killsXp(rows) {
+  const out = {};
+  for (const r of rows) {
+    if (!(r.kills > 0)) continue;
+    for (const [k, x] of Object.entries(killXp(r.npc, r.style) || {})) if (x > 0) out[k] = (out[k] || 0) + x * r.kills;
+  }
+  return out;
+}
+// How many kills of one monster an amount of Hitpoints XP is (rounded to the nearest).
+export function killsFromHp(npc, style, hp10) {
+  const per = killXp(npc, style)?.hitpoints || 0;
+  return per > 0 ? Math.max(0, Math.round(hp10 / per)) : 0;
+}
+// What's left of the XP gained once these kills are counted: { skill: tenths },
+// negative where they come to more than was gained.
+export function leftOver(gained, rows) {
+  const used = killsXp(rows), out = {};
+  for (const k of new Set([...Object.keys(gained), ...Object.keys(used)])) {
+    const d = (gained[k] || 0) - (used[k] || 0);
+    if (d) out[k] = d;
+  }
+  return out;
 }

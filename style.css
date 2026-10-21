@@ -63,7 +63,13 @@ a { color: var(--top); }
 main { flex: 1; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
+/* (v3.1) Pinned: the tabs stay at the top as the page scrolls. What's scrolled
+   to stops below them (scroll-padding: app.js keeps --top-h to their height). */
+html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -73,7 +79,23 @@ main { flex: 1; }
   background: var(--panel);
   border: 2px solid var(--gold);
   border-radius: 8px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
 }
+/* (a screen too short to give them the room: they scroll away again) */
+@media (max-height: 460px) { .top { position: static; } html { scroll-padding-top: 8px; } }
+/* (a window too narrow for one line: Settings stays up on the name's line, the tabs under them,
+   so what's pinned is a line shorter) */
+@media (max-width: 860px) { .brand { order: -2; } .top-right { order: -1; } }
+/* A tab's icon: 15 by 15, in the round style of the game's map icons (tabicons.png, build-data.mjs) */
+.ti { display: inline-block; width: 15px; height: 15px; margin-right: 5px; vertical-align: -2px; background-image: url('tabicons.png'); background-repeat: no-repeat; image-rendering: pixelated; }
+.ti.ti-lookup { background-position: 0 0; }
+.ti.ti-compare { background-position: -15px 0; }
+.ti.ti-gains { background-position: -30px 0; }
+.ti.ti-leaders { background-position: -45px 0; }
+.ti.ti-goals { background-position: -60px 0; }
+.ti.ti-npcs { background-position: -75px 0; }
+.ti.ti-bank { background-position: -90px 0; }
+.ti.ti-prices { background-position: -105px 0; }
 .brand { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--gold-hi); white-space: nowrap; }
 .brand img { image-rendering: pixelated; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; }
@@ -303,7 +325,7 @@ form.inline { display: inline-flex; gap: 4px; }
 .ico-thieving { background-image: url('thieving.webp'); }
 .ico-runecraft { background-image: url('runecraft.webp'); }
 .ico-combat { background-image: url('combat.webp'); }
-/* Slayer: Planner+'s own skull (the skill isn't in this version of the game yet) */
+/* Slayer: the skill's icon as the game drew it in 2005 (staticons2, build-data.mjs). It isn't in this version of the game yet */
 .ico-slayer { background-image: url('slayer.webp'); }
 .tile .ico { margin-bottom: 1px; }
 .tile .v { white-space: nowrap; }
@@ -571,23 +593,32 @@ table.plan-t .catch { color: var(--gold-hi); cursor: help; }
 .bank-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; color: var(--muted); }
 .bank-sum b { color: #fff; font-weight: normal; }
 .bank-group h4 { margin: 0 0 6px; font-weight: normal; font-size: 15px; color: var(--gold-hi); }
-.bank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 4px; }
+/* (v3.1) Eight to a row, as the bank has them in the game; fewer where the window is narrow */
+.bank-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+@media (max-width: 880px) { .bank-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 660px) { .bank-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 400px) { .bank-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .bank-cell {
   display: grid;
-  grid-template-columns: 32px 1fr;
+  grid-template-columns: 32px minmax(0, 1fr);
   grid-template-rows: auto auto auto;
-  column-gap: 6px;
+  column-gap: 4px;
+  row-gap: 1px;
   align-items: center;
-  padding: 3px 5px;
+  padding: 3px 4px;
   background: var(--tex) repeat;
   background-size: cover;
   border: 1px solid var(--gold-dim);
   border-radius: 3px;
+  min-width: 0;
 }
-.bank-cell .item { grid-row: 1 / span 3; }
-.bank-cell .bn { font-family: var(--small); font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bank-cell .input { width: 100%; max-width: 92px; }
-.bank-cell .bv { grid-column: 2; font-family: var(--small); font-size: 12px; color: var(--faint); min-height: 0; }
+.bank-cell .item { grid-row: 1 / span 2; }
+.bank-cell .bn { font-family: var(--small); font-size: 13px; line-height: 1.1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bank-cell .input { width: 100%; min-width: 0; padding: 2px 4px; }
+/* what one is worth, and what yours come to: below, side by side */
+.bank-cell .bvals { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 6px; min-height: 17px; font-family: var(--small); font-size: 14px; line-height: 1.2; }
+.bank-cell .bp { color: var(--muted); white-space: nowrap; }
+.bank-cell .bv { color: var(--xp); white-space: nowrap; margin-left: auto; }
 .bank-cell.has { border-color: var(--gold); }
 .bank-cell.has .bn { color: var(--text); }
 .bank-all-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 6px; }
@@ -672,7 +703,6 @@ a.it-chip.mk:hover b { text-decoration: underline; }
   .stats-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
   .pc-combat { margin-left: 0; }
   .tab-sep { display: none; }
-  .bank-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   table.prices-t th:nth-child(1) { width: 31%; }
   table.prices-t th:nth-child(2) { width: 27%; }
   table.prices-t th:nth-child(3) { width: 18%; }
@@ -735,6 +765,9 @@ table.xp-t td { padding: 3px 10px 3px 6px; }
 table.loot-t td, table.loot-t th { padding: 3px 6px; }
 table.loot-t .sep-l { border-left: 1px solid #000; }
 table.loot-t td.got { white-space: nowrap; }
+/* (v3.1: room for Actual value after Luck) */
+table.loot-t th.wrap { min-width: 0; }
+table.loot-t td.luck { white-space: normal; min-width: 120px; max-width: 180px; line-height: 1.2; }
 .got-box { display: inline-flex; align-items: center; gap: 2px; }
 .got-box .input.num { width: 72px; text-align: right; }
 .got-box .mv { width: 20px; height: 22px; }
@@ -755,3 +788,38 @@ table.loot-t td.got { white-space: nowrap; }
 /* (narrow windows: a list of drops or styles never makes the page wider) */
 .slayer-plan select, .npc-db select, .npc-page select { max-width: 100%; min-width: 0; }
 .dry-out { overflow-wrap: anywhere; }
+
+/* ── v3.1 ───────────────────────────────────────────────────────────────── */
+/* Bank and Prices: Other, every item no skill's tab lists */
+.other-tab { padding-left: 6px; }
+.bank-add { margin: 0 0 8px; }
+.bank-add .add-in { width: 260px; max-width: 100%; }
+.bank-add .input.num { width: 96px; }
+/* Total level goal: its plan's table of every skill */
+table.total-t td, table.total-t th { padding: 3px 8px; }
+table.total-t tr.off td:not(.c) { opacity: 0.5; }
+table.loot-t tr.off td:not(.c) { opacity: 0.5; }
+/* A Slayer goal's plan: what it says it just did (with Undo), what's alched, what you bring, a deposit */
+.slayer-msg, .session-msg { margin: 4px 0 6px; }
+.alch-tag { margin-left: 4px; padding: 0 4px; border: 1px solid var(--gold-dim); border-radius: 3px; font-family: var(--small); font-size: 12px; color: var(--gold-hi); white-space: nowrap; }
+.alch-line { margin-top: 3px; }
+.alch-line .check { display: inline-flex; margin-left: 6px; }
+.bring-line { margin: 6px 0 4px; }
+.bring-edit, .deposit-edit { margin-top: 8px; border-style: dashed; }
+.bring-edit .input.num, .deposit-edit .input.num, .loot-shots .shot-row .input.num { width: 80px; text-align: right; }
+.deposit-edit .shot-row, .loot-shots .shot-row, .bring-edit .shot-row { cursor: default; }
+.loot-one { display: inline-flex; margin: 0 0 4px; font-family: var(--small); font-size: 13px; }
+/* Kills counted from XP: the box above your goals */
+.session { border-color: var(--gold); }
+.session .bar { margin: 0; }
+.session.open { border-style: dashed; }
+.ses-rows { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
+.ses-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 3px 6px; border-radius: 3px; }
+.ses-row.rest { background: rgba(240, 196, 25, 0.07); box-shadow: inset 2px 0 0 var(--gold-dim); }
+.ses-row .input.num { width: 84px; text-align: right; }
+.ses-name { min-width: 220px; color: var(--text); }
+.ses-name .npc-in { width: 220px; }
+.rest-tag { padding: 0 4px; border: 1px solid var(--gold-dim); border-radius: 3px; font-family: var(--small); font-size: 12px; color: var(--gold-hi); white-space: nowrap; }
+.ses-left { margin: 4px 0 6px; font-family: var(--small); font-size: 13px; color: var(--muted); }
+.ses-left select { max-width: 100%; }
+@media (max-width: 520px) { .ses-name, .ses-name .npc-in { min-width: 0; width: 100%; } }

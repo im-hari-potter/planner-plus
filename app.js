@@ -14,7 +14,7 @@ import { Prices, LIVE_MARKET } from './prices.js';
 import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 
-const VERSION = '3.0.0';
+const VERSION = '3.1.0';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -441,7 +441,7 @@ function tileHtml(skill, stat, bounds) {
     <div class="v c-rank">Rank: ${fmt(stat.rank)}</div>
     ${topHtml}
     ${tail}
-    ${skill.id !== 0 ? planner.tileGoal(state.lookup.profile, skill) : ''}
+    ${planner.tileGoal(state.lookup.profile, skill)}
   </div>`;
 }
 
@@ -1361,6 +1361,10 @@ function afterRoute() {
 // ── Start ────────────────────────────────────────────────────────────────
 function start() {
   wire();
+  // (v3.1) The tabs are pinned to the top: what's scrolled to stops below them (style.css, scroll-padding-top).
+  const top = document.querySelector('.top');
+  const topHeight = () => document.documentElement.style.setProperty('--top-h', `${top.offsetHeight}px`);
+  if (top) { topHeight(); if (typeof ResizeObserver === 'function') new ResizeObserver(topHeight).observe(top); }
   if (location.hash.length > 1) applyHash();
   render();
   // (the Lookup tab, with no player in the address: the last one looked up)

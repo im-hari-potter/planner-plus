@@ -215,6 +215,8 @@ test('unid herbs saved one kind at a time (v2.0.0) become one Unid herb amount',
   const old = { unidentified_guam: 5, unidentified_ranarr: 100, unidentified_torstol: 3, ranarr_weed: 7 };
   assert.deepEqual(mergeUnids(old), { changed: true, items: { unidentified_guam: 108, ranarr_weed: 7 } });
   assert.deepEqual(mergeUnids({ ranarr_weed: 7 }), { changed: false, items: { ranarr_weed: 7 } });
+  // (v3.1: a quest's unidentified herb or chemical powder is an item of its own, not an unid herb)
+  assert.deepEqual(mergeUnids({ unidentified_guam: 5, unidentified_ardrigal: 2, unidentified_powder: 1 }), { changed: false, items: { unidentified_guam: 5, unidentified_ardrigal: 2, unidentified_powder: 1 } });
 });
 
 test('unfinished potions and empty vials in the bank count', () => {

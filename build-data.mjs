@@ -78,6 +78,8 @@ const serverCost = name => {
   return b.props.cost != null ? Number(b.props.cost) : 1;
 };
 const valueNotes = [];
+// (v3.1) The few quest items High Level Alchemy refuses: param no_alchemy (the spell's is_alchable)
+const noAlchemy = name => { const v = SERVER_OBJ.get(name)?.params?.no_alchemy; return v != null && !['0', 'no', 'false'].includes(v); };
 
 // ── Herblore ───────────────────────────────────────────────────────────────
 const methods = [];
@@ -89,6 +91,7 @@ const fixedPrices = {};      // item -> gp it's always worth (coins)
 const virtualItems = {};     // those items: slug -> { id, name, cost, iconOf, parts }
 const unidHerbs = {};        // the one entry every unidentified herb is counted under
 const herbOfUnid = new Map(); // unidentified herb -> the clean herb it turns out to be (v3: the herb table's names)
+const identifyOf = new Map(); // clean herb -> { level, xp (tenths) }: what identifying one takes and gives (v3.1: monsters' herbs, cleaned)
 const unchargedOf = {};      // a charged item -> the same thing with no charges left, a bank item of its own (an amulet of glory)
 
 async function herblore() {
@@ -119,6 +122,13 @@ async function herblore() {
   const unidOf = new Map();
   for (const m of identify.matchAll(/\[opheld1,(\w+)\]\s*~attempt_identify_herb\((\w+)/g)) unidOf.set(m[2], m[1]);
   for (const [herb, unid] of unidOf) herbOfUnid.set(unid, herb);
+  // (what identifying each takes and gives: the server's params, with their defaults)
+  const idParams = await readConfig(scripts('skill_herblore/configs/identifying/identify.param'));
+  const idDefault = k => Number(idParams.get(k)?.props.default ?? 0);
+  for (const herb of unidOf.keys()) {
+    const b = herbs.get(herb);
+    if (b) identifyOf.set(herb, { level: Number(b.params.identified_herb_level ?? idDefault('identified_herb_level')), xp: Number(b.params.identified_herb_exp ?? idDefault('identified_herb_exp')) });
+  }
 
   // Grinding (no level, no XP; needs a pestle and mortar)
   const grind = new Map();
@@ -3482,6 +3492,13 @@ async function npcLoot() {
   // (the herb table's herbs are all "Herb" until identified: counted as the one Unid herb, named by what they turn out to be)
   shared.randomherb.bank = unidHerbs.item;
   shared.randomherb.herbs = Object.fromEntries(shared.randomherb.rows.flatMap(([, ds]) => ds).filter(([o]) => herbOfUnid.has(o)).map(([o]) => [o, ITEM.get(herbOfUnid.get(o)).name]));
+  // (v3.1) Cleaned: each herb its own item, with the Herblore level and XP identifying it takes and gives
+  shared.randomherb.clean = Object.fromEntries(Object.keys(shared.randomherb.herbs).map(o => {
+    const herb = herbOfUnid.get(o), id = identifyOf.get(herb);
+    if (!id) throw new Error(`npc loot: no identify data for ${herb}`);
+    dropItems.add(need(herb));
+    return [o, { herb, ...id }];
+  }));
   // Checked against LostHQ's shared tables (which say the talisman in words, and leave Legends' Quest out)
   const lhqShared = JSON.parse(await readFile(join(LOSTHQ, 'js/npcdb/shared_drops.json'), 'utf8'));
   const fractions = (t, base) => {
@@ -3591,7 +3608,8 @@ async function npcLoot() {
     if (wear === 'weapon') return 'Weapons';
     if (wear === 'neck' || wear === 'ring' || /^uncut_|^(sapphire|emerald|ruby|diamond|dragonstone|opal|jade|red_topaz)$/.test(slug) || /^keyhalf|crystal_key|oyster/.test(slug)) return 'Gems, jewellery and keys';
     if (wear || slug === 'dragonshield_a') return 'Armour';
-    if (slug === unidHerbs.item || /^unidentified_|^vial|horn_dust$/.test(slug) || ['limpwurt_root', 'snape_grass', 'white_berries', 'eye_of_newt', 'unicorn_horn', 'red_spiders_eggs', 'wine_of_zamorak', 'jangerberries'].includes(slug)) return 'Herbs and secondaries';
+    // (v3.1: the herb table's herbs cleaned, each its own herb)
+    if (slug === unidHerbs.item || identifyOf.has(slug) || /^unidentified_|^vial|horn_dust$/.test(slug) || ['limpwurt_root', 'snape_grass', 'white_berries', 'eye_of_newt', 'unicorn_horn', 'red_spiders_eggs', 'wine_of_zamorak', 'jangerberries'].includes(slug)) return 'Herbs and secondaries';
     if (/_ore$|_bar$|^coal$/.test(slug)) return 'Ores and bars';
     if (iops.includes('Bury') || /bones|^ashes$/.test(slug) || /hide|fur$/.test(slug)) return 'Bones and hides';
     if (iops.includes('Eat') || iops.includes('Drink') || /dose|potion|poison$|^raw_|^burnt_|_dough$|^egg$|^grain$|^pot_flour$|berries$/.test(slug)) return 'Food and potions';
@@ -3700,6 +3718,70 @@ const stamped = async (file, png) => {
 const iconSheet = await stamped('items.png', await sharp(atlas, { raw: { width: PER_ROW * SIZE, height: rows * SIZE, channels: 4 } })
   .png({ compressionLevel: 9, palette: false }).toBuffer());
 
+// ── Every other item (v3.1) ───────────────────────────────────────────────
+// A bank screenshot is read for every item there is, not only what the planner
+// uses: each one is kept in your bank and priced (the market's, high alch or
+// yours). Not banknotes (a bank holds the item itself), not the dummy items
+// interfaces use, nor what has no name, no icon or no config on the server.
+// Items that look exactly alike and have one name are one entry: every "Clue
+// scroll" (188 trail clues) is one, and an item that looks like one of the
+// planner's under the same name is that one (the other "Bones"). With the same
+// look and another name, each is its own item, and the screenshot review asks
+// which a stack is. Their icons are a second sheet (items-more.png), which a page
+// only loads once it shows one of them.
+const iconPx = id => {
+  const sx = (id % 64) * SIZE, sy = Math.floor(id / 64) * SIZE, px = Buffer.alloc(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y++) sheet.copy(px, y * SIZE * 4, ((sy + y) * sheetMeta.width + sx) * 4, ((sy + y) * sheetMeta.width + sx + SIZE) * 4);
+  return px;
+};
+const hasOutline = px => { let n = 0; for (let i = 0; i < SIZE * SIZE; i++) if (px[i * 4 + 3] && !px[i * 4] && !px[i * 4 + 1] && px[i * 4 + 2] === 1) n++; return n >= 8; };
+const sheetCells = (sheetMeta.width / SIZE) * (sheetMeta.height / SIZE);
+const lookKey = (id, name) => `${iconPx(id).toString('base64')}|${name}`;
+// (the scrolls the clues a kill can give borrow their icon from: not bank items themselves)
+const clueReps = new Set(Object.values(clueItems).map(([rep]) => rep));
+// (a planner item's look, under the game's name and under the planner's, and the icons its bigger stacks switch
+// to: another item that looks the same and has that name is that item, as far as a bank shows: "Coins" that
+// look like a stack of 25 are coins)
+const takenLooks = new Set();
+for (const n of names) {
+  if (clueReps.has(n)) continue;
+  for (const name of new Set([ITEM.get(n).name, nameOverride[n] || ITEM.get(n).name])) takenLooks.add(lookKey(ITEM.get(n).id, name));
+}
+for (const b of SERVER_OBJ.values()) {
+  if (!names.includes(b.name)) continue;
+  for (const [k, v] of Object.entries(b.props)) if (/^count\d+$/.test(k) && ITEM.has(v.split(',')[0])) takenLooks.add(lookKey(ITEM.get(v.split(',')[0]).id, ITEM.get(b.name).name));
+}
+// (an icon a bigger stack switches to, coins_25 or bolt2, is that item's, not an item: from every obj's countN)
+const stackIcons = new Set([...SERVER_OBJ.values()].flatMap(b => Object.entries(b.props).filter(([k]) => /^count\d+$/.test(k)).map(([, v]) => v.split(',')[0])));
+const extras = [];
+{
+  const looks = new Map();                  // a look and a name -> the item that stands for them
+  for (const it of [...itemList].sort((a, b) => a.id - b.id)) {
+    const slug = it.debugname;
+    if (used.has(slug) || stackIcons.has(slug) || slug.startsWith('cert_') || it.dummyitem || !it.name || it.name === 'null') continue;
+    // (every unidentified herb is "Herb" in-game: the one Unid herb, whatever its icon, as before)
+    if (slug.startsWith('unidentified_') && it.name === ITEM.get(unidHerbs.item).name) continue;
+    const cfg = SERVER_OBJ.get(slug);
+    if (!cfg || cfg.props.certtemplate || it.id >= sheetCells) continue;
+    if (!hasOutline(iconPx(it.id))) continue;
+    const key = lookKey(it.id, it.name);
+    if (takenLooks.has(key) || looks.has(key)) continue;
+    looks.set(key, slug);
+    extras.push(slug);
+  }
+}
+const moreRows = Math.ceil(extras.length / PER_ROW);
+const moreAtlas = Buffer.alloc(PER_ROW * SIZE * moreRows * SIZE * 4);
+extras.forEach((slug, n) => {
+  const px = iconPx(ITEM.get(slug).id), dx = (n % PER_ROW) * SIZE, dy = Math.floor(n / PER_ROW) * SIZE;
+  for (let y = 0; y < SIZE; y++) px.copy(moreAtlas, ((dy + y) * PER_ROW * SIZE + dx) * 4, y * SIZE * 4, (y + 1) * SIZE * 4);
+});
+const moreSheet = await stamped('items-more.png', await sharp(moreAtlas, { raw: { width: PER_ROW * SIZE, height: moreRows * SIZE, channels: 4 } })
+  .png({ compressionLevel: 9, palette: false }).toBuffer());
+for (const slug of extras) banked.add(slug);
+// (and every item of the planner's: up to v3.0 not what only Thieving and Agility name, nor tools)
+for (const slug of names) if (!clueReps.has(slug)) banked.add(slug);
+
 // ── gamedata.js ────────────────────────────────────────────────────────────
 const items = {};
 names.forEach((name, n) => {
@@ -3715,6 +3797,7 @@ names.forEach((name, n) => {
     })(),
     ...(i.members ? { members: 1 } : {}),
     ...(i.tradeable === true ? {} : { untradeable: 1 }),
+    ...(noAlchemy(name) ? { noAlch: 1 } : {}),
     ...(fixedPrices[name] != null ? { gp: fixedPrices[name] } : {}),
     icon: n,
   };
@@ -3751,6 +3834,46 @@ for (const [slug, [rep, name]] of Object.entries(clueItems)) {
 // item you hold, so it's worth nothing and never bought. Plans count the ring.
 for (const [slug, v] of Object.entries(chargeItems)) {
   items[slug] = { id: v.id, name: v.name, cost: 0, members: 1, icon: items[v.of].icon, gp: 0, charge: { of: v.of, per: v.per } };
+}
+// (v3.1) Every other item: its own name, where another item has it too (a
+// planner item's stays as it is): what tells them apart in the name behind it
+// ("gnome_boots_pink": "Boots (gnome pink)"), else its id.
+{
+  extras.forEach((slug, n) => {
+    const i = ITEM.get(slug), cfg = SERVER_OBJ.get(slug).props;
+    items[slug] = {
+      id: i.id, name: i.name, cost: serverCost(slug),
+      ...(cfg.members === 'yes' ? { members: 1 } : {}),
+      ...(cfg.tradeable === 'no' || cfg.tradeable === 'false' ? { untradeable: 1 } : {}),
+      ...(noAlchemy(slug) ? { noAlch: 1 } : {}),
+      icon: n, more: 1,
+    };
+  });
+  const byName = new Map();
+  for (const [slug, it] of Object.entries(items)) if (!/^coins(_\d+)?$/.test(slug)) byName.set(it.name, [...(byName.get(it.name) || []), slug]);
+  const tokens = slug => slug.split(/[_\d]+/).filter(Boolean);
+  for (const [name, slugs] of byName) {
+    const mine = slugs.filter(s => items[s].more);
+    if (slugs.length < 2 || !mine.length) continue;
+    const words = new Set(name.toLowerCase().split(/[^a-z]+/));
+    const common = tokens(slugs[0]).filter(t => slugs.every(s => tokens(s).includes(t)));
+    for (const slug of mine) {
+      // (a word of the name inside a part comes off it: "whitecog" is the white cog)
+      const tag = tokens(slug).filter(t => !common.includes(t)).map(t => {
+        let x = t.toLowerCase();
+        for (const w of words) if (w.length > 2 && x !== w) { if (x.endsWith(w)) x = x.slice(0, -w.length); else if (x.startsWith(w)) x = x.slice(w.length); }
+        return x;
+      }).filter(x => x && !words.has(x)).join(' ');
+      items[slug].name = `${name} (${tag || `#${items[slug].id}`})`;
+    }
+  }
+  // (and where that still leaves two alike: the id)
+  const seenNames = new Map();
+  for (const [slug, it] of Object.entries(items)) {
+    if (/^coins(_\d+)?$/.test(slug)) continue;
+    if (seenNames.has(it.name) && it.more) it.name = `${it.name.replace(/\)$/, '')}${it.name.endsWith(')') ? ', ' : ' ('}#${it.id})`;
+    seenNames.set(it.name, slug);
+  }
 }
 
 const out = `// Generated by build-data.mjs. Do not edit by hand; change the script and re-run it.
@@ -3828,6 +3951,9 @@ export const ICONS_PER_ROW = ${PER_ROW};
 // The icon sheet these positions are for: its address, with a stamp of its
 // contents, so a browser never pairs them with a sheet from another release.
 export const ICON_SHEET = ${JSON.stringify(iconSheet)};
+// The second sheet: every item the planner doesn't use itself (more: 1 in ITEMS), in
+// the bank and on the Prices tab. Loaded only when one of them is shown.
+export const ICON_SHEET_MORE = ${JSON.stringify(moreSheet)};
 
 export const ITEMS = ${JSON.stringify(items, null, 0).replace(/\},"/g, '},\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}')};
 
@@ -4078,8 +4204,22 @@ async function bankScreenshots() {
   // An amulet of glory with no charges left looks the same again: it's the next
   // guess, before the plain dragonstone amulet.
   const enchantedFirst = methods.filter(m => m.id.startsWith('cr_ench_')).map(m => Object.keys(m.out)[0]).flatMap(k => (unchargedOf[k] ? [k, unchargedOf[k]] : [k]));
-  for (const name of [...enchantedFirst, ...names.filter(n => skillBanked.has(n)), ...names.filter(n => !skillBanked.has(n))]) if (banked.has(name)) add(name);
+  // (v3.1: then every other item, the tradeable ones first)
+  const others = [...extras].sort((x, y) => Number(!!items[x].untradeable) - Number(!!items[y].untradeable) || items[x].id - items[y].id);
+  // (an icon a bigger stack switches to is read as that item, not as itself: coins_25 is coins. And every
+  // unidentified herb is "Herb", the one Unid herb, whatever else it's in the data for)
+  const unidName = ITEM.get(unidHerbs.item).name;
+  const asItself = n => banked.has(n) && !variants.has(n) && !(n !== unidHerbs.item && n.startsWith('unidentified_') && ITEM.get(n).name === unidName);
+  for (const name of [...enchantedFirst, ...names.filter(n => skillBanked.has(n)), ...names.filter(n => !skillBanked.has(n)), ...others]) if (asItself(name)) add(name);
   for (const [v, base] of variants) add(v, { of: base });
+  // (every other "Herb", whatever its icon: the one Unid herb)
+  for (const it of itemList) if (it.debugname !== unidHerbs.item && it.debugname.startsWith('unidentified_') && it.name === unidName) add(it.debugname, { of: unidHerbs.item });
+  // (v3.1) A drop that comes noted is read as its item in an inventory: the banknote's icon.
+  const noted = new Set();
+  const look = rows => { for (const [, ds] of rows || []) for (const d of ds) if (d[2] === 'noted') noted.add(d[0]); };
+  for (const t of Object.values(npcData.tables)) { look(t.rows); for (const d of t.always || []) if (d[2] === 'noted') noted.add(d[0]); }
+  for (const t of Object.values(npcData.shared)) { look(t.rows); for (const v of Object.values(t.variants || {})) look(v.rows); }
+  for (const slug of noted) if (ITEM.has(`cert_${slug}`) && banked.has(slug)) add(`cert_${slug}`, { of: slug });
   const ours = new Set(entries.map(x => x.e.slug));
   for (const { px } of [...entries]) {
     for (const other of byOutline.get(outlineOf(px)) || []) {
@@ -4127,3 +4267,174 @@ ${entries.map(({ e }) => '  ' + JSON.stringify(e)).join(',\n')},
 }
 
 await bankScreenshots();
+
+// ── The app's own icons (v3.1) ─────────────────────────────────────────────
+// slayer.webp: the game's own Slayer icon, a skull with a dagger through it. It's
+// on the skills tab's second sheet (sprites/staticons2.png, after Runecraft's) in
+// rev 274 already, though that skills tab only shows it from rev 377 on (Slayer
+// came in 2005). Drawn the way the client draws it, like the other skills' icons:
+// magenta is nothing, and black is the client's near black (1).
+// tabicons.png: an icon for each tab, in the round style of the game's map icons
+// (sprites/mapfunction.png): the bank's own "$" and a sword from those, and the
+// rest drawn here on the same frame (a magnifying glass, scales, an arrow, a
+// trophy, a target, gold).
+async function appIcons() {
+  const cellOf = async (sheet, size, index) => {
+    const cell = (await readFile(join(CONTENT, `sprites/meta/${sheet}.opt`), 'ascii')).trim();
+    if (cell !== `${size}x${size}`) throw new Error(`sprites/${sheet}.png is in cells of ${cell} now, not ${size}x${size}`);
+    const { data, info } = await sharp(join(CONTENT, `sprites/${sheet}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const perRow = info.width / size, sx = (index % perRow) * size, sy = Math.floor(index / perRow) * size;
+    const px = Buffer.alloc(size * size * 4);
+    let drawn = 0;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const f = ((sy + y) * info.width + sx + x) * 4, t = (y * size + x) * 4;
+      if (data[f] === 0xff && data[f + 1] === 0 && data[f + 2] === 0xff) continue;
+      px[t] = data[f]; px[t + 1] = data[f + 1]; px[t + 2] = data[f + 2] || (data[f] || data[f + 1] ? 0 : 1); px[t + 3] = 0xff;
+      drawn++;
+    }
+    if (drawn < 30) throw new Error(`sprites/${sheet}.png: icon ${index} is empty`);
+    return px;
+  };
+  const slayer = await cellOf('staticons2', 25, 1);
+  await writeFile('slayer.webp', await sharp(slayer, { raw: { width: 25, height: 25, channels: 4 } }).webp({ lossless: true }).toBuffer());
+
+  const W = 15;
+  const bank = await cellOf('mapfunction', W, 5), sword = await cellOf('mapfunction', W, 1);
+  // (the bank's "$" is gold on the frame: the frame is its black ring, light grey inside)
+  const frame = Buffer.alloc(W * W * 4);
+  for (let i = 0; i < W * W; i++) {
+    if (!bank[i * 4 + 3]) continue;
+    const ring = !bank[i * 4] && !bank[i * 4 + 1] && bank[i * 4 + 2] === 1;
+    frame.set(ring ? [0, 0, 1, 255] : [191, 191, 191, 255], i * 4);
+  }
+  if ([...bank].filter((v, i) => i % 4 === 0 && v === 232).length < 10) throw new Error('sprites/mapfunction.png: icon 5 is no longer the bank\'s');
+  const PAL = {
+    k: [36, 30, 24], w: [255, 255, 255], l: [176, 216, 240], L: [104, 156, 206],
+    h: [140, 88, 36], H: [92, 54, 20],
+    y: [232, 209, 78], g: [176, 159, 65], d: [117, 100, 3],
+    r: [214, 36, 36], R: [128, 12, 12], G: [72, 182, 64], D: [22, 98, 22], s: [150, 150, 150],
+    m: [120, 120, 128], M: [78, 78, 86],
+  };
+  const draw = rows => {
+    const px = Buffer.from(frame);
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      const at = (y * W + x) * 4;
+      if (!frame[at + 3] || !frame[at]) throw new Error(`tab icons: a pixel on the frame or outside it at ${x},${y}`);
+      px.set([...PAL[ch], 255], at);
+    }));
+    return px;
+  };
+  const ICONS = {
+    lookup: draw([
+      '...............',
+      '...............',
+      '....kkkk.......',
+      '...kwwllk......',
+      '..kwllllLk.....',
+      '..kwllllLk.....',
+      '..klllllLk.....',
+      '..kLlllLLk.....',
+      '...kLLLLkhk....',
+      '....kkkkhhHk...',
+      '........khhHk..',
+      '.........khHk..',
+      '..........kk...',
+      '...............',
+      '...............',
+    ]),
+    compare: draw([
+      '...............',
+      '...............',
+      '.......k.......',
+      '......kyk......',
+      '...kkkkgkkkk...',
+      '...k...g...k...',
+      '..k.k..g..k.k..',
+      '.k...k.g.k...k.',
+      '.kyyyk.g.kyyyk.',
+      '..kgk..g..kgk..',
+      '...k...g...k...',
+      '......kgk......',
+      '.....kdddk.....',
+      '...............',
+      '...............',
+    ]),
+    gains: draw([
+      '...............',
+      '...............',
+      '.......k.......',
+      '......kGk......',
+      '.....kGGGk.....',
+      '....kGGGGGk....',
+      '...kGGGGGGDk...',
+      '...kkkGGGDkkk..',
+      '.....kGGGDk....',
+      '.....kGGGDk....',
+      '.....kGGGDk....',
+      '.....kGGDDk....',
+      '.....kkkkkk....',
+      '...............',
+      '...............',
+    ]),
+    leaders: draw([
+      '...............',
+      '...............',
+      '...............',
+      '...kkkkkkkkk...',
+      '..kkwyyyyygkk..',
+      '.k.kwyyyyygk.k.',
+      '.k.kyyyyyygk.k.',
+      '..kkyyyyyygkk..',
+      '...kkyyyyyykk..',
+      '.....kyyyk.....',
+      '......kgk......',
+      '.....kyygk.....',
+      '....kkkkkkk....',
+      '...............',
+      '...............',
+    ]),
+    goals: draw([
+      '...............',
+      '...............',
+      '.....kkkkk.....',
+      '....kRrrrRk....',
+      '...kRwwwwwRk...',
+      '..kRwrrrrrwRk..',
+      '..krwrwwwrwrk..',
+      '..krwrwRwrwrk..',
+      '..krwrwwwrwrk..',
+      '..kRwrrrrrwRk..',
+      '...kRwwwwwRk...',
+      '....kRrrrRk....',
+      '.....kkkkk.....',
+      '...............',
+      '...............',
+    ]),
+    npcs: sword,
+    bank,
+    prices: draw([
+      '...............',
+      '...............',
+      '...............',
+      '......kkkk.....',
+      '.....kyyyyk....',
+      '.....kgyydk....',
+      '...kkkkkkkkk...',
+      '..kyyyykyyyyk..',
+      '..kgyydkgyydk..',
+      '..kkkkkkkkkkk..',
+      '..kyyyykyyyyk..',
+      '..kgyydkgyydk..',
+      '...kkkkkkkkk...',
+      '...............',
+      '...............',
+    ]),
+  };
+  const names = Object.keys(ICONS);
+  const sheet = Buffer.alloc(names.length * W * W * 4);
+  names.forEach((n, k) => { for (let y = 0; y < W; y++) ICONS[n].copy(sheet, (y * names.length * W + k * W) * 4, y * W * 4, (y + 1) * W * 4); });
+  await writeFile('tabicons.png', await sharp(sheet, { raw: { width: names.length * W, height: W, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer());
+  console.log(`slayer.webp: the game's Slayer icon (staticons2 #1); tabicons.png: ${names.join(', ')} (${W}px)`);
+}
+await appIcons();

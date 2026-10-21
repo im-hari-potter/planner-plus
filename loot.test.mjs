@@ -4,7 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DROP_TABLES, SHARED_DROPS, NPC_INFO } from './npcdata.js';
-import { killDrops, killValue, killXp, atLeastOne, dryChance, killsFor, luck, binomCdf, rateText, styleOfSkillGoal, MONSTER_BY_ID } from './loot.js';
+import { killDrops, killValue, killXp, atLeastOne, dryChance, killsFor, luck, binomCdf, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, xpGained, killsXp, killsFromHp, leftOver } from './loot.js';
+import { cheapestLevels, xpForLevel } from './skills.js';
 
 const close = (a, b, tol = 1e-12, what = '') => assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${what} ${a} vs ${b}`);
 
@@ -183,4 +184,73 @@ test('loot: dryness in words: the drop rate, and how many players go that dry (O
   assert.deepEqual([chanceText(0.2084), chanceText(0.05), chanceText(0.0043), chanceText(1e-14), chanceText(0.99999998), chanceText(0.9996)], ['21%', '5%', '0.43%', 'under 0.0001%', '99.999998%', '99.96%']);
   assert.deepEqual([oneIn(0.2084), oneIn(0.0043), oneIn(0.6)], ['about 1 in 4.8', 'about 1 in 233', null]);
   assert.deepEqual(['at_fire_giant_86', 'rg_man_2', 'hp_kalphite_queen_333', 'cr_gold_ring'].map(monsterOfMethod), ['fire_giant_86', 'man_2', 'kalphite_queen_333', null]);
+});
+
+test('loot (v3.1): herbs cleaned: each herb its own chance, the herb table\'s weights; grimy, the one Unid herb as before', () => {
+  const grimy = killDrops('fire_giant_86');
+  const clean = killDrops('fire_giant_86', { herbs: 'clean' });
+  assert.equal(clean.has('unidentified_guam'), false);
+  // the fire giant rolls the herb table on 19 rows of its 128 (and a herb is always what that table gives)
+  const t = SHARED_DROPS.randomherb;
+  let sum = 0;
+  for (const [w, [[unid]]] of t.rows) {
+    const c = t.clean[unid];
+    close(clean.get(c.herb).p, (19 / 128) * (w / t.of), 1e-12, c.herb);
+    sum += clean.get(c.herb).q;
+  }
+  close(sum, grimy.get('unidentified_guam').q);
+  close(clean.get('ranarr_weed').p, (19 / 128) * (11 / 128));
+  assert.equal(rateText(clean.get('ranarr_weed').p), '209/16,384');
+  // what identifying takes and gives: the server's params (Guam leaf: level 3, the default; Ranarr 25)
+  assert.deepEqual(CLEAN_HERBS.get('guam_leaf'), { unid: 'unidentified_guam', level: 3, xp: 25 });
+  assert.equal(CLEAN_HERBS.get('ranarr_weed').unid, 'unidentified_ranarr');
+  assert.ok(CLEAN_HERBS.get('ranarr_weed').level > CLEAN_HERBS.get('guam_leaf').level);
+  assert.equal(CLEAN_HERBS.size, 11);
+  // everything else is the same either way
+  for (const [slug, d] of grimy) if (slug !== 'unidentified_guam') { close(clean.get(slug).q, d.q); close(clean.get(slug).p, d.p); }
+  // a chaos druid's row of two herb rolls: two of one herb can come from it
+  const druid = killDrops('chaos_druid_13', { herbs: 'clean' });
+  const g = druid.get('guam_leaf');
+  close(g.q, (35 / 128 + 2 * 11 / 128) * (32 / 128));
+  assert.equal(g.one, 1);
+});
+
+test('loot (v3.1): kills from XP: Hitpoints XP over a kill\'s, whatever the style; what\'s left once kills are counted', () => {
+  // 100 fire giants in Accurate: +44,400 Attack and +14,760 Hitpoints XP (in tenths)
+  const mark = { attack: 6000000, strength: 1000, defence: 2000, hitpoints: 9000000, ranged: 0, magic: 300 };
+  const now = { ...mark, attack: mark.attack + 444000, hitpoints: mark.hitpoints + 147600 };
+  assert.deepEqual(xpGained(mark, now), { attack: 444000, hitpoints: 147600 });
+  assert.deepEqual(xpGained(mark, { ...now, ranged: 0, magic: 100 }), { attack: 444000, hitpoints: 147600 });     // (nothing that went down)
+  assert.equal(killsFromHp('fire_giant_86', 'accurate', 147600), 100);
+  assert.equal(killsFromHp('fire_giant_86', 'magic', 147600), 100);              // (any style: 1.33 a point of damage)
+  assert.equal(killsFromHp('fire_giant_86', 'accurate', 147600 + 700), 100);      // (to the nearest)
+  assert.deepEqual(killsXp([{ npc: 'fire_giant_86', style: 'accurate', kills: 100 }]), { attack: 444000, hitpoints: 147600 });
+  // 100 greater demons and 100 blue dragons in one session: what each is, and nothing left
+  const rows = [{ npc: 'greater_demon_92', style: 'aggressive', kills: 100 }, { npc: 'blue_dragon_111', style: 'aggressive', kills: 100 }];
+  const xp = killsXp(rows);
+  const gd = killXp('greater_demon_92', 'aggressive'), bd = killXp('blue_dragon_111', 'aggressive');
+  assert.equal(xp.strength, 100 * (gd.strength + bd.strength));
+  assert.equal(xp.hitpoints, 100 * (gd.hitpoints + bd.hitpoints));
+  assert.deepEqual(leftOver(xp, rows), {});
+  // counted as fire giants that weren't: all of it left over, and the kills' XP short
+  assert.deepEqual(leftOver({ strength: xp.strength, hitpoints: xp.hitpoints }, [{ npc: 'fire_giant_86', style: 'accurate', kills: 10 }]),
+    { strength: xp.strength, hitpoints: xp.hitpoints - 14760, attack: -44400 });
+});
+
+test('skills (v3.1): the least XP for some more levels: always the closest level, which is the least there is', () => {
+  // Agility from 10 XP (level 1) to level 6: 512 XP; Magic 89 and Attack 99 far behind
+  const r = cheapestLevels({ attack: 130344310, agility: 100, magic: 4470850 }, 5);
+  assert.deepEqual(r.bySkill, [{ skill: 'agility', from: 1, to: 6, xp10: (xpForLevel(6) - 10) * 10 }]);
+  assert.equal(r.levels, 5);
+  // 99 stops a skill; with too few skills to go, it says how many it found
+  assert.equal(cheapestLevels({ attack: 130344310 }, 3).levels, 0);
+  // by brute force on small cases: no other choice of levels is cheaper
+  const xp10 = { a: 10 * xpForLevel(20) + 3000, b: 10 * xpForLevel(25), c: 10 * xpForLevel(18) + 15000 };
+  for (let n = 1; n <= 12; n++) {
+    const got = cheapestLevels(xp10, n).xp10;
+    let best = Infinity;
+    const cost = (k, m) => { const lv = Math.floor(Math.max(...[...Array(100).keys()].filter(L => L <= 99 && xpForLevel(L) * 10 <= xp10[k]))); return m ? (xpForLevel(lv + m) * 10 - xp10[k]) : 0; };
+    for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) best = Math.min(best, cost('a', i) + cost('b', j) + cost('c', n - i - j));
+    assert.equal(got, best, `${n} levels`);
+  }
 });

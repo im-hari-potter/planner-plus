@@ -16,11 +16,11 @@ const item = (merged, slug) => merged.items.find(i => i.slug === slug);
 const BANK = [
   { slot: 0, icon: 'lawrune', count: 3960 },
   { slot: 1, icon: 'naturerune', count: 1524 },
-  { slot: 2, icon: '1doseprayerrestore', count: 3309 },        // looks like a potion of ours, isn't a planner item (up to v2.8 a blood rune stood here: Magic's now)
+  { slot: 2, icon: '1doseprayerrestore', count: 3309 },        // looks like a potion of ours: up to v3.0 something else, from v3.1 an item of its own (up to v2.8 a blood rune stood here: Magic's now)
   { slot: 3, icon: 'blankrune', count: 150_420 },              // shown as 150K
   { slot: 4, icon: 'bronze_arrow_5', count: 5000 },            // the icon of a big stack of arrows
   { slot: 5, icon: 'unidentified_guam', count: 25 },
-  { slot: 6, icon: 'unidentified_ardrigal', count: 10 },       // another "Herb"
+  { slot: 6, icon: 'unidentified_ardrigal', count: 10 },       // an "Unidentified herb" (a quest's): up to v3.0 counted as an unid herb, from v3.1 its own item
   { slot: 7, icon: 'unstrung_yew_longbow', count: 1 },         // one of a kind: no number
   { slot: 8, icon: 'yew_logs', count: 1044 },
   { slot: 9, icon: 'magic_logs', count: 973 },
@@ -57,7 +57,7 @@ test('reads items, counts and lookalikes from a whole screenshot', () => {
   assert.equal(r.scroll, 0);
   const s = bySlot(r);
   assert.equal(s[0].entry.slug, 'lawrune'); assert.equal(s[0].count, 3960);
-  assert.equal(s[2].entry.other, 1, 'a one-dose potion is something else');
+  assert.equal(s[2].entry.slug, '1doseprayerrestore', 'a one-dose potion is read as itself (v3.1: every item is)');
   assert.equal(s[3].count, 150000); assert.equal(s[3].approx, true);
   assert.equal(s[4].entry.of, 'bronze_arrow'); assert.equal(s[4].count, 5000);
   assert.equal(s[7].entry.slug, 'unstrung_yew_longbow'); assert.equal(s[7].count, 1);
@@ -74,13 +74,14 @@ test('several screenshots: slots are the bank\'s own, so overlaps count once', (
   assert.equal(lower.scroll, 100);
   const m = mergeReads([top, lower]);
   assert.equal(item(m, 'lawrune').count, 3960);
-  assert.equal(item(m, 'unidentified_guam').count, 35, 'every unid herb is one entry');
-  assert.deepEqual(item(m, 'unidentified_guam').also, ['lantadyme'], 'lantadyme looks just like one');
+  assert.equal(item(m, 'unidentified_guam').count, 25, 'every "Herb" is one entry');
+  assert.equal(item(m, 'unidentified_ardrigal').count, 10, 'an "Unidentified herb" is an item of its own (v3.1)');
+  assert.deepEqual(item(m, 'unidentified_guam').also.slice(0, 1), ['lantadyme'], 'lantadyme looks just like one (and from v3.1, so do some quest herbs: items of their own)');
   assert.equal(item(m, 'bronze_arrow').count, 5000);
   assert.equal(item(m, '3doseprayerrestore').count, 1536, 'from the scrolled one');
   assert.deepEqual([item(m, 'blankrune').min, item(m, 'blankrune').max], [150000, 150999]);
-  assert.equal(item(m, '1doseprayerrestore'), undefined);
-  assert.equal(m.others, 1);
+  assert.equal(item(m, '1doseprayerrestore').count, 3309, 'every item is read (v3.1)');
+  assert.equal(m.others, 0);
   assert.equal(m.complete, true, 'every slot up to the first empty one was seen');
   assert.equal(mergeReads([lower]).complete, false, 'the top of the bank wasn\'t');
 });
@@ -102,48 +103,50 @@ test('a different brightness setting bends colours, and is allowed for', () => {
   assert.equal(s[0].entry.slug, 'lawrune');
 });
 
-test('every planner item but lantadyme has an icon to be read by', () => {
+test('every item there is has an icon to be read by (v3.1); a planner item\'s comes first where two look alike', () => {
   const read = new Set(BANK_ICONS.flatMap(e => [e.of || e.slug, ...(e.also || [])]));
-  // (v2.8) What only Thieving and Agility name is not read: loot, a lockpick, an Agility Arena ticket. No plan
-  // takes those from a bank, so they'd only be lines to check. Everything the other skills use still is.
-  const NO_BANK = new Set(['thieving', 'agility']);
-  const named = m => [...Object.keys(m.in), ...Object.keys(m.out), ...(m.tools || []), ...(m.icon ? [m.icon] : [])];
-  const banked = new Set([...METHODS.filter(m => !NO_BANK.has(m.skill)).flatMap(named), ...Object.values(BANK_GROUPS).flatMap(gs => gs.flatMap(g => g.items))]);
-  for (const k of [...banked]) if (/^3dose/.test(k) && ITEMS[k.replace(/^3dose/, '4dose')]) banked.add(k.replace(/^3dose/, '4dose'));
-  // (the market's armour sets aren't items in the game, so never in a bank; coins are a fee or loot here, not a bank item)
-  assert.deepEqual(Object.keys(ITEMS).filter(k => banked.has(k) && !read.has(k) && !ITEMS[k].set && ITEMS[k].gp == null), []);
-  const ours = new Set(BANK_ICONS.filter(e => !e.other).flatMap(e => [e.of || e.slug, ...(e.also || [])]));
-  const onlyNew = Object.keys(ITEMS).filter(k => !banked.has(k) && !ITEMS[k].set && !ITEMS[k].charge);
-  assert.deepEqual(onlyNew.filter(k => ours.has(k)), [], 'none of them is read as a planner item');
-  assert.ok(['silk', 'king_worm', 'lockpick', 'agilityarena_ticket', 'coins_25'].every(k => onlyNew.includes(k)));
-  // (v2.9) Prayer's bones and the staves Magic's own spells are cast with are read now, with what looks like them:
-  // 929 icons, where v2.7 and v2.8 had 921. Death, blood and soul runes were lookalikes before, and are Magic's now.
-  // (v3) Everything a monster drops is read too, for the loot of a Slayer plan, coins and all: 1,178 icons.
-  assert.equal(BANK_ICONS.length, 1178);
+  // (the market's armour sets aren't items in the game, so never in a bank; nor a ring of forging's charges, nor the clue
+  // a kill can give, which stands for any clue of its tier)
+  const bankable = Object.keys(ITEMS).filter(k => !ITEMS[k].set && !ITEMS[k].charge && !ITEMS[k].clue && !/^coins_\d+$/.test(k));
+  assert.deepEqual(bankable.filter(k => !read.has(k)), []);
+  assert.ok(Object.keys(ITEMS).length > 1900, 'about 2,000 items: the planner\'s and every other');
+  // (v2.8 to v3.0) What only Thieving and Agility name wasn't read (loot, a lockpick, an Agility Arena ticket); from v3.1 every item is
+  for (const k of ['silk', 'king_worm', 'lockpick', 'agilityarena_ticket']) assert.ok(read.has(k), k);
+  // tools and thread too, and things no plan uses (armour, quest items), each its own item
+  for (const k of ['chisel', 'hammer', 'thread', 'rune_platebody', 'dragon_med_helm', 'dramen_staff', '4doseprayerrestore', '1doseprayerrestore']) assert.ok(read.has(k), k);
+  // up to v3.0, 1,178 icons (planner items, variants and look-alikes); from v3.1 every item's
+  assert.ok(BANK_ICONS.length > 1800, `${BANK_ICONS.length} icons`);
+  assert.equal(BANK_ICONS.filter(e => e.other).length < 60, true, 'hardly anything left over as only a look-alike');
   for (const k of ['bones', 'big_bones', 'dragon_bones', 'wolf_bones', 'bones_burnt', 'deathrune', 'bloodrune', 'soulrune', 'rune_scimitar', 'dragon_spear', 'black_kiteshield']) assert.ok(BANK_ICONS.some(e => e.slug === k && !e.other && !e.of), k);
-  // (a staff a choice has you bring is named, never counted. Up to v2.10 it wasn't read; monsters drop
-  // the elemental staves, so from v3 they are: noted under the battlestaff they look exactly like, which a
-  // screenshot is still read as first)
+  // (a staff a choice has you bring is named, never counted; read as one of the battlestaff's look-alikes, which comes first)
+  const ours = new Set(BANK_ICONS.filter(e => !e.other).flatMap(e => [e.of || e.slug, ...(e.also || [])]));
   for (const k of ['staff_of_air', 'staff_of_fire']) assert.ok(ITEMS[k] && ours.has(k) && !BANK_ICONS.some(e => e.slug === k), k);
-  // (up to v2.10 a stack of coins wasn't read: a fee or Thieving's loot, never a bank item. From v3 coins are the
-  // commonest drop there is: read, with the icon each size of stack has)
+  // coins, with the icon each size of stack has
   assert.deepEqual(BANK_ICONS.filter(e => (e.of || e.slug) === 'coins').map(e => e.slug), ['coins', 'coins_2', 'coins_3', 'coins_4', 'coins_5', 'coins_25', 'coins_100', 'coins_250', 'coins_1000', 'coins_10000']);
+  // every "Clue scroll" (the trail clues) is one item, read by one icon; a drop that comes noted is read by its banknote's
+  assert.equal(Object.values(ITEMS).filter(i => i.name === 'Clue scroll').length, 1);
+  assert.equal(BANK_ICONS.find(e => e.slug === 'cert_silver_ore')?.of, 'silver_ore');
+  // names: no two items have one (the other "Boots" are told apart by what the game calls them behind it)
+  const names = Object.entries(ITEMS).filter(([k]) => !/^coins_\d+$/.test(k)).map(([, i]) => i.name);
+  assert.equal(new Set(names).size, names.length);
 });
 
 test('an item that looks exactly like another says so (v2.5)', () => {
   const entry = slug => BANK_ICONS.find(e => e.slug === slug);
   // enchanted jewellery is the plain piece with a spell on it: read as the enchanted one (likelier in a bank), the plain one noted
-  assert.deepEqual(entry('amulet_of_glory_4'), { slug: 'amulet_of_glory_4', also: ['amulet_of_glory', 'strung_dragonstone_amulet'], like: ['Amulet of glory (fewer charges)'] });
-  assert.deepEqual(entry('ring_of_dueling_8'), { slug: 'ring_of_dueling_8', also: ['emerald_ring'], like: ['Ring of dueling (fewer charges)'] });
-  assert.deepEqual(entry('necklace_of_minigames_8'), { slug: 'necklace_of_minigames_8', also: ['sapphire_necklace'], like: ['Games necklace (fewer charges)'] });
+  // (v3.1: the ones with fewer charges left are items too, after the plain piece)
+  assert.deepEqual(entry('amulet_of_glory_4'), { slug: 'amulet_of_glory_4', also: ['amulet_of_glory', 'strung_dragonstone_amulet', 'amulet_of_glory_1', 'amulet_of_glory_2', 'amulet_of_glory_3'] });
+  assert.deepEqual(entry('ring_of_dueling_8'), { slug: 'ring_of_dueling_8', also: ['emerald_ring', ...[7, 6, 5, 4, 3, 2, 1].map(n => `ring_of_dueling_${n}`)] });
+  assert.deepEqual(entry('necklace_of_minigames_8'), { slug: 'necklace_of_minigames_8', also: ['sapphire_necklace', ...[7, 6, 5, 4, 3, 2, 1].map(n => `necklace_of_minigames_${n}`)] });
   assert.deepEqual(entry('ring_of_recoil'), { slug: 'ring_of_recoil', also: ['sapphire_ring'] });
   assert.equal(entry('strung_dragonstone_amulet'), undefined);
   // things the planner doesn't use that you could well have in a bank are named
   // (v3: the plain staff and the staff of air are drops now: noted under also, the battlestaff still read first)
-  assert.deepEqual(entry('battlestaff'), { slug: 'battlestaff', also: ['plainstaff'], like: ['Dramen staff'] });
-  assert.deepEqual(entry('air_battlestaff'), { slug: 'air_battlestaff', also: ['staff_of_air'], like: ['Mystic air staff'] });
+  // (v3.1: what was only named under like is an item of its own now, a choice like the rest)
+  assert.deepEqual(entry('battlestaff'), { slug: 'battlestaff', also: ['plainstaff', 'dramen_staff'] });
+  assert.deepEqual(entry('air_battlestaff'), { slug: 'air_battlestaff', also: ['staff_of_air', 'mystic_air_staff'] });
   // (v2.7: a jug of wine and an unfermented one are Cooking's now: a choice, where they were only named)
-  assert.deepEqual(entry('wine_of_zamorak'), { slug: 'wine_of_zamorak', also: ['jug_wine', 'jug_unfermented_wine'], like: ['Half full wine jug', 'Jug of bad wine'] });
+  assert.deepEqual(entry('wine_of_zamorak'), { slug: 'wine_of_zamorak', also: ['jug_wine', 'jug_unfermented_wine', 'half_full_wine_jug', 'jug_bad_wine'] });
   assert.equal(entry('lawrune').like, undefined, 'not quest and minigame pieces (a board game\'s law rune)');
   // (v2.7) the very same name and picture is nothing to point out: Tutorial Island's raw shrimps and pot of flour,
   // an incomplete stew with the meat in first. "Fewer charges" is only said of things that have charges
@@ -151,8 +154,8 @@ test('an item that looks exactly like another says so (v2.5)', () => {
   for (const e of BANK_ICONS) for (const n of e.like || []) if (/\(fewer charges\)$/.test(n)) assert.match(ITEMS[e.slug].name, /\(\d+\)$/, `${e.slug}: ${n}`);
   assert.equal(entry('unidentified_guam').like, undefined, 'unid herbs have their own note');
   const m = mergeReads([read(fakeBank({ items: [{ slot: 0, icon: 'amulet_of_glory_4', count: 3 }, { slot: 1, icon: 'ashes', count: 40 }, { slot: 2, icon: 'gold_bar', count: 500 }] }))]);
-  assert.deepEqual([item(m, 'amulet_of_glory_4').also, item(m, 'amulet_of_glory_4').like], [['amulet_of_glory', 'strung_dragonstone_amulet'], ['Amulet of glory (fewer charges)']]);
-  assert.deepEqual(item(m, 'ashes').also, ['soda_ash'], 'soda ash looks just like ashes');
+  assert.deepEqual([item(m, 'amulet_of_glory_4').also, item(m, 'amulet_of_glory_4').like], [['amulet_of_glory', 'strung_dragonstone_amulet', 'amulet_of_glory_1', 'amulet_of_glory_2', 'amulet_of_glory_3'], undefined]);
+  assert.deepEqual(item(m, 'ashes').also.slice(0, 1), ['soda_ash'], 'soda ash looks just like ashes');
   assert.equal(item(m, 'gold_bar').like, undefined);
 });
 
@@ -180,17 +183,17 @@ const LIKELIER = { ashes: 'soda_ash' };
 const UNID = 'unidentified_guam';
 
 test('review: one line for an item; an icon two planner items share is a line a slot, with a choice (v2.5.1)', () => {
-  const m = merged([{ slot: 0, icon: 'gold_bar', count: 500 }, { slot: 1, icon: 'ashes', count: 1234 }, { slot: 2, icon: 'uncut_sapphire', count: 100 }]);
+  const m = merged([{ slot: 0, icon: 'iron_bar', count: 500 }, { slot: 1, icon: 'ashes', count: 1234 }, { slot: 2, icon: 'uncut_sapphire', count: 100 }]);
   assert.deepEqual(item(m, 'ashes').parts, [{ slot: 1, count: 1234, min: 1234, max: 1234, approx: false, unsure: false, shared: true }]);
-  assert.equal(item(m, 'gold_bar').parts[0].shared, false);
+  assert.equal(item(m, 'iron_bar').parts[0].shared, false);
   const rows = reviewRows(m, { likelier: LIKELIER });
-  assert.deepEqual(picked(rows), [['gold_bar', 'gold_bar', 500], ['ashes@0', 'soda_ash', 1234], ['uncut_sapphire', 'uncut_sapphire', 100]]);
+  assert.deepEqual(picked(rows), [['iron_bar', 'iron_bar', 500], ['ashes@0', 'soda_ash', 1234], ['uncut_sapphire', 'uncut_sapphire', 100]]);
   const [bar, ash] = rows;
   assert.equal(bar.choices, undefined, 'nothing to choose');
-  assert.deepEqual([ash.icon, ash.choices, ash.slots, ash.min, ash.max], ['ashes', ['ashes', 'soda_ash'], [1], 1234, 1234]);
+  assert.deepEqual([ash.icon, ash.choices.slice(0, 2), ash.slots, ash.min, ash.max], ['ashes', ['ashes', 'soda_ash'], [1], 1234, 1234]);
   // an item with an icon of its own reads as before
-  const { parts, ...whole } = item(m, 'gold_bar');
-  assert.deepEqual(bar, { key: 'gold_bar', ...whole });
+  const { parts, ...whole } = item(m, 'iron_bar');
+  assert.deepEqual(bar, { key: 'iron_bar', ...whole });
 });
 
 test('review: soda ash rather than ashes, until you say otherwise; a stack an earlier read filed under Ashes moves over (v2.5.1)', () => {
@@ -204,7 +207,7 @@ test('review: soda ash rather than ashes, until you say otherwise; a stack an ea
   // what you said last time is kept, whichever it was
   assert.equal(first({ memory: { ashes: ['ashes'] } }), 'ashes');
   assert.equal(first({ memory: { ashes: ['soda_ash'] }, bank: { ashes: 50 } }), 'soda_ash');
-  assert.equal(first({ memory: { ashes: ['gold_bar'] } }), 'soda_ash', 'a pick that is not one of the two is ignored');
+  assert.equal(first({ memory: { ashes: ['gold_bar'] } }), 'soda_ash', 'a pick that is not one of them is ignored');
   assert.equal(first({ memory: { ashes: ['ashes', 'soda_ash'] } }), 'soda_ash', 'two stacks then, one now: the picks may not line up, so they are left');
 
   // the same amount under Ashes, none under Soda ash: the same stack, moved over
@@ -275,9 +278,9 @@ test('review: enchanted jewellery by default, the plain piece once you have type
   // a third stack with that icon (a ring of recoil part used): it adds to one of the two, or you untick it
   const three = merged([{ slot: 0, icon: 'ring_of_recoil', count: 1 }, { slot: 1, icon: 'ring_of_recoil', count: 1 }, { slot: 2, icon: 'ring_of_recoil', count: 300 }]);
   assert.deepEqual(first(three, {}), ['ring_of_recoil', 'sapphire_ring', 'ring_of_recoil']);
-  // lookalikes the planner doesn't use stay named on the line
+  // (v3.1) what looks the same with fewer charges left is a choice of its own
   const glory = reviewRows(merged([{ slot: 0, icon: 'amulet_of_glory_4', count: 3 }]))[0];
-  assert.deepEqual([glory.choices, glory.like], [['amulet_of_glory_4', 'amulet_of_glory', 'strung_dragonstone_amulet'], ['Amulet of glory (fewer charges)']]);
+  assert.deepEqual([glory.choices, glory.like], [['amulet_of_glory_4', 'amulet_of_glory', 'strung_dragonstone_amulet', 'amulet_of_glory_1', 'amulet_of_glory_2', 'amulet_of_glory_3'], undefined]);
 });
 
 test('review: any stack that looks like an unid herb can be said to be lantadyme (v2.5.1)', () => {
@@ -285,27 +288,28 @@ test('review: any stack that looks like an unid herb can be said to be lantadyme
     { slot: 0, icon: 'unidentified_guam', count: 25 }, { slot: 1, icon: 'unidentified_guam', count: 642 },
     { slot: 2, icon: 'unidentified_ardrigal', count: 10 }, { slot: 3, icon: 'unidentified_guam', count: 7 },
   ]);
-  assert.equal(item(m, UNID).count, 684, 'every unid herb is one entry');
+  assert.equal(item(m, UNID).count, 674, 'every "Herb" is one entry');
+  // (v3.1) a quest's "Unidentified herb" is an item of its own (up to v3.0 it was counted as an unid herb)
+  assert.equal(item(m, 'unidentified_ardrigal').count, 10);
   const opts = { likelier: LIKELIER, repeat: [UNID] };
   let rows = reviewRows(m, opts);
-  // every stack that looks just like lantadyme has the choice; an unid herb with an icon of its own doesn't
-  assert.deepEqual(picked(rows), [[`${UNID}@0`, UNID, 25], [`${UNID}@1`, UNID, 642], [`${UNID}@2`, UNID, 7], [UNID, UNID, 10]]);
-  assert.deepEqual(rows.map(r => r.choices), [[UNID, 'lantadyme'], [UNID, 'lantadyme'], [UNID, 'lantadyme'], undefined]);
-  assert.deepEqual(rows[3].slots, [2]);
+  // every stack that looks just like lantadyme has the choice (and, from v3.1, the quest herbs that look the same)
+  assert.deepEqual(picked(rows), [[`${UNID}@0`, UNID, 25], [`${UNID}@1`, UNID, 642], [`${UNID}@2`, UNID, 7], ['unidentified_ardrigal@0', 'unidentified_ardrigal', 10]]);
+  assert.deepEqual(rows.map(r => r.choices.slice(0, 2)), [[UNID, 'lantadyme'], [UNID, 'lantadyme'], [UNID, 'lantadyme'], ['unidentified_ardrigal', 'ardrigal']]);
   // several can be unid herbs, so saying one is lantadyme leaves the others be
   assert.equal(pickRow(rows, `${UNID}@1`, 'lantadyme', [UNID]), true);
-  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, 'lantadyme', UNID, UNID]);
+  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, 'lantadyme', UNID, 'unidentified_ardrigal']);
   // ...and saying another is, moves it (one stack of lantadyme)
   assert.equal(pickRow(rows, `${UNID}@2`, 'lantadyme', [UNID]), true);
-  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, UNID, 'lantadyme', UNID]);
+  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, UNID, 'lantadyme', 'unidentified_ardrigal']);
   assert.equal(pickRow(rows, `${UNID}@2`, UNID, [UNID]), true);
-  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, UNID, UNID, UNID]);
+  assert.deepEqual(picked(rows).map(r => r[1]), [UNID, UNID, UNID, 'unidentified_ardrigal']);
   // lantadyme you typed in: the stack of that amount is it; with no such stack, they're all unid herbs
-  assert.deepEqual(picked(reviewRows(m, { ...opts, bank: { lantadyme: 642 } })).map(r => r[1]), [UNID, 'lantadyme', UNID, UNID]);
-  assert.deepEqual(picked(reviewRows(m, { ...opts, bank: { lantadyme: 600 } })).map(r => r[1]), [UNID, UNID, UNID, UNID]);
+  assert.deepEqual(picked(reviewRows(m, { ...opts, bank: { lantadyme: 642 } })).map(r => r[1]), [UNID, 'lantadyme', UNID, 'unidentified_ardrigal']);
+  assert.deepEqual(picked(reviewRows(m, { ...opts, bank: { lantadyme: 600 } })).map(r => r[1]), [UNID, UNID, UNID, 'unidentified_ardrigal']);
   // remembered while the bank shows as many of them
-  assert.deepEqual(picked(reviewRows(m, { ...opts, memory: { [UNID]: [UNID, 'lantadyme', UNID] } })).map(r => r[1]), [UNID, 'lantadyme', UNID, UNID]);
-  assert.deepEqual(picked(reviewRows(m, { ...opts, memory: { [UNID]: [UNID, 'lantadyme'] } })).map(r => r[1]), [UNID, UNID, UNID, UNID]);
+  assert.deepEqual(picked(reviewRows(m, { ...opts, memory: { [UNID]: [UNID, 'lantadyme', UNID] } })).map(r => r[1]), [UNID, 'lantadyme', UNID, 'unidentified_ardrigal']);
+  assert.deepEqual(picked(reviewRows(m, { ...opts, memory: { [UNID]: [UNID, 'lantadyme'] } })).map(r => r[1]), [UNID, UNID, UNID, 'unidentified_ardrigal']);
   // an earlier read counted the lantadyme as unid herbs: a lone stack of that amount moves over
   const lone = reviewRows(merged([{ slot: 0, icon: 'unidentified_guam', count: 642 }]), opts);
   pickRow(lone, `${UNID}@0`, 'lantadyme', [UNID]);
@@ -313,13 +317,8 @@ test('review: any stack that looks like an unid herb can be said to be lantadyme
   // with other unid herbs beside it, they're simply counted again
   rows = reviewRows(m, opts);
   pickRow(rows, `${UNID}@1`, 'lantadyme', [UNID]);
-  assert.deepEqual(movedFrom(rows, { [UNID]: 684 }), {});
-  assert.deepEqual(movedFrom(rows, { [UNID]: 684 }, { complete: true }), {});
-  // ...also when the only other one has an icon of its own
-  const pair = reviewRows(merged([{ slot: 0, icon: 'unidentified_guam', count: 642 }, { slot: 1, icon: 'unidentified_ardrigal', count: 10 }]), opts);
-  pickRow(pair, `${UNID}@0`, 'lantadyme', [UNID]);
-  assert.deepEqual(picked(pair), [[`${UNID}@0`, 'lantadyme', 642], [UNID, UNID, 10]]);
-  assert.deepEqual(movedFrom(pair, { [UNID]: 642 }, { complete: true }), {}, 'unid herbs are still in the bank');
+  assert.deepEqual(movedFrom(rows, { [UNID]: 674 }), {});
+  assert.deepEqual(movedFrom(rows, { [UNID]: 674 }, { complete: true }), {});
 });
 
 

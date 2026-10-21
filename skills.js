@@ -179,3 +179,27 @@ export function combatFromProfile(levels, totalLevel) {
   const exact = COMBAT_KEYS.every(k => low[k] === high[k]);
   return { min: combatLevel(low), max: combatLevel(high), exact, low, high, bounds };
 }
+
+// The least XP that gets n more levels in all (a total level goal), one level
+// at a time, always the closest: XP needed for a level only grows, so that's
+// the least there is. xp10: { skill: XP in tenths } for the skills that count.
+// -> { bySkill: [{ skill, from, to, xp10 }] (least XP first), xp10 (in all), levels }
+export function cheapestLevels(xp10, n) {
+  const xp = { ...xp10 }, at = {}, start = {};
+  for (const k of Object.keys(xp)) at[k] = start[k] = levelForXp(Math.floor(xp[k] / 10));
+  let total = 0, levels = 0;
+  for (; levels < n; levels++) {
+    let best = null, cost = Infinity;
+    for (const k of Object.keys(xp)) {
+      if (at[k] >= MAX_LEVEL) continue;
+      const c = xpForLevel(at[k] + 1) * 10 - xp[k];
+      if (c < cost) { cost = c; best = k; }
+    }
+    if (!best) break;
+    xp[best] += cost; at[best]++; total += cost;
+  }
+  const bySkill = Object.keys(xp).filter(k => at[k] > start[k])
+    .map(k => ({ skill: k, from: start[k], to: at[k], xp10: xp[k] - xp10[k] }))
+    .sort((a, b) => a.xp10 - b.xp10);
+  return { bySkill, xp10: total, levels };
+}

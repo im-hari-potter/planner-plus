@@ -20,8 +20,9 @@ const TTL_MS = 12 * 3600e3;
 const FORMAT = 1;                       // bump to drop cached prices after a logic change
 
 // What High Level Alchemy gives for an item: 3/5 of its value, at least 1 coin
-// (the server's own sum, in the high alchemy spell).
-export const highAlch = slug => (ITEMS[slug] ? Math.max(1, Math.floor((ITEMS[slug].cost * 6) / 10)) : null);
+// (the server's own sum, in the high alchemy spell). Nothing for the few quest
+// items the spell refuses (v3.1: noAlch, the server's no_alchemy).
+export const highAlch = slug => (ITEMS[slug] ? (ITEMS[slug].noAlch ? 0 : Math.max(1, Math.floor((ITEMS[slug].cost * 6) / 10))) : null);
 
 // Which price an item uses: the market's, high alch, or yours ('mine').
 export const SOURCES = ['market', 'alch', 'mine'];
@@ -72,7 +73,10 @@ export class Prices extends EventTarget {
   }
 
   // What the market says, whichever price an item uses (null: not checked yet).
+  // (v3.1) An item that can't be traded is never looked up: its high alch is
+  // what it's worth (untradeable).
   market(slug) {
+    if (ITEMS[slug]?.untradeable && ITEMS[slug].gp == null) return { gp: highAlch(slug), src: 'alch', untraded: true, untradeable: true };
     const c = this.cache[slug];
     if (c && c.p != null) return { gp: c.p, src: c.src, n: c.n, last: c.last, at: c.at };
     // A 3-dose potion with no trades of its own: 3/4 of the 4-dose price.

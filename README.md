@@ -34,10 +34,12 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | Tab | What it's for |
 |---|---|
 | **Lookup**, **Compare**, **Gains**, **Leaderboard** | The hiscores: any player's levels, XP, rank and Top %; players side by side; XP gained since last time; any skill's rankings. |
-| **Goals** | Your goals, each with its **Plan (Calculator)**: every skill, your combat level, and Slayer (a plan of kills and their loot). |
+| **Goals** | Your goals, each with its **Plan (Calculator)**: every skill, your total level, your combat level, and Slayer (a plan of kills and their loot). |
 | **NPCs** | Every monster: its stats, the XP of a kill and every drop with its chance. |
-| **Bank** | What you have, typed in or read from screenshots. Plans use it first. |
+| **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
+
+The tabs stay at the top of the window as you scroll.
 
 ## Getting started
 
@@ -75,16 +77,20 @@ in that skill.*
 
 ![Goals: set a goal, then your goals with their plans](readme-2-goals.png)
 
-*Pick a skill (or your combat level, or Slayer), then what to reach. Each goal sits under **Your
-goals** with its progress since you set it, and its **Plan (Calculator)**.*
+*Pick a skill (or your total level, your combat level, or Slayer), then what to reach. Each goal
+sits under **Your goals** with its progress since you set it, and its **Plan (Calculator)**.*
 
 - A goal is a **level, XP, rank or top %**. A rank or top % goal means beating whoever holds it
   now, and is checked again as they train. **Edit** moves the goalpost and keeps the rest.
-- **Combat level** is a goal too (the first button). Its plan says what each kind of level takes
-  to get there, with the combat calculator under it.
+- **Total level** is a goal too (the first button). Its plan says what your skill goals add, then
+  the least XP that gets the rest, a level at a time: low levels are cheap. Untick a skill under
+  **Train** that you won't train, and **set a goal** turns a line into a skill goal.
+- **Combat level** is the second button. Its plan says what each kind of level takes to get there,
+  with the combat calculator under it.
 - **Slayer** isn't in this version of the game yet; here it's the home of monster plans. See
   [Combat, monsters and loot](#combat-monsters-and-loot).
-- Move goals up and down, and filter them: in progress, reached, or one skill's.
+- Move goals up and down, and filter them: in progress, reached, or one skill's. A combat skill's
+  filter keeps your Combat level and Slayer goals with it.
 
 **Plan (Calculator)** opens a goal's plan, in three parts:
 
@@ -98,11 +104,19 @@ goals** with its progress since you set it, and its **Plan (Calculator)**.*
 How many you need is the XP still to go ÷ the XP each one gives, rounded up. Everything is done in
 tenths of XP, the way the game keeps it.
 
+![A Total level goal: what your skill goals add, then the least XP for the rest](readme-10-total.png)
+
+*A Total level goal: your skill goals' levels first, then the cheapest levels for the rest.*
+
 ## Important: choose what you actually use
 
 ![The Use column: every option is on until you untick it](readme-3-use.png)
 
 *The **Use** column, first in the table. Every option starts ticked: untick what you won't make.*
+
+Every skill's table starts with a tick box. Where a plan uses your bank it's **Use**; elsewhere a
+word for what the skill does with a row: **Chop**, **Mine**, **Catch**, **Steal**, **Run**,
+**Fight**. Untick a tree you won't chop or a monster you won't fight, and the plan leaves it out.
 
 The bank plan makes everything it can from your bank. **Every option starts out ticked**, so it
 will spend your supplies on anything that uses them, even things you'd never make. **Untick what
@@ -113,9 +127,10 @@ gets the irits first, and the 477 left over become Superantipoison. Don't want S
 **Untick it**, and those 477 irits stay in your bank for Super attack: of the 2,305 Super attacks
 still needed (see below), you collect 1,828 irits instead of 2,305.
 
-- An unticked option also leaves the **Train with** list.
-- **Hide unused items** (beside the table's Sort) takes the unticked rows out of every plan's
-  table.
+- An unticked option also leaves the **Train with** list, and the levels on the way to it. Click
+  an unticked row to train with it, and it's ticked again.
+- **Hide unused items** (beside the table's Sort; **Hide unticked** where there's no bank) takes
+  the unticked rows out of every plan's table.
 - What a ticked row needs is still made on the way: untick Sapphire (cut) and the sapphires for
   your games necklaces are still cut. To leave uncut sapphires alone, untick what's made of them.
 
@@ -171,12 +186,14 @@ tab for the items you'll use, and pick or type the price that's right for you.**
 a price shows **?** until it has one.
 
 - **Market** (the default): the median of recent sales on
-  [markets.lostcity.rs](https://markets.lostcity.rs), otherwise of open offers. Nobody trading it?
-  Its high alch value.
-- **High alch**: what High Level Alchemy gives, 3/5 of its value, the game's own sum.
+  [markets.lostcity.rs](https://markets.lostcity.rs), otherwise of open offers. Nobody trading it,
+  or it can't be traded? Its high alch value.
+- **High alch**: what High Level Alchemy gives, 3/5 of its value, the game's own sum (a few quest
+  items the spell refuses are worth nothing that way).
 - **Your price**: type one in, and it's used until you pick another.
-- Switch a whole skill or one list at once. **All** has every item once, under the skill it first
-  belongs to.
+- Switch a whole skill or one list at once. **All** has every item the planner prices once, under
+  the skill it first belongs to; **Other** has everything else you have.
+- **Find any item** searches every item in the game by name, whatever the tab.
 
 **A price is both what a supply costs you and what a product is worth.** Say you mined your own
 coal and set its price to 0: smithing steel bars from it now shows almost pure profit. But that coal
@@ -199,20 +216,28 @@ the market (inside LostKit it opens in the tool's tab; ◀ comes back).
 *What was read from your screenshots, to check before anything changes. A stack that looks exactly
 like another item gets a drop-down.*
 
-- Type what you have: `1500`, `1.5k` and `2m` all work. Each skill has a tab of its items (and
-  what they're worth), and **All** has everything you have: in your bank's order, by value, or by
-  skill.
+- Type what you have: `1500`, `1.5k` and `2m` all work. Items sit eight to a row, as in the game's
+  bank, each with what one is worth (**ea**) and what yours come to. Each skill has a tab of its
+  items, **Other** has everything no skill uses (and adds any item by name), and **All** has
+  everything you have: in your bank's order, by value, or by skill.
 - **Read it from screenshots**: open your bank in LostKit and press the screenshot key (scroll and
   take more if it doesn't fit). Drop the pictures from *Pictures › LostKit Screenshots* on the
   Bank tab, paste one, or **Choose screenshots**.
   - It reads the picture the way the game drew it: icon outlines and colours say which item is in
-    each slot, and the yellow numbers how many. Overlapping screenshots don't count twice.
+    each slot, and the yellow numbers how many. Every item in the game is known, tools and quest
+    items too. Overlapping screenshots don't count twice.
   - Some items look exactly like another (soda ash and ashes, big bones and jogre bones, a sapphire
     ring and a ring of recoil): pick which from the drop-down. Your pick is kept for next time.
   - Amounts of 100K and up are rounded on screen (`150K`): an amount you entered that fits is kept.
   - Only the ticked lines change your bank.
 - **Slayer** has a tab of everything monsters drop, by kind (runes, weapons, armour, gems, herbs,
   bones…). Items a skill uses too are on that skill's tab as well: it's one bank.
+- Everything is valued: by the market, high alch or your own price (Prices tab). An item that
+  can't be traded is worth its high alch.
+
+![The bank: eight items to a row, each with what one is worth and what yours come to](readme-12-bank.png)
+
+*Eight to a row, as in the game: what one is worth (ea), and what yours come to.*
 
 ## Combat, monsters and loot
 
@@ -251,17 +276,50 @@ the line opens it).
 
 Its plan has:
 
-- **Kills done** (type them, or − and +), and the goal's progress.
-- **XP**: what the kills give each skill, and the level the ones still to do take you to.
+- **Kills done** (type them, or − and +), and the goal's progress. They're counted from your XP
+  too: see below.
+- **XP**: what the kills give each skill, and the level the ones still to do take you to; what
+  alching and cleaning the drops give besides.
 - **Loot**: every drop with its chance a kill, how many to expect over your kills, the chance of at
-  least one, and its value at your prices.
+  least one, and its **Expected value** at your prices.
+  - **Take**: untick what you leave on the ground. It's worth nothing to you, and starts unticked
+    when loot is read from screenshots.
+  - **Alch**: tick what you high alch. It's counted at its high alch in coins (a fire battlestaff:
+    9,300 each), goes into your bank as coins, and its casts' Magic XP and nature runes are counted.
+  - **Herbs**: cleaned, each herb has its own chance (Ranarr weed 209/16,384 a fire giant); kept
+    grimy, they're the one Unid herb.
 - **What you got**: type it in, or − and + a drop at a time. After your kills, each drop says
-  what's to be expected and how lucky you are: "luckier than 54%", "65% get more".
+  what's to be expected and how lucky you are ("luckier than 54%", "65% get more"), and its
+  **Actual value**. Sort by Expected value or Actual value.
 - **Dryness**: a drop you haven't had says how dry you are, and how many players go that dry.
+
+**Kills from your XP.** When the hiscores show new combat XP, a box above your goals says what it
+comes to: *That's about 60 Fire giant kills*, from the Hitpoints XP (1.33 a point of damage,
+whatever the style). **Count** them, or **Choose what I killed**: every Slayer goal's monster is
+listed, and any other can be added. Type the kills of all but one, and that one takes the XP that's
+left. XP from something else can be taken off a goal's kills, since a goal for some XP needs fewer.
+
+![New combat XP above your goals, and the kills it comes to](readme-11a-kills.png)
+
+![Choose what I killed: your Slayer goals' monsters, one of them taking the rest of the XP](readme-11-kills.png)
+
+*The new XP and the kills it comes to; then Choose what I killed: type the kills of all but one,
+and that one takes the XP that's left.*
+
+**Loot, and your bank.**
+
 - **Read loot from screenshots**: a screenshot of your inventory for each trip (your bank can be
-  open). Only what the monster drops is read; untick anything you brought along, then add it to
-  what you got.
-- **Add to my bank** puts what you got in your bank (and takes back what you correct).
+  open). Only what the monster drops is read. Change any amount, or untick what wasn't from these
+  kills; several screenshots of one trip count once (**They're all one trip**), and a screenshot
+  you've added before isn't counted again. Nor is one taken before you set the goal, unless you
+  tick it: what it shows was picked up before.
+- **What you bring each trip** (runes, coins, arrows the monster drops too) is taken off each
+  screenshot, so what you carry, and loot from before this goal, is never counted as what you got.
+- **Add to what I got** counts it as these kills' loot. **…and to my bank** puts that same loot in
+  your bank too, on top of what's there: nothing else in your bank changes.
+- **Deposit to my bank…** works from your totals: what you got that isn't in your bank yet, after
+  every trip, a few, or at the end. Change any amount first; an **In bank** column keeps count.
+- What it did is said in the plan itself, with **Undo**.
 
 ![How dry is dry, and reading loot from screenshots](readme-8b-slayer-dry.png)
 
@@ -274,6 +332,7 @@ players have one by 294.
 ## Useful tips
 
 - **Untick what you won't make** (see above). It's the one thing that changes a plan the most.
+- **Refresh XP** after a session: new combat XP is counted as your Slayer goals' kills.
 - **Check the prices** of what a plan uses before trusting its gp.
 - **Hide table** tucks one plan's table away, and **Hide all tables** every open plan's.
 - A number you're typing is left alone until you enter it (Enter, Tab or a click elsewhere), so
@@ -329,9 +388,9 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   API and a fake market at <http://localhost:8787/?api=local>, and `node e2e.mjs` runs the browser
   tests against it (needs Playwright).
 - The game data is generated: `node build-data.mjs <Content checkout> <LostHQ 2004 checkout>`
-  (needs `sharp`) writes `gamedata.js`, `npcdata.js`, `items.png`, `bankread-data.js` and
-  `bankicons.png`. Upload them together: the data names its icon sheets with a stamp of the
-  picture.
+  (needs `sharp`) writes `gamedata.js`, `npcdata.js`, `items.png`, `items-more.png`,
+  `bankread-data.js`, `bankicons.png`, `slayer.webp` and `tabicons.png`. Upload them together: the
+  data names its icon sheets with a stamp of the picture.
   - Content is [LostCityRS/Content](https://github.com/LostCityRS/Content), branch 274: levels, XP,
     what everything takes and makes, item values, monsters, their stats and their drops.
   - [LostHQ/2004](https://github.com/LostHQ/2004) gives item names and icons, and the rows of its
@@ -344,9 +403,9 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
     used. What a monster leaves to bury is the server's too.
 - Planner files: `planner.js` (the maths, in tenths of XP), `planner-ui.js` (Goals, Bank and
   Prices), `npc-ui.js` (the NPCs tab and Slayer goals), `loot.js` (drop chances, expected loot,
-  luck and dryness), `prices.js` (the market and high alch), `bankread.js` (reading the bank and
-  the inventory from screenshots; `bankfake.mjs` paints pretend ones for the tests), `sortable.js`
-  (dragging).
+  luck and dryness, kills from XP), `prices.js` (the market and high alch), `bankread.js`
+  (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
+  tests), `sortable.js` (dragging).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own
   website read it from a browser; LostKit's tool tabs are the exception, and a copy hosted on
   Netlify (see `_redirects`) works in any browser. A GitHub Action refreshes each skill's player
@@ -357,7 +416,9 @@ drops, spell icons, and the bank layout and font the screenshot reader uses, fro
 content and client (MIT). Item names and icons, and the rows of LostHQ's calculators, from
 [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices from
 [markets.lostcity.rs](https://markets.lostcity.rs). Skill icons and RuneScape fonts from
-[LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0); the Slayer skull is Planner+'s own.
+[LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0). The Slayer icon is the client's own
+(from 2005, when the skill came), and the tabs' icons are the client's bank and sword map icons,
+the rest drawn in their style.
 RuneScape is © Jagex Ltd.
 
 This is a fan project, not affiliated with Jagex, Lost City or LostHQ. Licensed under GPL-3.0.
