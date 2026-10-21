@@ -4552,7 +4552,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.1\.0 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.1\.1 · /);
   await page.click('#settings-close');
 });
 
