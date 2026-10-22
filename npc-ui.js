@@ -20,17 +20,17 @@
 // shots? ([the screenshots whose loot it has, as file keys: none is counted twice]).
 // Per account (v3.1): slayerMark.<account> = { at, xp10: { skill: XP } }, the
 // combat XP when kills were last counted from it (a session's kills are the
-// Hitpoints XP gained since, over what a kill gives), and slayerLast.<account>,
-// the goal counted last.
+// Hitpoints XP gained since, over what a kill gives; v3.2: or since one of the
+// account's Gains snapshots).
 // Created by planner-ui.js with what it shares (P).
 
 import { SLAYER, SKILL_BY_KEY, MAX_LEVEL } from './skills.js';
 import { ITEMS, MONSTERS, UNID_HERBS, METHODS } from './gamedata.js';
 import { NPC_INFO } from './npcdata.js';
-import { killDrops, killXp, KILL_STYLES, atLeastOne, dryChance, killsFor, luck, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, COUNTED_SKILLS, xpGained, killsXp, killsFromHp, leftOver } from './loot.js';
+import { killDrops, killXp, KILL_STYLES, atLeastOne, dryChance, killsFor, luck, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, COUNTED_SKILLS, xpGained, killsXp, killsFromHp, leftOver, guessAlchs, coinsDropped } from './loot.js';
 import { levelForXp10, MAX_XP10 } from './planner.js';
 import { highAlch } from './prices.js';
-import { store } from './store.js';
+import { store, snapshots } from './store.js';
 
 const MAX_KILLS = 10_000_000;
 const STAT_NAMES = ['Attack', 'Strength', 'Defence', 'Hitpoints', 'Ranged', 'Magic'];
@@ -84,7 +84,7 @@ export function drySentence(name, p, kills) {
 export const canAlch = slug => !!ITEMS[slug] && slug !== 'coins' && ITEMS[slug].gp == null && !ITEMS[slug].untradeable && (highAlch(slug) || 0) > 0;
 
 export function createNpcUi(P) {
-  const { esc, fmt, gpShort, xpText, iconImg, itemIcon, itemName, marketLink, priceTip, prices, S, $ } = P;
+  const { esc, fmt, gpShort, xpText, iconImg, itemIcon, itemName, priceTip, prices, S, $ } = P;
   // ── Prefs of the NPCs tab ───────────────────────────────────────────────
   const saved = store.get('npcUi', {});
   const N = {
@@ -422,10 +422,10 @@ export function createNpcUi(P) {
       + `<th class="l">Item</th><th title="The chance a kill drops it, as the drop table has it">A kill</th><th title="How many one drop is">Each drop</th>`
       + `<th title="How many on average in ${esc(fmt(n))} kills">Expected</th><th class="wrap" title="The chance of at least one in ${esc(fmt(n))} kills">At least one<br>in ${esc(gpShort(n))}</th>`
       + `<th class="wrap" title="Expected, at your prices (alched: its high alch)">Expected<br>value</th>`
-      + (done ? `<th class="wrap sep-l" title="How many on average after the ${esc(fmt(done))} kills you've done">Expected<br>after ${esc(gpShort(done))}</th><th class="wrap" title="What you got: type it in, or − and + by one drop">You got</th><th class="l" title="How what you got compares with other players after as many kills">Luck</th>`
-        : `<th class="wrap sep-l" title="What you got: type it in, or − and + by one drop">You got</th>`)
-      + `<th class="wrap" title="What you got is worth, at your prices (alched: its high alch)">Actual<br>value</th>`
-      + (inBank ? `<th class="wrap" title="How much of what you got you've put in your bank (alched: as coins)">In<br>bank</th>` : '');
+      + (done ? `<th class="wrap sep-l" title="How many on average after the ${esc(fmt(done))} kills you've done">Expected<br>after ${esc(gpShort(done))}</th><th class="wrap" title="Your loot: type it in, or − and + by one drop">Looted</th><th class="l" title="How your loot compares with other players' after as many kills">Luck</th>`
+        : `<th class="wrap sep-l" title="Your loot: type it in, or − and + by one drop">Looted</th>`)
+      + `<th class="wrap" title="What your loot is worth, at your prices (alched: its high alch)">Actual<br>value</th>`
+      + (inBank ? `<th class="wrap" title="How much of your loot you've put in your bank (alched: as coins)">Banked</th>` : '');
     const row = ({ slug, d, gp }) => {
       const take = taken(goal, slug), alch = alched(goal, slug);
       const at1 = atLeastOne(d.p, n);
@@ -442,14 +442,19 @@ export function createNpcUi(P) {
     };
     const extraRows = extra.map(slug => `<tr data-loot="${slug}" title="${esc(`${ITEMS[slug]?.name || slug}: not something this monster drops`)}"><td></td><td></td><td class="l"><span class="sk-cell">${itemIcon(slug, true)} ${itemName(slug)} <span class="c-faint small-note">(not its drop)</span></span></td><td colspan="5"></td>${done ? `<td class="sep-l"></td><td class="got">${gotBox(slug, got[slug], null)}</td><td></td>` : `<td class="got sep-l">${gotBox(slug, got[slug], null)}</td>`}<td>${worthOf(slug) != null ? gpShort(worthOf(slug) * got[slug]) : '<span class="c-faint">?</span>'}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`).join('');
     const sBtn = (k, label, tip) => `<button type="button" class="${sort === k ? 'on' : ''}" data-loot-sort="${k}" aria-pressed="${sort === k}" title="${esc(tip)}">${label}</button>`;
-    return `<div class="bar wrap"><span class="c-muted small-note">Sort</span><div class="seg">${sBtn('value', 'Expected value', 'What it\'s worth on average over your kills, most first')}${sBtn('got', 'Actual value', 'What what you got is worth, most first')}${sBtn('chance', 'Chance', 'Commonest first')}${sBtn('name', 'A to Z', 'By name')}</div></div>
-      <div class="table-wrap"><table class="grid loot-t"><thead><tr>${head}</tr></thead><tbody>${list.map(row).join('')}${extraRows}</tbody></table></div>`;
+    // (v3.2) Hide unticked loot: what you leave on the ground, out of the table (the one switch every table has)
+    const shown = S.hideOff ? list.filter(x => taken(goal, x.slug)) : list;
+    const hidden = list.length - shown.length;
+    const cols = head.split('<th').length - 1;
+    const body = shown.length || extraRows ? `${shown.map(row).join('')}${extraRows}` : `<tr><td class="l c-faint" colspan="${cols}">Everything is unticked under Take, and hidden. Untick Hide unticked loot to see it.</td></tr>`;
+    return `<div class="bar wrap"><span class="c-muted small-note">Sort</span><div class="seg">${sBtn('value', 'Expected value', 'What it\'s worth on average over your kills, most first')}${sBtn('got', 'Actual value', 'What your loot is worth, most first')}${sBtn('chance', 'Chance', 'Commonest first')}${sBtn('name', 'A to Z', 'By name')}</div>
+        ${P.hideOffBox('Take', 'loot', hidden)}</div>
+      <div class="table-wrap"><table class="grid loot-t"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
-  // An item's name in a loot table: with its icon, and a link to the market where it sells.
+  // An item's name in a loot table: with its icon, and (v3.2) a link to its line on the Prices tab.
   function itemLink(slug, d) {
-    const it = ITEMS[slug];
     const name = `${itemIcon(slug, true)} ${itemName(slug)}${d && noted(d) ? ' <span class="c-faint small-note">(noted)</span>' : ''}`;
-    return untradeable(slug) || it?.gp != null ? `<span class="sk-cell">${name}</span>` : `<a class="sk-cell mk" ${marketLink(slug)}>${name}</a>`;
+    return P.pricedLine(slug) ? `<a class="sk-cell mk" ${P.priceLink(slug)} title="See its price on the Prices tab">${name}</a>` : `<span class="sk-cell">${name}</span>`;
   }
   function itemTitle(slug, d, goal = null) {
     const name = ITEMS[slug]?.name || slug;
@@ -464,9 +469,9 @@ export function createNpcUi(P) {
   const stepOf = d => (d?.one > 0 ? d.one : 1);
   function gotBox(slug, n, d) {
     const name = ITEMS[slug]?.name || slug;
-    return `<span class="got-box"><button type="button" class="mv" data-got-step="-${stepOf(d)}" data-slug="${slug}" title="One drop fewer" aria-label="One ${esc(name)} drop fewer"${n > 0 ? '' : ' disabled'}>−</button><input class="input small num" data-got="${slug}" inputmode="numeric" value="${n ? fmt(n) : ''}" placeholder="0" aria-label="${esc(name)} you got"><button type="button" class="mv" data-got-step="${stepOf(d)}" data-slug="${slug}" title="One drop more" aria-label="One ${esc(name)} drop more">+</button></span>`;
+    return `<span class="got-box"><button type="button" class="mv" data-got-step="-${stepOf(d)}" data-slug="${slug}" title="One drop fewer" aria-label="One ${esc(name)} drop fewer"${n > 0 ? '' : ' disabled'}>−</button><input class="input small num" data-got="${slug}" inputmode="numeric" value="${n ? fmt(n) : ''}" placeholder="0" aria-label="${esc(name)} looted"><button type="button" class="mv" data-got-step="${stepOf(d)}" data-slug="${slug}" title="One drop more" aria-label="One ${esc(name)} drop more">+</button></span>`;
   }
-  // How lucky what you got is, after done kills: in drops where every drop is the same amount, else in the amount.
+  // How lucky your loot is, after done kills: in drops where every drop is the same amount, else in the amount.
   function luckText(slug, d, done, got) {
     if (!done) return '';
     if (d.p >= 1 && d.one) return got === d.one * done ? '<span class="c-faint">every kill</span>' : '';
@@ -606,7 +611,7 @@ export function createNpcUi(P) {
       <span class="c-muted small-note">kills</span>
       <button class="btn small" type="submit">Save</button>
       <button type="button" class="linkish" data-act="edit-cancel">Cancel</button>
-      ${e.problem ? `<span class="c-lose small-note">${e.problem}</span>` : '<span class="c-faint small-note">Your kills done and what you got stay as they are.</span>'}
+      ${e.problem ? `<span class="c-lose small-note">${e.problem}</span>` : '<span class="c-faint small-note">Your kills done and your loot stay as they are.</span>'}
     </form>`;
   }
   function saveEdit(goal, form) {
@@ -638,7 +643,9 @@ export function createNpcUi(P) {
       return `<div class="step">${iconImg(SKILL_BY_KEY.get(k))}<div class="step-main"><b class="c-xp">+${xpText(total)}</b> ${esc(SKILL_BY_KEY.get(k).name)} XP <span class="c-faint">(${xpText(x)} a kill)</span>${to > (cur?.level || 0) ? ` <span class="c-faint">· the ${fmt(Math.max(0, goal.value - done))} still to do take you from level ${cur.level} to ${to}</span>` : ''}</div></div>`;
     }).join('');
     const bones = m.bones && drops.get(m.bones) && taken(goal, m.bones) ? drops.get(m.bones) : null;
-    const bury = bones ? `<div class="c-faint small-note">Their ${itemName(m.bones)}: <b class="c-xp">+${xpText(Math.round(bones.q * goal.value * (P.buryXp(m.bones) || 0)))}</b> Prayer XP if you bury them all.</div>` : '';
+    // (v3.2: what the drops give besides, a row each like the kills' own: burying, alching, cleaning)
+    const bury = bones ? xpRow('prayer', Math.round(bones.q * goal.value * (P.buryXp(m.bones) || 0)), 'if you bury them',
+      `(${fmt(Math.round(bones.q * goal.value))} ${itemName(m.bones)}, ${xpText(P.buryXp(m.bones) || 0)} each)`) : '';
     const priced = value.missing.length === 0;
     const gv = gotValue(goal);
     const anyGot = Object.values(got).some(n => n > 0);
@@ -664,25 +671,25 @@ export function createNpcUi(P) {
           <span class="c-muted">Kills done</span>
           <span class="got-box"><button type="button" class="mv" data-done-step="-1" title="One kill fewer" aria-label="One kill fewer"${done > 0 ? '' : ' disabled'}>−</button><input class="input small num" data-done="1" inputmode="numeric" value="${done ? fmt(done) : ''}" placeholder="0" aria-label="Kills done"><button type="button" class="mv" data-done-step="1" title="One kill more" aria-label="One kill more">+</button></span>
           <span class="c-faint">of ${fmt(goal.value)}${done < goal.value ? ` · ${fmt(goal.value - done)} to go` : ''}</span>
-          <span class="c-faint small-note">Your kills are counted from your XP too: when the hiscores show new combat XP, the box above your goals counts them.</span>
+          <span class="c-faint small-note">Your kills are counted from your XP too: when the hiscores show new combat XP, the box above your goals asks what you killed. <button type="button" class="linkish small-note" data-act="ses-open" data-go-top="1" title="Count kills from your XP since your last count, or since a Gains snapshot">Count kills from my XP…</button></span>
         </div>
       </div>
-      <div class="plan-sec"><h4>XP from ${fmt(goal.value)} kills</h4><div class="steps">${xpLines || '<span class="c-faint">None in this style.</span>'}</div>${bury}${alchLine(goal, drops)}${cleanLine(goal, drops)}</div>
+      <div class="plan-sec"><h4>XP from ${fmt(goal.value)} kills</h4><div class="steps">${xpLines || '<span class="c-faint">None in this style.</span>'}${bury}${alchLine(goal, drops)}${cleanLine(goal, drops)}</div></div>
       <div class="plan-sec loot-sec"><h4>Loot from ${fmt(goal.value)} kills: about <span class="c-xp">${priced ? '' : '≈'}${gpShort(value.total * goal.value)}</span> gp <span class="c-faint">(${gpShort(value.total)} a kill${priced ? '' : `; ${value.missing.length} without a price yet`})</span>
           <button type="button" class="linkish small-note" data-act="table-toggle" aria-expanded="${!hidden}">${hidden ? 'Show table' : 'Hide table'}</button></h4>
         ${noteHtml(goal)}
-        ${hidden ? '' : `<div class="c-faint small-note">Expected: the average over ${fmt(goal.value)} kills. At least one: the chance of one or more in that many. ${done ? `After your ${fmt(done)} kills: what's to be expected, what you got, and how lucky that is.` : 'Type in your kills done above to compare what you get with what\'s to be expected.'} − and + change what you got by one drop. Untick <b>Take</b> for what you leave on the ground; tick <b>Alch</b> for what you high alch (counted as coins).</div>
+        ${hidden ? '' : `<div class="c-faint small-note">Expected: the average over ${fmt(goal.value)} kills. At least one: the chance of one or more in that many. ${done ? `After your ${fmt(done)} kills: what's to be expected, your loot, and how lucky that is.` : 'Type in your kills done above to compare what you get with what\'s to be expected.'} − and + change your loot by one drop. Untick <b>Take</b> for what you leave on the ground; tick <b>Alch</b> for what you high alch (counted as coins).</div>
         ${dropTable(drops, goal)}`}
         <div class="money">
           ${done ? `<span>Expected after ${fmt(done)} kills: <b>${priced ? '' : '≈'}${gpShort(expectedDone)}</b> gp</span>` : ''}
-          ${anyGot ? `<span>You got: <b class="c-xp">${gpShort(gv.total)}</b> gp${gv.missing.length ? ` <span class="c-faint">(${gv.missing.length} without a price)</span>` : ''}${vs}</span>` : ''}
+          ${anyGot ? `<span>Looted: <b class="c-xp">${gpShort(gv.total)}</b> gp${gv.missing.length ? ` <span class="c-faint">(${gv.missing.length} without a price)</span>` : ''}${vs}</span>` : ''}
           ${alchCoins(goal, drops)}
         </div>
         ${bringLine(goal)}
         <div class="bar wrap">
-          <button type="button" class="btn small" data-act="loot-pick" title="Read what you got from screenshots of your inventory: a trip each">Read loot from screenshots</button>
-          ${diff.any ? `<button type="button" class="btn small" data-act="loot-deposit-open" aria-expanded="${deposits.has(goal.id)}" title="${esc(diff.text)}">Deposit to my bank…</button>` : anyGot ? '<span class="c-faint small-note">All you got is in your bank.</span>' : ''}
-          ${anyGot ? '<button type="button" class="linkish small-note" data-act="loot-clear">Clear what you got</button>' : ''}
+          <button type="button" class="btn small" data-act="loot-pick" title="Read your loot from screenshots of your inventory: a trip each">Read loot from screenshots</button>
+          ${diff.any ? `<button type="button" class="btn small" data-act="loot-deposit-open" aria-expanded="${deposits.has(goal.id)}" title="${esc(diff.text)}">Deposit to my bank…</button>` : anyGot ? '<span class="c-faint small-note">All your loot is in your bank.</span>' : ''}
+          ${anyGot ? '<button type="button" class="linkish small-note" data-act="loot-clear">Clear my loot</button>' : ''}
         </div>
         ${deposits.has(goal.id) ? depositHtml(goal) : ''}
         ${brings.has(goal.id) ? bringHtml(goal, drops) : ''}
@@ -713,8 +720,9 @@ export function createNpcUi(P) {
     const magic = P.currentOf('magic');
     const low = magic && magic.level < HIGH_ALCH.level ? ` <span class="c-lose">High Level Alchemy takes Magic ${HIGH_ALCH.level}: you're ${magic.level}${magic.ranked ? '' : ' at most'}.</span>` : '';
     const natures = P.bank().items.naturerune || 0;
-    return `<div class="c-faint small-note alch-line">High Level Alchemy: <b class="c-xp">+${xpText(Math.round(c.plan * HIGH_ALCH.xp))}</b> Magic XP for about ${fmt(Math.round(c.plan))} casts over ${fmt(goal.value)} kills${c.soFar ? ` (+${xpText(c.soFar * HIGH_ALCH.xp)} for the ${fmt(c.soFar)} you've alched)` : ''}; a nature rune a cast, and 5 fire runes unless you wield a staff of fire.${low}
-      <label class="check" title="When alched loot goes into your bank (as coins), the nature runes its casts took come out of it"><input type="checkbox" data-sopt="runes"${goal.runesKept ? '' : ' checked'}> Take the nature runes out of my bank when it goes in <span class="c-faint">(you have ${fmt(natures)})</span></label></div>`;
+    return xpRow('magic', Math.round(c.plan * HIGH_ALCH.xp), 'if you alch them',
+      `(about ${fmt(Math.round(c.plan))} casts of High Level Alchemy, ${xpText(HIGH_ALCH.xp)} each${c.soFar ? `; +${xpText(c.soFar * HIGH_ALCH.xp)} for the ${fmt(c.soFar)} you've alched` : ''}: a nature rune a cast, and 5 fire runes unless you wield a staff of fire)${low}`,
+      `<label class="check alch-runes" title="When something you alched goes into your bank (as the coins it made), a nature rune for each cast comes out of it"><input type="checkbox" data-sopt="runes"${goal.runesKept ? '' : ' checked'}> Take the nature runes out of my bank when it goes in <span class="c-faint">(you have ${fmt(natures)})</span></label>`);
   }
   const alchCoins = (goal, drops) => {
     const c = alchCasts(goal, drops);
@@ -735,7 +743,13 @@ export function createNpcUi(P) {
       plan += d.q * goal.value * h.xp;
       soFar += (goal.got?.[slug] || 0) * h.xp;
     }
-    return `<div class="c-faint small-note">Cleaning the herbs: <b class="c-xp">+${xpText(Math.round(plan))}</b> Herblore XP over ${fmt(goal.value)} kills${soFar ? ` (+${xpText(soFar)} for the ones you've got)` : ''}.${cant.length ? ` At Herblore ${level} you can't clean ${esc(listText(cant))} yet.` : ''}</div>`;
+    return xpRow('herblore', Math.round(plan), 'if you clean them',
+      `(the herbs${soFar ? `; +${xpText(soFar)} for the ones you've looted` : ''})${cant.length ? ` <span class="c-lose">At Herblore ${level} you can't clean ${esc(listText(cant))} yet.</span>` : ''}`);
+  }
+  // A skill's XP as a row with its icon, the way the kills' own XP is shown: "+15,000 Prayer XP if you bury them (…)".
+  function xpRow(skill, xp10, how, more = '', extra = '') {
+    const sk = SKILL_BY_KEY.get(skill);
+    return `<div class="step xp-row">${iconImg(sk)}<div class="step-main"><b class="c-xp">+${xpText(xp10)}</b> ${esc(sk.name)} XP ${how} <span class="c-faint">${more}</span>${extra ? `<div>${extra}</div>` : ''}</div></div>`;
   }
 
   // ── What you bring (v3.1) ───────────────────────────────────────────────
@@ -744,7 +758,7 @@ export function createNpcUi(P) {
   function bringLine(goal) {
     const b = Object.entries(goal.bring || {}).filter(([, n]) => n > 0);
     return `<div class="c-faint small-note bring-line">What you bring each trip: ${b.length ? esc(listText(b.map(([s, n]) => `${fmt(n)} ${ITEMS[s]?.name || s}`))) : 'nothing it drops'} <button type="button" class="linkish small-note" data-act="bring-open" aria-expanded="${brings.has(goal.id)}">${b.length ? 'Change' : 'Set it'}</button>
-      <span>· it's taken off each screenshot of your loot, so what you carry (and loot from before this goal) isn't counted as what you got.</span></div>`;
+      <span>· it's taken off each screenshot of your loot, so what you carry (and loot from before this goal) isn't counted as loot.</span></div>`;
   }
   function bringHtml(goal, drops) {
     const st = brings.get(goal.id);
@@ -778,7 +792,7 @@ export function createNpcUi(P) {
     }
     const adds = Object.entries(out).filter(([, n]) => n > 0), less = Object.entries(out).filter(([, n]) => n < 0);
     const say = list => list.map(([s, n]) => `${fmt(Math.abs(n))} ${ITEMS[s]?.name || s}`).join(', ');
-    const text = [adds.length ? `What you got that isn't in your bank yet: ${say(adds)}.` : '', less.length ? `Your bank has more from this goal than you got: ${say(less)}.` : ''].filter(Boolean).join(' ');
+    const text = [adds.length ? `Loot that isn't in your bank yet: ${say(adds)}.` : '', less.length ? `Your bank has more from this goal than you looted: ${say(less)}.` : ''].filter(Boolean).join(' ');
     return { out, any: adds.length + less.length > 0, adds, less, text };
   }
   function depositHtml(goal) {
@@ -789,11 +803,11 @@ export function createNpcUi(P) {
       const as = alched(goal, s) ? ` <span class="c-faint small-note">→ ${fmt(highAlch(s))} coins each</span>` : '';
       return `<label class="shot-row"><input type="checkbox" data-dep-on="${s}"${st.off.has(s) ? '' : ' checked'}> ${itemIcon(s, true)} <span class="shot-name">${itemName(s)}${as}</span>
         <input class="input small num" data-dep="${s}" inputmode="numeric" value="${fmt(n)}" aria-label="${esc(ITEMS[s]?.name || s)} to deposit" title="${diff.out[s] < 0 ? 'Less than nothing takes them back out of your bank' : 'How many to put in your bank'}">
-        <span class="shot-was c-faint">got ${fmt(goal.got?.[s] || 0)} · in bank ${fmt(goal.banked?.[s] || 0)}</span></label>`;
+        <span class="shot-was c-faint">looted ${fmt(goal.got?.[s] || 0)} · banked ${fmt(goal.banked?.[s] || 0)}</span></label>`;
     }).join('');
     return `<div class="card deposit-edit">
       <div class="shots-title">Deposit to my bank</div>
-      <p class="note">What you got that isn't in your bank yet, ready to go in: change an amount, or untick what stays out for now. Alched loot goes in as coins${goal.runesKept ? '' : ', and the nature runes its casts took come out'}. Only these kills' loot is counted: what you brought and what your bank held before this goal stay as they were.</p>
+      <p class="note">Your loot that isn't in your bank yet: change an amount, or untick what stays out for now. What you alched goes in as the coins it made (its high alch)${goal.runesKept ? '' : ', and a nature rune for each cast comes out of your bank'}. Nothing else in your bank changes.</p>
       <div class="shot-list">${rows}</div>
       <div class="bar wrap"><button type="button" class="btn small" data-act="loot-deposit">Deposit</button><button type="button" class="btn small" data-act="loot-deposit-cancel">Cancel</button></div>
     </div>`;
@@ -847,11 +861,13 @@ export function createNpcUi(P) {
 
   // ── Kills counted from XP (v3.1) ────────────────────────────────────────
   // When the hiscores show combat XP gained since kills were last counted, a box
-  // above your goals says what it comes to: the Hitpoints XP over what a kill of
-  // your goal's monster gives (1.33 a point of damage, whatever the style).
-  // Count those kills, or choose what you killed: kills of each of your Slayer
-  // goals' monsters and any other, one of them taking whatever XP the others
-  // leave. What's left over can be taken off a goal's kills (the XP it was for).
+  // above your goals says so: choose what you killed (kills of each of your
+  // Slayer goals' monsters and any other; one of them takes whatever XP the
+  // others leave, 1.33 Hitpoints XP a point of damage, whatever the style: your
+  // topmost Slayer goal, till you pick another), or Not now. What's left over
+  // can be taken off a goal's kills (the XP it was for). v3.2: the box itself
+  // makes no guess, and the XP can be counted from any of the account's Gains
+  // snapshots instead of the last count (the default, every time).
   const markKey = () => `slayerMark.${P.safe()}`;
   const readMark = () => (P.safe() ? store.get(markKey(), null) : null);
   function xpNow() {
@@ -864,28 +880,63 @@ export function createNpcUi(P) {
     const xp = xpNow();
     if (xp) store.set(markKey(), { at: P.profile()?.fetchedAt || Date.now(), xp10: xp });
   }
-  // XP gained since the mark: { skill: tenths }, or null when there's none to count
+  const whenText = t => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // The account's Gains snapshots there's combat XP since, newest first: [{ t, xp10 }]
+  // (a skill without a row then counts nothing: its XP then isn't known)
+  function snapBases() {
+    const now = xpNow(), at = P.profile()?.fetchedAt || Date.now();
+    if (!now || !P.account()) return [];
+    const out = [];
+    for (const snap of snapshots.list(P.account())) {
+      if (snap.t >= at) continue;
+      const xp10 = {};
+      for (const k of COUNTED_SKILLS) {
+        const st = snap.stats[SKILL_BY_KEY.get(k).id];
+        xp10[k] = st ? Math.round(st.xp * 10) : now[k];
+      }
+      if ((xpGained(xp10, now).hitpoints || 0) > 0) out.push({ t: snap.t, xp10 });
+    }
+    return out.reverse();
+  }
+  // What the XP is counted from: the last count (the default), or a snapshot ('t:<time>'): { at, xp10 } or null
+  function baseline() {
+    if (ses.from?.startsWith('t:')) {
+      const t = Number(ses.from.slice(2));
+      const b = snapBases().find(x => x.t === t);
+      if (b) return { at: b.t, xp10: b.xp10 };
+    }
+    return readMark();
+  }
+  // XP gained since the baseline: { skill: tenths }, or null when there's none to count
   function sessionGain() {
-    const mark = readMark(), now = xpNow();
-    if (!mark || !now) return null;
-    const g = xpGained(mark.xp10, now);
+    const base = baseline(), now = xpNow();
+    if (!base || !now) return null;
+    const g = xpGained(base.xp10, now);
     return g.hitpoints > 0 ? g : null;
   }
-  // The chooser's state: open, kills typed for each goal (and other monsters), which row takes the rest.
-  const ses = { open: false, kills: {}, rest: null, others: [], reduce: '', hidden: null, note: null };
-  const slayerGoals = () => P.goals().filter(isSlayerGoal).filter(g => MONSTER_BY_ID.has(g.npc));
-  // (the one the XP is most likely for: the goal counted last, else the first not reached)
-  function likelyGoal(list) {
-    const last = store.get(`slayerLast.${P.safe()}`, null);
-    return list.find(g => g.id === last && !reached(g)) || list.find(g => !reached(g)) || list[0] || null;
+  // "since <the last count ▾>": the last count, or one of the Gains snapshots
+  function fromSelect() {
+    const mark = readMark();
+    const bases = snapBases();
+    const opts = [`<option value="prev"${ses.from?.startsWith('t:') ? '' : ' selected'}>${mark ? `the previous count, ${esc(whenText(mark.at))}` : 'the previous count'}</option>`];
+    // (the 30 newest, and the first)
+    const shown = bases.length > 31 ? [...bases.slice(0, 30), bases[bases.length - 1]] : bases;
+    for (const b of shown) opts.push(`<option value="t:${b.t}"${ses.from === `t:${b.t}` ? ' selected' : ''}>${b === bases[bases.length - 1] && bases.length > 1 ? 'the first snapshot' : 'a Gains snapshot'}, ${esc(whenText(b.t))}</option>`);
+    return `<select class="input small ses-from" data-ses-from="1" aria-label="Count the XP from" title="The XP is counted from your last count, or from any of this account's snapshots on the Gains tab">${opts.join('')}</select>`;
   }
+  // The chooser's state: open, the baseline, kills typed for each goal (and other monsters), which row takes the rest.
+  const ses = { open: false, from: 'prev', kills: {}, rest: null, others: [], reduce: '', hidden: null, note: null };
+  const slayerGoals = () => P.goals().filter(isSlayerGoal).filter(g => MONSTER_BY_ID.has(g.npc));
   const hpOf = (npc, style) => killXp(npc, style)?.hitpoints || 0;
   // A monster's Slayer goal: the first not reached, else any
   const goalFor = npc => (npc ? slayerGoals().find(g => g.npc === npc && !reached(g)) || slayerGoals().find(g => g.npc === npc) || null : null);
-  // The rows the chooser counts: [{ key, npc, style, kills, goal? }], the rest row filled in from what the others leave.
+  // The rows the chooser counts: [{ key, npc, style, kills, goal? }], the rest row filled in from what the
+  // others leave: the one you pick, else your topmost Slayer goal (the first not reached), unless you've
+  // typed its kills ('-': none takes the rest).
+  const topGoal = list => list.find(g => !reached(g)) || list[0] || null;
   function sessionRows(gain) {
     const list = slayerGoals();
-    const rest = ses.rest ?? likelyGoal(list)?.id ?? null;
+    const rest = ses.rest === '-' ? null : ses.rest ?? topGoal(list)?.id ?? null;
     const rows = list.map(g => ({ key: g.id, npc: g.npc, style: g.style, goal: g, kills: ses.kills[g.id] ?? 0 }));
     for (const o of ses.others) {
       const found = o.text ? findMonster(o.text) : null;
@@ -903,24 +954,25 @@ export function createNpcUi(P) {
   }
   function sessionHtml() {
     if (!P.profile() || !slayerGoals().length) return '';
-    if (!readMark()) { setMark(); return ''; }
+    if (!readMark()) { setMark(); if (!ses.open) return ''; }
     const note = ses.note ? `<div class="msg ok session-msg">${ses.note.html}${ses.note.undo ? ' <button type="button" class="linkish" data-act="ses-undo">Undo</button>' : ''} <button type="button" class="linkish c-faint" data-act="ses-note-close" aria-label="Close">✕</button></div>` : '';
     const gain = sessionGain();
-    if (!gain) return note;
-    const sig = JSON.stringify(gain);
+    if (!gain && !ses.open) return note;
+    if (!gain) {
+      // (opened from a plan, with nothing since the count it's from: an earlier snapshot may have some)
+      return `${note}<div class="card session open" data-session="1">
+        <div class="bar wrap"><span>No new combat XP since ${fromSelect()}${snapBases().length ? ': pick an earlier snapshot.' : '. Refresh XP after a session, and it\'s counted here.'}</span>
+          <span class="grow"></span><button type="button" class="btn small" data-act="ses-cancel">Close</button></div>
+      </div>`;
+    }
+    const sig = JSON.stringify([ses.from, gain]);
     if (ses.hidden === sig && !ses.open) return note;
-    const mark = readMark();
-    const when = new Date(mark.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const gained = COUNTED_SKILLS.filter(k => gain[k] > 0).map(k => `<b class="c-xp">+${xpText(gain[k])}</b> ${esc(SKILL_BY_KEY.get(k).name)}`).join(', ');
     const list = slayerGoals();
-    const guess = likelyGoal(list);
-    const n = guess ? killsFromHp(guess.npc, guess.style, gain.hitpoints) : 0;
-    const gm = guess && MONSTER_BY_ID.get(guess.npc);
     if (!ses.open) {
       return `${note}<div class="card session" data-session="1">
-        <div class="bar wrap"><span>New combat XP since ${esc(when)}: ${gained} XP.${gm && n ? ` That's about <b>${fmt(n)}</b> ${esc(gm.name)} kill${n === 1 ? '' : 's'}.` : ''}</span>
+        <div class="bar wrap"><span>New combat XP since ${fromSelect()}: ${gained} XP.</span>
           <span class="grow"></span>
-          ${gm && n ? `<button type="button" class="btn small" data-act="ses-count-guess" data-goal-id="${guess.id}" data-kills="${n}">Count ${fmt(n)} ${esc(gm.name)} kill${n === 1 ? '' : 's'}</button>` : ''}
           <button type="button" class="btn small" data-act="ses-open">Choose what I killed</button>
           <button type="button" class="linkish small-note" data-act="ses-hide" title="Ask again when there's more XP">Not now</button></div>
       </div>`;
@@ -951,14 +1003,18 @@ export function createNpcUi(P) {
     // (what's left over can come off a goal's kills: the XP it was for)
     const cut = g => Math.max(0, Math.min((g.value || 0) - (g.done || 0) - (rows.find(r => r.key === g.id)?.kills || 0), Math.floor(leftHp / Math.max(1, hpOf(g.npc, g.style)))));
     const cutters = leftHp > 0 ? list.filter(g => cut(g) > 0) : [];
-    const leftText = leftHp > 0
-      ? `<div class="ses-left">Left over: ${xpList(Object.fromEntries(Object.entries(left).filter(([, x]) => x > 0)))} XP, from something else.${cutters.length ? ` <label class="check">Take it off <select class="input small" data-ses-reduce="1" aria-label="Take it off a goal"><option value="">no goal</option>${cutters.map(g => `<option value="${g.id}"${ses.reduce === g.id ? ' selected' : ''}>your ${esc(MONSTER_BY_ID.get(g.npc).name)} goal: ${fmt(g.value)} → ${fmt(g.value - cut(g))} kills</option>`).join('')}</select></label> <span class="c-faint small-note">(the XP it was for: a goal for some XP needs fewer kills)</span>` : ''}</div>`
+    const leftXp = xpList(Object.fromEntries(Object.entries(left).filter(([, x]) => x > 0)));
+    const reduceSel = cutters.length ? ` <label class="check">Take it off <select class="input small" data-ses-reduce="1" aria-label="Take it off a goal"><option value="">no goal</option>${cutters.map(g => `<option value="${g.id}"${ses.reduce === g.id ? ' selected' : ''}>your ${esc(MONSTER_BY_ID.get(g.npc).name)} goal: ${fmt(g.value)} → ${fmt(g.value - cut(g))} kills</option>`).join('')}</select></label> <span class="c-faint small-note">(the XP it was for: a goal for some XP needs fewer kills)</span>` : '';
+    const leftText = !counted.length
+      ? `<div class="ses-left">Not counted yet: ${leftXp} XP. Type the kills of each monster you killed, or click <b>the rest</b> on the one that takes whatever XP the others leave.${reduceSel ? ` All of it from something else?${reduceSel}` : ''}</div>`
+      : leftHp > 0
+      ? `<div class="ses-left">Left over: ${leftXp} XP, from something else.${reduceSel}</div>`
       : leftHp < 0 ? `<div class="ses-left c-lose">Those come to ${xpText(-leftHp)} more Hitpoints XP than you gained: fewer kills, or another style?</div>`
       : '<div class="ses-left c-faint">That\'s all of it.</div>';
     const any = counted.some(r => r.goal || goalFor(r.npc));
     return `${note}<div class="card session open" data-session="1">
-      <div class="shots-title">What did you kill since ${esc(when)}?</div>
-      <p class="note">You gained ${gained} XP. One line takes whatever XP the others leave (a kill's Hitpoints XP is 1.33 a point of damage, whatever the style): type the others' kills, and it follows.</p>
+      <div class="shots-title">What did you kill since ${fromSelect()}?</div>
+      <p class="note">You gained ${gained} XP. One line takes whatever XP the others leave (a kill's Hitpoints XP is 1.33 a point of damage, whatever the style): your topmost Slayer goal, till you click <b>the rest</b> on another. Type the others' kills, and it follows.</p>
       ${datalist('npc-names-ses')}
       <div class="ses-rows">${rows.map(rowHtml).join('')}</div>
       <div class="bar wrap"><button type="button" class="linkish" data-act="ses-add">+ another monster</button></div>
@@ -988,9 +1044,8 @@ export function createNpcUi(P) {
       P.updateGoal(reduce.goal.id, g => { g.value = Math.max(g.done || 1, g.value - reduce.by); to = g.value; });
       cut = `Your ${esc(MONSTER_BY_ID.get(reduce.goal.npc).name)} goal is ${fmt(reduce.by)} kill${reduce.by === 1 ? '' : 's'} fewer, ${fmt(to)}: the XP they were for.`;
     }
-    if (most) store.set(`slayerLast.${P.safe()}`, most.goal.id);
     setMark();
-    ses.open = false; ses.kills = {}; ses.rest = null; ses.others = []; ses.reduce = '';
+    ses.open = false; ses.from = 'prev'; ses.kills = {}; ses.rest = null; ses.others = []; ses.reduce = '';
     // (and the loot of those kills, next: read from screenshots into that goal's plan)
     const loot = most ? ` <button type="button" class="linkish" data-act="ses-loot" data-goal-id="${most.goal.id}">Read the ${esc(MONSTER_BY_ID.get(most.goal.npc).name)} loot from screenshots</button>` : '';
     const html = [said.length ? `Counted: ${esc(listText(said))}.` : '', cut].filter(Boolean).join(' ');
@@ -1060,7 +1115,8 @@ export function createNpcUi(P) {
       const got = await readInventories(files);
       if (got.error) { shots.set(goalId, { error: got.error }); P.renderGoals(); return; }
       const { B, reads } = got;
-      const sh = { B, reads, one: false, again: false, early: false, ...lootReview(goal, B, reads, {}) };
+      const sh = { B, reads, one: false, again: false, early: false, edited: new Set(), alchKills: tripKills(goal), alch: {}, alchEdited: false, ...lootReview(goal, B, reads, {}) };
+      startAlch(goal, sh);
       shots.set(goalId, sh);
       prices.want(sh.rows.map(r => r.slug));
     } catch (e) {
@@ -1100,7 +1156,10 @@ export function createNpcUi(P) {
     }
     // (what you leave on the ground isn't ticked: you won't have picked it up)
     const off = new Set(keep.filter(r => !taken(goal, r.slug)).map(r => r.key));
-    return { rows: keep, skipped, others: sum.others, unknown: sum.unknown, off, amounts, brought, trips, used: use.map(r => r.key),
+    // (the coins: some may be what alching on the way made, v3.2)
+    const coinsKey = keep.find(r => r.slug === 'coins')?.key || null;
+    const coinsRead = coinsKey ? amounts[coinsKey] : 0;
+    return { rows: keep, skipped, others: sum.others, unknown: sum.unknown, off, amounts, brought, trips, used: use.map(r => r.key), coinsKey, coinsRead,
       repeats: reads.filter(r => r.ok && before.has(r.key)).length, earlier: reads.filter(r => r.ok && !before.has(r.key) && isEarly(r)).length };
   }
   function shotsHtml(goal, sh) {
@@ -1119,10 +1178,11 @@ export function createNpcUi(P) {
       const unsure = it.unsure ? ' <span class="shot-check" title="A close call between items that look alike: check this one">check</span>' : '';
       const brought = sh.brought[it.key] ? ` · ${fmt(sh.brought[it.key])} you bring taken off` : '';
       const left = !taken(goal, it.slug) ? ' · you leave it on the ground' : '';
+      const alching = it.key === sh.coinsKey && alchCoinsOf(sh) ? ` · ${fmt(alchCoinsOf(sh))} from alching` : '';
       return `<label class="shot-row"><input type="checkbox" data-loot-shot="${it.key}"${sh.off.has(it.key) ? '' : ' checked'}>
         ${itemIcon(it.slug, true)} <span class="shot-name">${name}${unsure}</span>
-        <input class="input small num" data-loot-n="${it.key}" inputmode="numeric" value="${fmt(sh.amounts[it.key] ?? it.count)}" aria-label="${esc(ITEMS[it.slug]?.name || it.slug)} to add" title="How many to add to what you got">
-        <span class="shot-was c-faint">read ${read}${brought}${left}${got[it.slug] ? ` · you have ${fmt(got[it.slug])}` : ''}</span></label>`;
+        <input class="input small num" data-loot-n="${it.key}" inputmode="numeric" value="${fmt(sh.amounts[it.key] ?? it.count)}" aria-label="${esc(ITEMS[it.slug]?.name || it.slug)} to add" title="How many to add to your loot">
+        <span class="shot-was c-faint">read ${read}${brought}${alching}${left}${got[it.slug] ? ` · you have ${fmt(got[it.slug])}` : ''}</span></label>`;
     }).join('');
     const skipped = sh.skipped.length + sh.others + sh.unknown;
     const names = [...new Set(sh.skipped.map(r => ITEMS[r.slug]?.name || r.slug))];
@@ -1132,11 +1192,12 @@ export function createNpcUi(P) {
       ${sh.earlier ? `<label class="check loot-one" title="Taken before you set this goal: what it shows was picked up before it"><input type="checkbox" data-loot-early="1"${sh.early ? ' checked' : ''}> ${sh.earlier === ok ? (ok === 1 ? 'This one was' : `All ${ok} of these were`) : `${fmt(sh.earlier)} of these ${sh.earlier === 1 ? 'was' : 'were'}`} taken before you set this goal, so ${sh.early ? `${sh.earlier === 1 ? 'it counts' : 'they count'}` : `${sh.earlier === 1 ? 'it\'s' : 'they\'re'} left out`}: count ${sh.earlier === 1 ? 'it' : 'them'} too</label>` : ''}
       ${sh.trips > 1 || sh.one ? `<label class="check loot-one" title="A screenshot shows everything picked up on its trip so far: of several taken on one trip, only the last counts"><input type="checkbox" data-loot-one="1"${sh.one ? ' checked' : ''}> They're all one trip: count only the last one</label>` : ''}
       <p class="note">${sh.one ? 'Only the last screenshot counts: it has all that trip\'s loot' : 'Each screenshot counts as a trip\'s loot'}${Object.keys(goal.bring || {}).length ? ', less what you bring each trip' : ''}. ${skipped ? `${fmt(skipped)} other slot${skipped === 1 ? '' : 's'} ${skipped === 1 ? 'was' : 'were'} left out${names.length ? `: ${esc(names.slice(0, 8).join(', '))}${names.length > 8 ? ' …' : ''}, which ${esc(m?.name || 'it')} doesn't drop` : ''}.` : ''} Change any amount, or untick what wasn't from these kills (what you had with you before them: or set <b>what you bring</b>, and it's taken off every time).
-        <b>Add to what I got</b> counts it as these kills' loot; <b>…and to my bank</b> puts that same loot in your bank too (alched items as coins). Nothing else in your bank changes.</p>
+        <b>Add to my loot</b> counts it as these kills' loot; then <b>Deposit to my bank…</b> under the table puts what isn't in your bank yet into it.</p>
       ${problems ? `<ul class="shot-problems">${problems}</ul>` : ''}
       ${rows ? `<div class="shot-list">${rows}</div>` : `<p class="c-faint">None of what ${esc(m?.name || 'it')} drops is in these screenshots.</p>`}
+      ${alchHtml(goal, sh)}
       <div class="bar wrap">
-        ${rows ? '<button type="button" class="btn small" data-act="loot-apply">Add to what I got</button><button type="button" class="btn small" data-act="loot-apply" data-to-bank="1">Add to what I got and to my bank</button>' : ''}
+        ${rows || alchCoinsOf(sh) ? '<button type="button" class="btn small" data-act="loot-apply">Add to my loot</button>' : ''}
         <button type="button" class="btn small" data-act="loot-discard">${rows ? 'Discard' : 'Close'}</button>
       </div>
     </div>`;
@@ -1151,26 +1212,107 @@ export function createNpcUi(P) {
     }
     return out;
   }
-  function applyLoot(goalId, toBank) {
+  function applyLoot(goalId) {
     const sh = shots.get(goalId);
     const goal = goalOf(goalId);
     if (!sh?.rows || !goal) return;
     const undo = snapshot();
     const add = shotAmounts(sh);
+    // (what was alched on the way: loot too, alched; the coins it made aren't coins dropped)
+    const alchedNow = Object.entries(sh.alch || {}).filter(([, n]) => n > 0);
+    for (const [slug, n] of alchedNow) add[slug] = (add[slug] || 0) + n;
     P.updateGoal(goalId, g => {
       const got = { ...(g.got || {}) };
       for (const [slug, n] of Object.entries(add)) got[slug] = (got[slug] || 0) + n;
       g.got = got;
+      if (alchedNow.length) g.alch = [...new Set([...(g.alch || []), ...alchedNow.map(([slug]) => slug)])];
+      // (the screenshots it's from: not counted again; and the kills it's for, so the next trips' are told apart)
+      g.shots = [...new Set([...(g.shots || []), ...(sh.used || [])])].slice(-400);
+      g.lootDone = g.done || 0;
     });
     shots.delete(goalId);
-    const lines = Object.entries(add).map(([s, n]) => `${fmt(n)} ${ITEMS[s]?.name || s}`);
-    // (the screenshots it's from: not counted again)
-    P.updateGoal(goalId, g => { g.shots = [...new Set([...(g.shots || []), ...(sh.used || [])])].slice(-400); });
+    const alchedSet = new Set(alchedNow.map(([slug]) => slug));
+    const lines = Object.entries(add).map(([s, n]) => `${fmt(n)} ${ITEMS[s]?.name || s}${alchedSet.has(s) ? ' (alched)' : ''}`);
     const what = lines.length > 6 ? `${lines.slice(0, 6).join(', ')} and ${lines.length - 6} more` : listText(lines);
-    if (toBank) {
-      const r = deposit(goalOf(goalId), add);
-      say(goalId, `Added to what you got, and put in your bank: ${esc(depositText(r))}. <button type="button" class="linkish" data-act="to-bank" data-skill="slayer">See your bank</button>`, undo);
-    } else say(goalId, lines.length ? `Added to what you got: ${esc(what)}.` : 'Nothing was added.', undo);
+    say(goalId, lines.length ? `Added to your loot: ${esc(what)}.` : 'Nothing was added.', undo);
+  }
+
+  // ── Alching on the way (v3.2) ───────────────────────────────────────────
+  // The coins a loot screenshot shows are coins dropped and the coins alching
+  // made on the way. What was alched is guessed (loot.js guessAlchs) from the
+  // kills on those trips, the drop rates and what you alch: what's ticked under
+  // Alch, or with none ticked, the drops an alch gives 1,000 coins or more for,
+  // and only when there are more coins than the kills would drop. You change it
+  // to what you did; the alched drops are loot (alched), and the rest of the
+  // coins are coins dropped. What you bring that a cast uses (nature runes, and
+  // fire runes if you bring them) comes off what you bring.
+  const ALCH_WORTH = 1000;
+  function alchCandidates(goal, drops) {
+    const ticked = (goal.alch || []).filter(s => drops.has(s) && canAlch(s) && taken(goal, s));
+    if (ticked.length) return ticked;
+    return [...drops.keys()].filter(s => canAlch(s) && taken(goal, s) && highAlch(s) >= ALCH_WORTH);
+  }
+  // The kills on the trips a screenshot is from: since loot was last added, else all of them.
+  function tripKills(goal) {
+    const done = goal.done || 0, since = done - (goal.lootDone ?? 0);
+    return since > 0 ? since : done;
+  }
+  const alchCoinsOf = sh => Object.entries(sh.alch || {}).reduce((t, [slug, n]) => t + (n > 0 ? n * highAlch(slug) : 0), 0);
+  function guessFor(goal, sh) {
+    const drops = dropsOf(goal.npc, goalOpts(goal));
+    const ticked = (goal.alch || []).some(s => drops.has(s) && canAlch(s));
+    const { mean, sd } = coinsDropped(drops.get('coins'), sh.alchKills);
+    // (with nothing ticked under Alch, only coins well over what the kills drop say there was alching)
+    if (!ticked && !(sh.coinsRead > mean + 2 * sd + 100)) return {};
+    const items = alchCandidates(goal, drops).map(slug => ({ slug, q: drops.get(slug).q, ha: highAlch(slug) }));
+    return guessAlchs({ coins: sh.coinsRead || 0, kills: sh.alchKills, coinDrop: drops.get('coins') || null, items }).counts;
+  }
+  // The guess, and what it shows; then the amounts it changes.
+  function startAlch(goal, sh) {
+    if (!sh.alchEdited) sh.alch = sh.coinsRead > 0 ? guessFor(goal, sh) : {};
+    sh.alchOpen = sh.alchOpen || Object.keys(sh.alch).length > 0;
+    syncAlch(goal, sh);
+  }
+  // The coins dropped are what's read less what alching made; the runes the casts took come off what you bring.
+  function syncAlch(goal, sh) {
+    const casts = Object.values(sh.alch || {}).reduce((t, n) => t + (n > 0 ? n : 0), 0);
+    if (sh.coinsKey && !sh.edited.has(sh.coinsKey)) sh.amounts[sh.coinsKey] = Math.max(0, sh.coinsRead - alchCoinsOf(sh));
+    const bring = goal.bring || {};
+    for (const [slug, per] of [['naturerune', 1], ['firerune', 5]]) {
+      const r = sh.rows.find(x => x.slug === slug);
+      if (!r || !bring[slug] || sh.edited.has(r.key)) continue;
+      const less = Math.min(r.count, Math.max(0, bring[slug] * sh.trips - per * casts));
+      sh.brought[r.key] = less;
+      sh.amounts[r.key] = r.count - less;
+    }
+  }
+  function alchHtml(goal, sh) {
+    if (!(sh.coinsRead > 0)) return '';
+    const drops = dropsOf(goal.npc, goalOpts(goal));
+    const alchable = [...drops.keys()].filter(s => canAlch(s) && taken(goal, s));
+    if (!alchable.length) return '';
+    if (!sh.alchOpen) return `<div class="alch-guess c-faint small-note">The ${fmt(sh.coinsRead)} coins are counted as dropped. <button type="button" class="linkish small-note" data-act="alch-open">Alched something on these trips?</button></div>`;
+    const { mean, sd } = coinsDropped(drops.get('coins'), sh.alchKills);
+    const counts = sh.alch || {};
+    const used = alchCoinsOf(sh);
+    // (a line each for what's guessed or typed and what you tick under Alch; anything else from the list)
+    const ticked = (goal.alch || []).filter(s => drops.has(s) && canAlch(s) && taken(goal, s));
+    const listed = [...new Set([...ticked, ...Object.keys(counts)])].filter(slug => ITEMS[slug]);
+    const row = slug => `<label class="shot-row">${itemIcon(slug, true)} <span class="shot-name">${itemName(slug)}</span>
+        <input class="input small num" data-alch-n="${slug}" inputmode="numeric" value="${counts[slug] ? fmt(counts[slug]) : ''}" placeholder="0" aria-label="${esc(ITEMS[slug].name)} alched">
+        <span class="shot-was c-faint">× ${fmt(highAlch(slug))} = ${fmt((counts[slug] || 0) * highAlch(slug))} coins</span></label>`;
+    // (the others worth an alch, dearest first)
+    const others = alchable.filter(s => !listed.includes(s) && highAlch(s) >= 100).sort((a, b) => highAlch(b) - highAlch(a) || itemName(a).localeCompare(itemName(b)));
+    const dropped = sh.coinsRead - used;
+    const kills = `<input class="input small num alch-kills" data-alch-kills="1" inputmode="numeric" value="${sh.alchKills ? fmt(sh.alchKills) : ''}" placeholder="0" aria-label="Kills on these trips" title="The kills on the trips these screenshots are from (since you last added loot)">`;
+    return `<div class="card alch-guess">
+      <div class="shots-title">Coins, and what you alched</div>
+      <p class="note">${fmt(sh.coinsRead)} coins read. ${kills} kills drop about <b>${fmt(Math.round(mean))}</b> coins${sd >= 1 ? ` (most often within ${fmt(Math.round(sd))} of it)` : ''}${!used ? `. Alched some? ${listed.length ? 'Type how many' : 'Pick it from the list'}.` : sh.alchEdited ? `, and <b>${fmt(used)}</b> of them are what you alched.`
+        : `, so <b>${fmt(used)}</b> of them look like alching: a guess from the drop rates${(goal.alch || []).length ? ' and what you tick under Alch' : ''}. Change it to what you alched.`}</p>
+      <div class="shot-list">${listed.map(row).join('')}</div>
+      ${others.length ? `<select class="input small" data-alch-add="1" aria-label="Another item you alched"><option value="">Something else you alched…</option>${others.map(s => `<option value="${s}">${esc(ITEMS[s].name)} (${fmt(highAlch(s))} coins)</option>`).join('')}</select>` : ''}
+      <div class="small-note">${dropped < 0 ? `<span class="c-lose">That's ${fmt(-dropped)} coins more alching than the coins read: fewer?</span>` : `Coins dropped: <b>${fmt(dropped)}</b> (the Coins line above).`} What you alched counts as loot, alched: its high alch is its worth, and it goes into your bank as coins.</div>
+    </div>`;
   }
 
   // ── Events (called by planner-ui.js; true when handled) ─────────────────
@@ -1237,7 +1379,8 @@ export function createNpcUi(P) {
       case 'npc-sync': P.updateGoal(act.dataset.goalId, g => { g.value = Number(act.dataset.kills); }); P.renderGoals(); return true;
       // loot
       case 'loot-pick': if (goal) pickLoot(goal.id, 'loot'); return true;
-      case 'loot-apply': if (goal) { applyLoot(goal.id, !!act.dataset.toBank); P.renderGoals(); } return true;
+      case 'loot-apply': if (goal) { applyLoot(goal.id); P.renderGoals(); } return true;
+      case 'alch-open': { const sh = goal && shots.get(goal.id); if (sh?.rows) { sh.alchOpen = true; P.renderGoals(); } return true; }
       case 'loot-discard': if (goal) { shots.delete(goal.id); P.renderGoals(); } return true;
       case 'loot-deposit-open': if (goal) { if (deposits.has(goal.id)) deposits.delete(goal.id); else deposits.set(goal.id, { amounts: {}, off: new Set() }); P.renderGoals(); } return true;
       case 'loot-deposit-cancel': if (goal) { deposits.delete(goal.id); P.renderGoals(); } return true;
@@ -1257,7 +1400,7 @@ export function createNpcUi(P) {
       case 'loot-clear':
         if (!goal) return true;
         if (!act.dataset.armed) { act.dataset.armed = '1'; act.textContent = 'Click again to clear'; return true; }
-        { const undo = snapshot(); P.updateGoal(goal.id, g => { delete g.got; delete g.banked; delete g.shots; }); say(goal.id, 'What you got is cleared (your bank is as it was).', undo); }
+        { const undo = snapshot(); P.updateGoal(goal.id, g => { delete g.got; delete g.banked; delete g.shots; }); say(goal.id, 'Your loot is cleared (your bank is as it was).', undo); }
         P.renderGoals();
         return true;
       case 'note-undo': if (goal && notes.get(goal.id)?.undo) { restore(notes.get(goal.id).undo); notes.set(goal.id, { html: 'Undone.' }); P.renderGoals(); } return true;
@@ -1277,14 +1420,9 @@ export function createNpcUi(P) {
       }
       case 'bring-read': if (goal) pickLoot(goal.id, 'bring'); return true;
       // kills counted from XP
-      case 'ses-count-guess': {
-        const g = goalOf(act.dataset.goalId);
-        if (g) { countSession([{ goal: g, kills: Number(act.dataset.kills) }]); P.renderGoals(); }
-        return true;
-      }
-      case 'ses-open': ses.open = true; ses.kills = {}; ses.rest = null; P.renderGoals(); return true;
-      case 'ses-cancel': ses.open = false; P.renderGoals(); return true;
-      case 'ses-hide': { const g = sessionGain(); ses.hidden = g ? JSON.stringify(g) : null; ses.open = false; P.renderGoals(); return true; }
+      case 'ses-open': ses.open = true; ses.kills = {}; ses.rest = null; ses.reduce = ''; P.renderGoals(); if (act.dataset.goTop) document.querySelector('#goals-list .session')?.scrollIntoView({ block: 'nearest' }); return true;
+      case 'ses-cancel': ses.open = false; ses.from = 'prev'; P.renderGoals(); return true;
+      case 'ses-hide': { const g = sessionGain(); ses.hidden = g ? JSON.stringify([ses.from, g]) : null; ses.open = false; P.renderGoals(); return true; }
       case 'ses-add': ses.others.push({ key: `o${Date.now().toString(36)}${ses.others.length}`, text: '' }); P.renderGoals(); return true;
       case 'ses-del': ses.others = ses.others.filter(o => o.key !== act.dataset.key); delete ses.kills[act.dataset.key]; if (ses.rest === act.dataset.key) ses.rest = null; P.renderGoals(); return true;
       case 'ses-rest': ses.rest = act.dataset.key; delete ses.kills[act.dataset.key]; P.renderGoals(); return true;
@@ -1327,6 +1465,7 @@ export function createNpcUi(P) {
     }
     if (t.dataset.sesNpc) { const o = ses.others.find(x => x.key === t.dataset.sesNpc); if (o) { o.text = t.value; o.style = null; } P.entered(P.renderGoals); return true; }
     if (t.dataset.sesReduce != null) { ses.reduce = t.value; P.renderGoals(); return true; }
+    if (t.dataset.sesFrom) { ses.from = t.value === 'prev' ? 'prev' : t.value; ses.kills = {}; ses.rest = null; ses.reduce = ''; P.renderGoals(); return true; }
     const card = t.closest('[data-goal]');
     const goal = card && goalOf(card.dataset.goal);
     if (!goal || !isSlayerGoal(goal)) return false;
@@ -1412,15 +1551,38 @@ export function createNpcUi(P) {
       if (t.dataset.lootOne || t.dataset.lootAgain || t.dataset.lootEarly) {
         if (t.dataset.lootOne) sh.one = t.checked; else if (t.dataset.lootAgain) sh.again = t.checked; else sh.early = t.checked;
         Object.assign(sh, lootReview(goal, sh.B, sh.reads, { one: sh.one, again: sh.again, early: sh.early }));
+        sh.edited = new Set();
+        startAlch(goal, sh);
         P.renderGoals();
         return true;
       }
+      // (what was alched on the way: the kills it's guessed from, a count, another item)
+      if (t.dataset.alchKills) {
+        const n = P.parseAmount(t.value);
+        if (n == null || n > MAX_KILLS) { t.classList.add('bad'); return true; }
+        sh.alchKills = Math.floor(n);
+        startAlch(goal, sh);
+        P.entered(P.renderGoals);
+        return true;
+      }
+      if (t.dataset.alchN) {
+        const n = P.parseAmount(t.value);
+        if (n == null) { t.classList.add('bad'); return true; }
+        // (a line typed down to 0 stays, to be seen)
+        sh.alch = { ...sh.alch, [t.dataset.alchN]: Math.floor(n) };
+        sh.alchEdited = true;
+        syncAlch(goal, sh);
+        P.entered(P.renderGoals);
+        return true;
+      }
+      if (t.dataset.alchAdd) { if (t.value && ITEMS[t.value]) { sh.alch = { ...sh.alch, [t.value]: sh.alch[t.value] || 0 }; sh.alchOpen = true; } P.renderGoals(); return true; }
       if (t.dataset.lootShot) { if (t.checked) sh.off.delete(t.dataset.lootShot); else sh.off.add(t.dataset.lootShot); return true; }
       if (t.dataset.lootAs) { const r = sh.rows.find(x => x.key === t.dataset.lootAs); if (r && r.choices?.includes(t.value)) r.slug = t.value; P.renderGoals(); return true; }
       if (t.dataset.lootN) {
         const n = P.parseAmount(t.value);
         if (n == null) { t.classList.add('bad'); return true; }
         sh.amounts[t.dataset.lootN] = n;
+        sh.edited.add(t.dataset.lootN);
         P.entered(P.renderGoals);
         return true;
       }

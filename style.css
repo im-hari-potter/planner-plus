@@ -86,16 +86,19 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 /* (a window too narrow for one line: Settings stays up on the name's line, the tabs under them,
    so what's pinned is a line shorter) */
 @media (max-width: 860px) { .brand { order: -2; } .top-right { order: -1; } }
-/* A tab's icon: 15 by 15, in the round style of the game's map icons (tabicons.png, build-data.mjs) */
-.ti { display: inline-block; width: 15px; height: 15px; margin-right: 5px; vertical-align: -2px; background-image: url('tabicons.png'); background-repeat: no-repeat; image-rendering: pixelated; }
+/* A tab's icon: 15 by 15, in the round style of the game's map icons (tabicons.png, build-data.mjs),
+   (v3.2) drawn twice the size, pixel for pixel (a narrow window keeps them small) */
+.ti { --s: 30px; display: inline-block; flex: 0 0 auto; width: var(--s); height: var(--s); margin: -3px 6px -3px -2px; vertical-align: middle; background-image: url('tabicons.png'); background-size: calc(var(--s) * 8) var(--s); background-repeat: no-repeat; image-rendering: pixelated; }
+.tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
-.ti.ti-compare { background-position: -15px 0; }
-.ti.ti-gains { background-position: -30px 0; }
-.ti.ti-leaders { background-position: -45px 0; }
-.ti.ti-goals { background-position: -60px 0; }
-.ti.ti-npcs { background-position: -75px 0; }
-.ti.ti-bank { background-position: -90px 0; }
-.ti.ti-prices { background-position: -105px 0; }
+.ti.ti-compare { background-position: calc(var(--s) * -1) 0; }
+.ti.ti-gains { background-position: calc(var(--s) * -2) 0; }
+.ti.ti-leaders { background-position: calc(var(--s) * -3) 0; }
+.ti.ti-goals { background-position: calc(var(--s) * -4) 0; }
+.ti.ti-npcs { background-position: calc(var(--s) * -5) 0; }
+.ti.ti-bank { background-position: calc(var(--s) * -6) 0; }
+.ti.ti-prices { background-position: calc(var(--s) * -7) 0; }
+@media (max-width: 520px) { .ti { --s: 15px; margin: 0 5px 0 0; } }
 .brand { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--gold-hi); white-space: nowrap; }
 .brand img { image-rendering: pixelated; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; }
@@ -534,7 +537,7 @@ table.cmp tfoot td { background: #241e10; font-size: 13px; }
 .plan-sec h4 { margin: 0 0 6px; font-weight: normal; font-size: 15px; color: var(--gold-hi); }
 .plan-sec h4 .c-faint, .plan-sec h4 .c-level, .plan-sec h4 .c-win { font-family: var(--small); font-size: 13px; }
 .steps { display: flex; flex-direction: column; gap: 3px; }
-.step { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 3px; }
+.step, .xp-row { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 3px; }
 .step-main { font-size: 14px; line-height: 1.35; }
 /* A bank plan's lines can be dragged into your own order: the grip says so */
 .steps.movable > .step { cursor: grab; user-select: none; -webkit-user-select: none; }
@@ -635,10 +638,12 @@ table.plan-t .mix-in { width: 84px; }
 
 .price-wrap { margin-bottom: 8px; }
 table.prices-t { table-layout: fixed; }
-table.prices-t th:nth-child(1) { width: 30%; }
-table.prices-t th:nth-child(2) { width: 32%; }
-table.prices-t th:nth-child(3) { width: 16%; }
-table.prices-t th:nth-child(4) { width: 22%; }
+table.prices-t th:nth-child(1) { width: 26%; }
+table.prices-t th:nth-child(2) { width: 27%; }
+table.prices-t th:nth-child(3) { width: 12%; }
+table.prices-t th:nth-child(4) { width: 15%; }
+table.prices-t th:nth-child(5) { width: 10%; }
+table.prices-t th:nth-child(6) { width: 10%; }
 table.prices-t td { overflow: hidden; text-overflow: ellipsis; }
 table.prices-t .th-all { margin-left: 4px; font-size: 12px; }
 #prices-head .bulk { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -703,10 +708,12 @@ a.it-chip.mk:hover b { text-decoration: underline; }
   .stats-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
   .pc-combat { margin-left: 0; }
   .tab-sep { display: none; }
-  table.prices-t th:nth-child(1) { width: 31%; }
-  table.prices-t th:nth-child(2) { width: 27%; }
-  table.prices-t th:nth-child(3) { width: 18%; }
-  table.prices-t th:nth-child(4) { width: 24%; }
+  table.prices-t th:nth-child(1) { width: 26%; }
+  table.prices-t th:nth-child(2) { width: 22%; }
+  table.prices-t th:nth-child(3) { width: 13%; }
+  table.prices-t th:nth-child(4) { width: 15%; }
+  table.prices-t th:nth-child(5) { width: 13%; }
+  table.prices-t th:nth-child(6) { width: 11%; }
   table.prices-t .pick .src { display: none; }
   table.prices-t td .input.num { width: 100%; margin: 3px 0 0; }
   table.grid th, table.grid td { padding: 4px 5px; }
@@ -823,3 +830,33 @@ table.loot-t tr.off td:not(.c) { opacity: 0.5; }
 .ses-left { margin: 4px 0 6px; font-family: var(--small); font-size: 13px; color: var(--muted); }
 .ses-left select { max-width: 100%; }
 @media (max-width: 520px) { .ses-name, .ses-name .npc-in { min-width: 0; width: 100%; } }
+
+/* ── v3.2 ───────────────────────────────────────────────────────────────── */
+/* Kills counted from XP: what it's counted from */
+.ses-from { max-width: 100%; margin: 0 2px; }
+/* What kills give besides: a row a skill, like a Slayer plan's XP */
+.also-xp { margin-top: 6px; }
+.also-xp .also-title { margin: 0 0 3px; font-size: 14px; color: var(--gold-hi); }
+.xp-row .step-main > div { margin-top: 2px; font-family: var(--small); font-size: 13px; }
+.xp-row .alch-runes { display: inline-flex; }
+/* Alching on the way: the coins in a loot screenshot */
+.alch-guess { margin-top: 8px; }
+.alch-guess.card { border-style: dashed; }
+.alch-guess .shot-row { cursor: default; }
+.alch-guess .input.num { width: 80px; text-align: right; }
+.alch-guess .alch-kills { width: 72px; }
+.alch-guess select { max-width: 100%; margin: 4px 0; }
+/* Total level: whoever a rank or top % goal is after */
+.tip.total-aim { margin: 0 0 8px; }
+/* A loot review's, a deposit's and what-you-bring's lines on a narrow window: what was read under the name and
+   the amount, so neither is squeezed to a letter */
+@media (max-width: 520px) {
+  .loot-shots .shot-row, .deposit-edit .shot-row, .bring-edit .shot-row { flex-wrap: wrap; row-gap: 0; }
+  .loot-shots .shot-name, .deposit-edit .shot-name { flex: 1 1 8em; }
+  .loot-shots .shot-was, .deposit-edit .shot-was { flex: 1 1 100%; min-width: 0; text-align: left; padding-left: 28px; }
+}
+/* Prices: how many you want, what they cost, and your list's total */
+table.prices-t th.pq, table.prices-t th.pcost, table.prices-t td.pcost { text-align: right; }
+table.prices-t td.pq .input.num { width: 100%; max-width: 90px; margin: 0; }
+table.prices-t td.pcost { color: var(--xp, #fff); }
+.pq-sum { margin: 2px 0 0; font-size: 14px; }

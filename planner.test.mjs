@@ -1,7 +1,7 @@
 // Run with:  node --test
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { METHODS, ITEMS, BANK_GROUPS, SALE_GROUPS, PLACES, CHOICES, UNID_HERBS, ICON_SHEET, MONSTERS, COMBAT_STYLES } from './gamedata.js';
+import { METHODS, ITEMS, BANK_GROUPS, SALE_GROUPS, PLACES, CHOICES, UNID_HERBS, ICON_SHEET, MONSTERS, COMBAT_STYLES, ITEM_KINDS } from './gamedata.js';
 import { BANK_ICON_SHEET } from './bankread-data.js';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -3141,4 +3141,17 @@ test('combat: the search finds a monster by words of its name, and by its combat
   assert.deepEqual([find('zzz'), find('giant 500')], [[], []]);
   assert.equal(find('').length, 314, 'nothing typed: everything');
   assert.deepEqual([searchTerms(null), searchTerms('  '), searchTerms('Fire  Giant')], [[], [], ['fire', 'giant']]);
+});
+
+test('items have a kind for the Bank\'s and Prices\' Other (v3.2): gear by how it\'s worn, then the rest; the Slayer tab\'s kinds are the same', () => {
+  const kind = s => (ITEMS[s].k != null ? ITEM_KINDS[ITEMS[s].k] : 'Other');
+  assert.equal(ITEM_KINDS[ITEM_KINDS.length - 1], 'Other');
+  assert.equal(kind('rune_scimitar'), 'Weapons');
+  assert.equal(kind('cape_of_legends'), 'Armour');
+  assert.equal(kind('amulet_of_glory'), 'Gems, jewellery and keys');
+  assert.equal(kind('bronze_arrow'), 'Ammunition and throwing weapons');
+  assert.equal(kind('chisel'), 'Tools and containers');
+  assert.equal(kind('lobster'), 'Food and potions');
+  assert.equal(kind('khazard_cellkeys'), 'Other');
+  for (const g of BANK_GROUPS.slayer) for (const s of g.items) assert.equal(kind(s), g.name, s);
 });

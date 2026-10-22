@@ -284,3 +284,92 @@ export function leftOver(gained, rows) {
   }
   return out;
 }
+
+// ── What was alched (v3.2) ──────────────────────────────────────────────────
+// Loot read from a screenshot taken after alching on the way has coins where
+// the alched drops were. What was alched is guessed from those coins: the
+// likeliest counts of the alchable drops, each count as likely as that many
+// drops in the kills (Poisson, over the kills), the coins they leave as likely
+// as that many coins dropped (a normal curve: a kill's coins, mean and spread).
+//   coins:    the coins read (less any you brought)
+//   kills:    the kills on those trips
+//   coinDrop: the monster's coins, { q, m2 } a kill (killDrops), or null
+//   items:    [{ slug, q (how many a kill drops), ha (the coins one alch gives) }]
+// -> { counts: { slug: n }, alchCoins, dropCoins }
+// The coins kills drop: { mean, sd } (the spread of their total).
+export function coinsDropped(coinDrop, kills) {
+  const K = Math.max(0, kills || 0), q = coinDrop?.q || 0;
+  return { mean: K * q, sd: Math.sqrt(K * Math.max(0, (coinDrop?.m2 || 0) - q * q)) };
+}
+export function guessAlchs({ coins, kills, coinDrop = null, items = [] }) {
+  const K = Math.max(0, Math.floor(kills || 0));
+  const list = items.filter(i => i.ha > 0 && i.q > 0);
+  const none = { counts: {}, alchCoins: 0, dropCoins: Math.max(0, coins || 0) };
+  if (!(coins > 0) || !K || !list.length) return none;
+  const mean = K * (coinDrop?.q || 0);
+  // (a monster that drops no coins: the coins left should come to none, give or take a few)
+  const variance = Math.max(K * Math.max(0, (coinDrop?.m2 || 0) - (coinDrop?.q || 0) ** 2), 50 * 50);
+  const lnLam = list.map(i => Math.log(K * i.q));
+  const lnFact = [0];
+  const lf = n => { while (lnFact.length <= n) lnFact.push(lnFact[lnFact.length - 1] + Math.log(lnFact.length)); return lnFact[n]; };
+  const score = n => {
+    let used = 0, s = 0;
+    for (let i = 0; i < list.length; i++) { used += n[i] * list[i].ha; s += n[i] * lnLam[i] - lf(n[i]); }
+    const rest = coins - used;
+    return rest < 0 ? -Infinity : s - (rest - mean) ** 2 / (2 * variance);
+  };
+  // A climb: one count up or down, or one for another, while it makes the guess likelier.
+  const climb = start => {
+    const n = [...start];
+    let best = score(n);
+    for (let step = 0; step < 20000; step++) {
+      let move = null, val = best;
+      for (let i = 0; i < n.length; i++) {
+        for (const d of [1, -1]) {
+          if (n[i] + d < 0) continue;
+          n[i] += d; const v = score(n); n[i] -= d;
+          if (v > val + 1e-9) { val = v; move = [[i, d]]; }
+        }
+        for (let j = 0; j < n.length; j++) {
+          if (i === j || !n[j]) continue;
+          n[i]++; n[j]--; const v = score(n); n[i]--; n[j]++;
+          if (v > val + 1e-9) { val = v; move = [[i, 1], [j, -1]]; }
+        }
+      }
+      if (!move) break;
+      for (const [i, d] of move) n[i] += d;
+      best = val;
+    }
+    return { n, best };
+  };
+  // (from nothing alched, and from the coins over what's dropped shared out as the drops would)
+  const over = Math.max(0, coins - mean);
+  const worth = list.reduce((s, i) => s + K * i.q * i.ha, 0);
+  const share = list.map(i => Math.floor(over * (K * i.q * i.ha) / worth / i.ha));
+  const a = climb(list.map(() => 0)), b = climb(share);
+  let { n, best } = b.best > a.best ? b : a;
+  // Then every choice, the dearest items first, leaving out what can't beat the best so far
+  // (a count can't be likelier than its drops' likeliest, nor the coins left better than spot on).
+  const order = list.map((_, i) => i).sort((x, y) => list[y].ha - list[x].ha);
+  const top = i => { const m = Math.floor(K * list[i].q); return m * lnLam[i] - lf(m); };
+  const bound = order.map((_, k) => order.slice(k).reduce((s, i) => s + top(i), 0)).concat(0);
+  const cur = list.map(() => 0);
+  let nodes = 0;
+  const dfs = (k, used, prior) => {
+    if (++nodes > 300000 || prior + bound[k] <= best) return;
+    if (k === order.length) {
+      const v = prior - (coins - used - mean) ** 2 / (2 * variance);
+      if (v > best) { best = v; n = [...cur]; }
+      return;
+    }
+    const i = order[k], lam = K * list[i].q;
+    const cap = Math.min(Math.floor((coins - used) / list[i].ha), Math.ceil(lam + 6 * Math.sqrt(lam) + 6));
+    for (let c = cap; c >= 0; c--) { cur[i] = c; dfs(k + 1, used + c * list[i].ha, prior + c * lnLam[i] - lf(c)); }
+    cur[i] = 0;
+  };
+  dfs(0, 0, 0);
+  const counts = {};
+  let alchCoins = 0;
+  list.forEach((i, k) => { if (n[k] > 0) { counts[i.slug] = n[k]; alchCoins += n[k] * i.ha; } });
+  return { counts, alchCoins, dropCoins: coins - alchCoins };
+}

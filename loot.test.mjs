@@ -4,7 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DROP_TABLES, SHARED_DROPS, NPC_INFO } from './npcdata.js';
-import { killDrops, killValue, killXp, atLeastOne, dryChance, killsFor, luck, binomCdf, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, xpGained, killsXp, killsFromHp, leftOver } from './loot.js';
+import { killDrops, killValue, killXp, atLeastOne, dryChance, killsFor, luck, binomCdf, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, xpGained, killsXp, killsFromHp, leftOver, guessAlchs, coinsDropped } from './loot.js';
+import { highAlch } from './prices.js';
 import { cheapestLevels, xpForLevel } from './skills.js';
 
 const close = (a, b, tol = 1e-12, what = '') => assert.ok(Math.abs(a - b) <= tol * Math.max(1, Math.abs(b)), `${what} ${a} vs ${b}`);
@@ -253,4 +254,27 @@ test('skills (v3.1): the least XP for some more levels: always the closest level
     for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) best = Math.min(best, cost('a', i) + cost('b', j) + cost('c', n - i - j));
     assert.equal(got, best, `${n} levels`);
   }
+});
+
+test('loot (v3.2): what was alched, guessed from the coins a screenshot ends with: the likeliest counts of the drops you alch', () => {
+  const d = killDrops('fire_giant_86', {});
+  const items = ['rune_scimitar', 'fire_battlestaff'].map(slug => ({ slug, q: d.get(slug).q, ha: highAlch(slug) }));
+  assert.deepEqual(items.map(i => i.ha), [15360, 9300], 'the server\'s high alch: 3/5 of the item\'s value');
+  const guess = coins => guessAlchs({ coins, kills: 45, coinDrop: d.get('coins'), items });
+  // 45 fire giants drop about 1,335 coins (most often within 772 of it)
+  const { mean, sd } = coinsDropped(d.get('coins'), 45);
+  assert.equal(Math.round(mean), 1335);
+  assert.equal(Math.round(sd), 772);
+  // two rune scimitars alched, and the coins dropped
+  assert.deepEqual(guess(30720 + 1335), { counts: { rune_scimitar: 2 }, alchCoins: 30720, dropCoins: 1335 });
+  // three fire battlestaffs: two scimitars would be more coins than there are
+  assert.deepEqual(guess(27900 + 1335).counts, { fire_battlestaff: 3 });
+  // about what the kills drop: nothing alched
+  assert.deepEqual(guess(1500), { counts: {}, alchCoins: 0, dropCoins: 1500 });
+  // no kills, no coins or nothing to alch: no guess
+  assert.deepEqual(guessAlchs({ coins: 5000, kills: 0, coinDrop: d.get('coins'), items }).counts, {});
+  assert.deepEqual(guessAlchs({ coins: 0, kills: 45, coinDrop: d.get('coins'), items }).counts, {});
+  assert.deepEqual(guessAlchs({ coins: 5000, kills: 45, coinDrop: d.get('coins'), items: [] }).counts, {});
+  // a monster that drops no coins: the coins are all alching
+  assert.deepEqual(guessAlchs({ coins: 3000, kills: 10, coinDrop: null, items: [{ slug: 'x', q: 0.5, ha: 1000 }] }), { counts: { x: 3 }, alchCoins: 3000, dropCoins: 0 });
 });

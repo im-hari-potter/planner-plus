@@ -3434,6 +3434,27 @@ await combat();
 const lootNotes = [];
 let npcData = null;              // what npcdata.js holds
 const dropItems = new Set();     // every item some monster drops (as the bank counts it)
+// What kind of item it is: the Slayer tab's kinds (v3), and (v3.2) the Bank's and Prices'
+// Other, where gear and the rest each have a section: what it's worn as, what it does, its name.
+const KINDS = ['Coins and runes', 'Weapons', 'Armour', 'Ammunition and throwing weapons', 'Gems, jewellery and keys', 'Herbs and secondaries', 'Ores and bars', 'Bones and hides', 'Food and potions', 'Tools and containers', 'Other'];
+function kindOf(slug) {
+  const i = ITEM.get(slug), wear = i.equipable_item?.wearpos, iops = Object.values(i.iops || {});
+  if (slug === 'coins' || (/rune$/.test(slug) && /rune$/i.test(i.name))) return 'Coins and runes';
+  if (/talisman$/.test(slug)) return 'Coins and runes';
+  if (wear === 'ammunition' || (wear === 'weapon' && i.stackable)) return 'Ammunition and throwing weapons';
+  if (wear === 'weapon') return 'Weapons';
+  if (wear === 'neck' || wear === 'ring' || /^uncut_|^(sapphire|emerald|ruby|diamond|dragonstone|opal|jade|red_topaz)$/.test(slug) || /^keyhalf|crystal_key|oyster/.test(slug)) return 'Gems, jewellery and keys';
+  if (wear || slug === 'dragonshield_a') return 'Armour';
+  // (v3.1: the herb table's herbs cleaned, each its own herb)
+  if (slug === unidHerbs.item || identifyOf.has(slug) || /^unidentified_|^vial|horn_dust$/.test(slug) || ['limpwurt_root', 'snape_grass', 'white_berries', 'eye_of_newt', 'unicorn_horn', 'red_spiders_eggs', 'wine_of_zamorak', 'jangerberries'].includes(slug)) return 'Herbs and secondaries';
+  if (/_ore$|_bar$|^coal$/.test(slug)) return 'Ores and bars';
+  if (iops.includes('Bury') || /bones|^ashes$/.test(slug) || /hide|fur$/.test(slug)) return 'Bones and hides';
+  if (iops.includes('Eat') || iops.includes('Drink') || /dose|potion|poison$|^raw_|^burnt_|_dough$|^egg$|^grain$|^pot_flour$|berries$/.test(slug)) return 'Food and potions';
+  if (['lobster_pot', 'harpoon', 'tinderbox', 'knife', 'hammer', 'shears', 'rope', 'bucket_empty', 'pot_empty', 'jug_empty', 'ring_mould', 'amulet_mould', 'unholy_symbol_mould'].includes(slug)) return 'Tools and containers';
+  // (v3.2: the rest of the tools, for Other's sections; none of them is a monster's drop)
+  if (['chisel', 'needle', 'glassblowingpipe', 'necklace_mould', 'holy_symbol_mould', 'ammo_mould', 'pestle_and_mortar', 'net', 'big_net', 'fishing_rod', 'fly_fishing_rod', 'oily_fishing_rod', 'spade', 'bowl_empty', 'vial_empty'].includes(slug)) return 'Tools and containers';
+  return 'Other';
+}
 async function npcLoot() {
   const { rowsOf, npcs, placed, drops: ev, blocks: raw } = npcWorld;
   const { blocks, constants, ctx, envFor, deathDropDefault, evaluate, asTable, trigger } = ev;
@@ -3600,23 +3621,6 @@ async function npcLoot() {
   npcData = { ...out, shared };
   // The Slayer tab of the bank: every item a monster drops, other skills' too
   // (runes, herbs, gems), sorted into kinds.
-  const kindOf = slug => {
-    const i = ITEM.get(slug), wear = i.equipable_item?.wearpos, iops = Object.values(i.iops || {});
-    if (slug === 'coins' || (/rune$/.test(slug) && /rune$/i.test(i.name))) return 'Coins and runes';
-    if (/talisman$/.test(slug)) return 'Coins and runes';
-    if (wear === 'ammunition' || (wear === 'weapon' && i.stackable)) return 'Ammunition and throwing weapons';
-    if (wear === 'weapon') return 'Weapons';
-    if (wear === 'neck' || wear === 'ring' || /^uncut_|^(sapphire|emerald|ruby|diamond|dragonstone|opal|jade|red_topaz)$/.test(slug) || /^keyhalf|crystal_key|oyster/.test(slug)) return 'Gems, jewellery and keys';
-    if (wear || slug === 'dragonshield_a') return 'Armour';
-    // (v3.1: the herb table's herbs cleaned, each its own herb)
-    if (slug === unidHerbs.item || identifyOf.has(slug) || /^unidentified_|^vial|horn_dust$/.test(slug) || ['limpwurt_root', 'snape_grass', 'white_berries', 'eye_of_newt', 'unicorn_horn', 'red_spiders_eggs', 'wine_of_zamorak', 'jangerberries'].includes(slug)) return 'Herbs and secondaries';
-    if (/_ore$|_bar$|^coal$/.test(slug)) return 'Ores and bars';
-    if (iops.includes('Bury') || /bones|^ashes$/.test(slug) || /hide|fur$/.test(slug)) return 'Bones and hides';
-    if (iops.includes('Eat') || iops.includes('Drink') || /dose|potion|poison$|^raw_|^burnt_|_dough$|^egg$|^grain$|^pot_flour$|berries$/.test(slug)) return 'Food and potions';
-    if (['lobster_pot', 'harpoon', 'tinderbox', 'knife', 'hammer', 'shears', 'rope', 'bucket_empty', 'pot_empty', 'jug_empty', 'ring_mould', 'amulet_mould', 'unholy_symbol_mould'].includes(slug)) return 'Tools and containers';
-    return 'Other';
-  };
-  const KINDS = ['Coins and runes', 'Weapons', 'Armour', 'Ammunition and throwing weapons', 'Gems, jewellery and keys', 'Herbs and secondaries', 'Ores and bars', 'Bones and hides', 'Food and potions', 'Tools and containers', 'Other'];
   const byKind = new Map(KINDS.map(k => [k, []]));
   for (const slug of [...dropItems].sort((a, b) => ITEM.get(a).id - ITEM.get(b).id)) byKind.get(kindOf(slug)).push(slug);
   bankGroups.slayer = KINDS.filter(k => byKind.get(k).length).map(k => ({ name: k, items: byKind.get(k) }));
@@ -3876,6 +3880,12 @@ for (const [slug, v] of Object.entries(chargeItems)) {
   }
 }
 
+// (v3.2) Each item's kind, for the Bank's and Prices' Other: an index into ITEM_KINDS (none: Other).
+for (const [slug, it] of Object.entries(items)) {
+  if (it.set || it.charge || it.clue || !ITEM.has(slug)) continue;
+  const k = KINDS.indexOf(kindOf(slug));
+  if (k >= 0 && KINDS[k] !== 'Other') it.k = k;
+}
 const out = `// Generated by build-data.mjs. Do not edit by hand; change the script and re-run it.
 // Levels and XP come from Lost City's server content (LostCityRS/Content, rev 274, MIT);
 // XP is in tenths, like the server keeps it. Item names, ids and shop values are from
@@ -3941,6 +3951,7 @@ const out = `// Generated by build-data.mjs. Do not edit by hand; change the scr
 // that, batches: [[size, xp], …], biggest first }. Its xp here is own + the
 // smallest batch's rate; a plan hands its tickets in together and counts each
 // at the average of the biggest batches they fill (planner.js: averaged).
+// An item's k (v3.2) is its kind (ITEM_KINDS), for the Bank's and Prices' Other.
 // An item with gp is always worth that (a coin is 1 gp): no market price. One
 // with charge is what a worn item gives while it lasts (a ring of forging's 140
 // bars): a step on the way turns the item into them, so plans count whole rings.
@@ -3954,6 +3965,9 @@ export const ICON_SHEET = ${JSON.stringify(iconSheet)};
 // The second sheet: every item the planner doesn't use itself (more: 1 in ITEMS), in
 // the bank and on the Prices tab. Loaded only when one of them is shown.
 export const ICON_SHEET_MORE = ${JSON.stringify(moreSheet)};
+
+// (v3.2) What kind an item is (ITEMS' k: an index into these; none is Other).
+export const ITEM_KINDS = ${JSON.stringify(KINDS)};
 
 export const ITEMS = ${JSON.stringify(items, null, 0).replace(/\},"/g, '},\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}')};
 

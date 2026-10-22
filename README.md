@@ -39,7 +39,8 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
 
-The tabs stay at the top of the window as you scroll.
+The tabs stay at the top of the window as you scroll, each with its own icon. An item's name,
+anywhere, takes you to its price on the Prices tab.
 
 ## Getting started
 
@@ -82,9 +83,13 @@ sits under **Your goals** with its progress since you set it, and its **Plan (Ca
 
 - A goal is a **level, XP, rank or top %**. A rank or top % goal means beating whoever holds it
   now, and is checked again as they train. **Edit** moves the goalpost and keeps the rest.
-- **Total level** is a goal too (the first button). Its plan says what your skill goals add, then
-  the least XP that gets the rest, a level at a time: low levels are cheap. Untick a skill under
-  **Train** that you won't train, and **set a goal** turns a line into a skill goal.
+- **Total level** is a goal too (the first button): a total level, total XP, an Overall rank or a
+  top %. Its plan says what your skill goals add (rank and top % goals too, at the level that beats
+  whoever holds that rank now), then the least XP that gets the rest, a level at a time: low
+  levels are cheap. Untick a skill under **Train** that you won't train. **set a goal** turns a line
+  into a skill goal, and **make your goal 80** changes the goal you have in that skill, whatever
+  kind it is. A rank or top % goal works toward a level more than whoever holds that rank (Overall
+  ranks by total level, then XP).
 - **Combat level** is the second button. Its plan says what each kind of level takes to get there,
   with the combat calculator under it.
 - **Slayer** isn't in this version of the game yet; here it's the home of monster plans. See
@@ -129,8 +134,8 @@ still needed (see below), you collect 1,828 irits instead of 2,305.
 
 - An unticked option also leaves the **Train with** list, and the levels on the way to it. Click
   an unticked row to train with it, and it's ticked again.
-- **Hide unused items** (beside the table's Sort; **Hide unticked** where there's no bank) takes
-  the unticked rows out of every plan's table.
+- **Hide unticked items** (beside the table's Sort; *Hide unticked fish*, *loot*, *skills*… as the
+  table has it) takes the unticked rows out of every table with ticks: it's one switch.
 - What a ticked row needs is still made on the way: untick Sapphire (cut) and the sapphires for
   your games necklaces are still cut. To leave uncut sapphires alone, untick what's made of them.
 
@@ -194,6 +199,8 @@ a price shows **?** until it has one.
 - Switch a whole skill or one list at once. **All** has every item the planner prices once, under
   the skill it first belongs to; **Other** has everything else you have.
 - **Find any item** searches every item in the game by name, whatever the tab.
+- **Qty**: type how many you want, and its cost is beside it. **Your list** adds up everything with
+  a quantity (**Show only these** lists just them), for planning what to buy.
 
 **A price is both what a supply costs you and what a product is worth.** Say you mined your own
 coal and set its price to 0: smithing steel bars from it now shows almost pure profit. But that coal
@@ -206,8 +213,9 @@ than the coal and ore you put in.
 - **Net**: worth less what its supplies cost, so it can be negative.
 - **gp/XP**: what each XP costs you (negative: you make money doing it).
 
-Market prices are checked one at a time and kept for 12 hours. Click an item anywhere to open it on
-the market (inside LostKit it opens in the tool's tab; ◀ comes back).
+Market prices are checked one at a time and kept for 12 hours. Click an item's name anywhere to
+see its price here; here, a name opens it on the market (inside LostKit it opens in the tool's tab;
+◀ comes back).
 
 ## Your bank, and reading it from screenshots
 
@@ -218,8 +226,9 @@ like another item gets a drop-down.*
 
 - Type what you have: `1500`, `1.5k` and `2m` all work. Items sit eight to a row, as in the game's
   bank, each with what one is worth (**ea**) and what yours come to. Each skill has a tab of its
-  items, **Other** has everything no skill uses (and adds any item by name), and **All** has
-  everything you have: in your bank's order, by value, or by skill.
+  items, **Other** has everything no skill uses, in sections (weapons, armour, jewellery,
+  ammunition, tools, food…; it adds any item by name too), and **All** has everything you have:
+  in your bank's order, by value, or by skill.
 - **Read it from screenshots**: open your bank in LostKit and press the screenshot key (scroll and
   take more if it doesn't fit). Drop the pictures from *Pictures › LostKit Screenshots* on the
   Bank tab, paste one, or **Choose screenshots**.
@@ -229,7 +238,8 @@ like another item gets a drop-down.*
   - Some items look exactly like another (soda ash and ashes, big bones and jogre bones, a sapphire
     ring and a ring of recoil): pick which from the drop-down. Your pick is kept for next time.
   - Amounts of 100K and up are rounded on screen (`150K`): an amount you entered that fits is kept.
-  - Only the ticked lines change your bank.
+  - Only the ticked lines change your bank. **Hide the items that stayed the same** leaves just
+    what changed, to check.
 - **Slayer** has a tab of everything monsters drop, by kind (runes, weapons, armour, gems, herbs,
   bones…). Items a skill uses too are on that skill's tab as well: it's one bank.
 - Everything is valued: by the market, high alch or your own price (Prices tab). An item that
@@ -246,8 +256,9 @@ a plan counts kills. A kill is the monster's hitpoints in damage, and every poin
 XP by your style, the server's own sum: 4 XP to the style's skill (Controlled: 1.33 to each of
 Attack, Strength and Defence; Longrange: 2 to Ranged and Defence), and 1.33 to Hitpoints whatever
 the style. With no monster picked, a plan trains on the one with the most XP a kill among those no
-more than half your combat level. Each plan says what its kills give besides (Hitpoints XP, bones
-to bury), and what its goal adds to your combat level.
+more than half your combat level. Each plan says what its kills give besides, a row for each skill
+with its icon (Hitpoints XP, and Prayer XP if you bury the bones), and what its goal adds to your
+combat level.
 
 ### NPCs: the monster database
 
@@ -264,10 +275,10 @@ done**: both change the gem table.
 
 ### Slayer goals: a plan of kills
 
-![A Slayer goal: kills done, XP, the loot to expect, what you got, and how lucky](readme-8-slayer.png)
+![A Slayer goal: kills done, XP, the loot to expect, your loot, and how lucky](readme-8-slayer.png)
 
 *A Slayer goal: the XP of its kills and the level they take you to, the loot to expect, and, once
-you've done some, what you got and how lucky that is.*
+you've done some, your loot and how lucky that is.*
 
 A Slayer goal is a monster and a number of kills. Make one from the Slayer button on Goals, with
 **Plan kills** on the NPCs tab, or with **Plan the loot** on a monster's line in any combat skill's
@@ -278,33 +289,36 @@ Its plan has:
 
 - **Kills done** (type them, or − and +), and the goal's progress. They're counted from your XP
   too: see below.
-- **XP**: what the kills give each skill, and the level the ones still to do take you to; what
-  alching and cleaning the drops give besides.
+- **XP**: what the kills give each skill, and the level the ones still to do take you to; then,
+  each with its skill's icon too, what burying the bones, alching and cleaning the herbs give.
 - **Loot**: every drop with its chance a kill, how many to expect over your kills, the chance of at
   least one, and its **Expected value** at your prices.
   - **Take**: untick what you leave on the ground. It's worth nothing to you, and starts unticked
-    when loot is read from screenshots.
+    when loot is read from screenshots. **Hide unticked loot** takes it out of the table.
   - **Alch**: tick what you high alch. It's counted at its high alch in coins (a fire battlestaff:
     9,300 each), goes into your bank as coins, and its casts' Magic XP and nature runes are counted.
   - **Herbs**: cleaned, each herb has its own chance (Ranarr weed 209/16,384 a fire giant); kept
     grimy, they're the one Unid herb.
-- **What you got**: type it in, or − and + a drop at a time. After your kills, each drop says
+- **Looted**: your loot, typed in, or − and + a drop at a time. After your kills, each drop says
   what's to be expected and how lucky you are ("luckier than 54%", "65% get more"), and its
-  **Actual value**. Sort by Expected value or Actual value.
+  **Actual value**. Sort by Expected value or Actual value. **Banked** is how much of it is in
+  your bank.
 - **Dryness**: a drop you haven't had says how dry you are, and how many players go that dry.
 
-**Kills from your XP.** When the hiscores show new combat XP, a box above your goals says what it
-comes to: *That's about 60 Fire giant kills*, from the Hitpoints XP (1.33 a point of damage,
-whatever the style). **Count** them, or **Choose what I killed**: every Slayer goal's monster is
-listed, and any other can be added. Type the kills of all but one, and that one takes the XP that's
-left. XP from something else can be taken off a goal's kills, since a goal for some XP needs fewer.
+**Kills from your XP.** When the hiscores show new combat XP, a box above your goals says how much:
+**Choose what I killed**, or **Not now**. Every Slayer goal's monster is listed, and any other can be
+added. Your topmost Slayer goal takes the XP to start with (the Hitpoints XP over a kill's: 1.33 a
+point of damage, whatever the style); type the others' kills, and it takes what they leave, or
+click **the rest** on another. XP from something else can be taken off a goal's kills, since a goal
+for some XP needs fewer. The XP is counted since your last count; to count from further back, pick
+one of your Gains snapshots instead. **Count kills from my XP…** in a plan opens it any time.
 
-![New combat XP above your goals, and the kills it comes to](readme-11a-kills.png)
+![New combat XP above your goals: choose what you killed, or not now](readme-11a-kills.png)
 
 ![Choose what I killed: your Slayer goals' monsters, one of them taking the rest of the XP](readme-11-kills.png)
 
-*The new XP and the kills it comes to; then Choose what I killed: type the kills of all but one,
-and that one takes the XP that's left.*
+*The new XP above your goals; then Choose what I killed: your topmost Slayer goal takes the XP the
+others leave.*
 
 **Loot, and your bank.**
 
@@ -313,13 +327,23 @@ and that one takes the XP that's left.*
   kills; several screenshots of one trip count once (**They're all one trip**), and a screenshot
   you've added before isn't counted again. Nor is one taken before you set the goal, unless you
   tick it: what it shows was picked up before.
+- **Alched on the way?** The coins in a screenshot are coins dropped and the coins alching made.
+  When there are more than your kills drop, the review guesses what you alched (from the drop
+  rates, the kills on those trips and what you tick under **Alch**), and you change it to what you
+  did. What you alched counts as loot, alched; only the rest of the coins count as coins dropped,
+  so the luck stays right.
 - **What you bring each trip** (runes, coins, arrows the monster drops too) is taken off each
-  screenshot, so what you carry, and loot from before this goal, is never counted as what you got.
-- **Add to what I got** counts it as these kills' loot. **…and to my bank** puts that same loot in
-  your bank too, on top of what's there: nothing else in your bank changes.
-- **Deposit to my bank…** works from your totals: what you got that isn't in your bank yet, after
-  every trip, a few, or at the end. Change any amount first; an **In bank** column keeps count.
+  screenshot, so what you carry, and loot from before this goal, is never counted as loot.
+- **Add to my loot** counts it as these kills' loot. Your bank doesn't change till you deposit.
+- **Deposit to my bank…** works from your loot: what isn't in your bank yet, after every trip, a
+  few, or at the end. Change any amount first. What you alched goes in as the coins it made, and a
+  nature rune for each cast comes out of your bank; nothing else in your bank changes.
 - What it did is said in the plan itself, with **Undo**.
+
+![Alched on the way: the coins a trip's screenshot shows, less what alching made](readme-13-alch.png)
+
+*A trip's screenshot with more coins than its kills drop: what was alched, guessed from the drop
+rates; the Coins line keeps only what was dropped.*
 
 ![How dry is dry, and reading loot from screenshots](readme-8b-slayer-dry.png)
 
