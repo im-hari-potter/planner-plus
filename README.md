@@ -269,7 +269,7 @@ level.*
 
 Click a monster for its page: its stats and how it fights, the XP of a kill in every style, and
 every drop with its chance a kill (as the drop table has it: 1/128, 3/128…), how many a drop is,
-and the kills it takes for an even chance of one, and for 9 in 10. Drops are worked out for a
+and the kills by which half of players have one, and 9 in 10. Drops are worked out for a
 members world, from the server's own drop scripts. Tick **Ring of wealth** or **Legends' Quest
 done**: both change the gem table.
 
@@ -350,8 +350,8 @@ rates; the Coins line keeps only what was dropped.*
 *How dry is dry: any drop, any number of kills without it.*
 
 A drop of 1/128 and 200 kills without it is 1.56 × the drop rate, and more to the point: **going
-that dry happens to 21% of players**, about 1 in 5. An even chance of one takes 89 kills; 9 in 10
-players have one by 294.
+that dry happens to 21% of players**, about 1 in 5. Half of players have one by 89 kills, and 9 in
+10 by 294.
 
 ## Useful tips
 

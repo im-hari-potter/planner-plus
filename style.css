@@ -86,19 +86,21 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 /* (a window too narrow for one line: Settings stays up on the name's line, the tabs under them,
    so what's pinned is a line shorter) */
 @media (max-width: 860px) { .brand { order: -2; } .top-right { order: -1; } }
-/* A tab's icon: 15 by 15, in the round style of the game's map icons (tabicons.png, build-data.mjs),
-   (v3.2) drawn twice the size, pixel for pixel (a narrow window keeps them small) */
-.ti { --s: 30px; display: inline-block; flex: 0 0 auto; width: var(--s); height: var(--s); margin: -3px 6px -3px -2px; vertical-align: middle; background-image: url('tabicons.png'); background-size: calc(var(--s) * 8) var(--s); background-repeat: no-repeat; image-rendering: pixelated; }
+/* A tab's icon (v3.2.1): 26 by 24, drawn at that size, so never blurry (tabicons.png): the round ones in the
+   frame of the game's own round side icons, Goals the game's Stats side icon. Clear of the active tab's
+   gold line under it. Its address carries a stamp of the picture, so a browser fetches the new one with
+   these sizes, not an old one it kept. */
+.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=d9de5700ee'); background-size: 208px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
 .tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
-.ti.ti-compare { background-position: calc(var(--s) * -1) 0; }
-.ti.ti-gains { background-position: calc(var(--s) * -2) 0; }
-.ti.ti-leaders { background-position: calc(var(--s) * -3) 0; }
-.ti.ti-goals { background-position: calc(var(--s) * -4) 0; }
-.ti.ti-npcs { background-position: calc(var(--s) * -5) 0; }
-.ti.ti-bank { background-position: calc(var(--s) * -6) 0; }
-.ti.ti-prices { background-position: calc(var(--s) * -7) 0; }
-@media (max-width: 520px) { .ti { --s: 15px; margin: 0 5px 0 0; } }
+.ti.ti-compare { background-position: -26px 0; }
+.ti.ti-gains { background-position: -52px 0; }
+.ti.ti-leaders { background-position: -78px 0; }
+.ti.ti-goals { background-position: -104px 0; }
+.ti.ti-npcs { background-position: -130px 0; }
+.ti.ti-bank { background-position: -156px 0; }
+.ti.ti-prices { background-position: -182px 0; }
+@media (max-width: 520px) { .ti { margin: -3px 4px 0 -2px; } }
 .brand { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--gold-hi); white-space: nowrap; }
 .brand img { image-rendering: pixelated; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; }

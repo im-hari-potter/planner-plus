@@ -3952,7 +3952,7 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
     'Accurate (Attack) ← your plan +444 Attack, +147.6 Hitpoints', 'Aggressive (Strength) +444 Strength, +147.6 Hitpoints', 'Defensive (Defence) +444 Defence, +147.6 Hitpoints',
     'Controlled (Attack, Strength, Defence) +147.6 Attack, +147.6 Strength, +147.6 Defence, +147.6 Hitpoints', 'Ranged: Accurate or Rapid +444 Ranged, +147.6 Hitpoints',
     'Ranged: Longrange (Ranged, Defence) +222 Ranged, +222 Defence, +147.6 Hitpoints', 'Magic (damage XP only) +222 Magic, +147.6 Hitpoints']);
-  // every drop: its chance a kill as the table has it, how many a drop is, the average, and the kills for an even chance and for 9 in 10
+  // every drop: its chance a kill as the table has it, how many a drop is, the average, and the kills by which half of players have one, and 9 in 10
   const drop = async slug => (await pg.locator(`table.loot-t tr:has-text("${slug}")`).first().locator('td').allInnerTexts()).map(flat);
   assert.deepEqual((await drop('Rune scimitar')).slice(0, 5), ['Rune scimitar', '1/128', '1', '0.008', '89 / 294']);
   assert.deepEqual((await drop('Big bones')).slice(0, 5), ['Big bones', 'Always', '1', '1', '1']);
@@ -4040,7 +4040,7 @@ await check('slayer: a goal of kills, picked between Thieving and Runecraft: the
     await dry.locator('[data-dry-kills]').fill('200');
     await dry.locator('[data-dry-kills]').press('Enter');
     await dry.locator('.dry-out', { hasText: '200 kills without one' }).waitFor();
-    assert.equal(flat(await dry.locator('.dry-out').innerText()), 'Rune scimitar: 200 kills without one is 1.56 × the drop rate (1/128). Going this dry happens to 21% of players (about 1 in 4.8). An even chance of one takes 89 kills; 9 players in 10 have one by 294, and 99 in 100 by 588.');
+    assert.equal(flat(await dry.locator('.dry-out').innerText()), 'Rune scimitar: 200 kills without one is 1.56 × the drop rate (1/128). Going this dry happens to 21% of players (about 1 in 4.8). Half of players have one by 89 kills; 9 in 10 by 294, and 99 in 100 by 588.');
     // every kill done: reached
     await card.locator('[data-done]').fill('1500');
     await card.locator('[data-done]').press('Enter');
@@ -4573,7 +4573,7 @@ await check("bank and prices: items eight to a row as in the game, each with wha
   }
 });
 
-await check('the tabs stay at the top as the page scrolls, each with its icon; what a goal scrolls to stops below them (v3.1)', async () => {
+await check('the tabs stay at the top as the page scrolls, each with its icon (v3.2.1: 26 by 24, clear of the gold line); what a goal scrolls to stops below them (v3.1)', async () => {
   await page.click('.tab[data-tab="npcs"]');
   await page.waitForSelector('#view-npcs:not([hidden]) table.npc-t');
   await page.evaluate(() => window.scrollTo(0, 3000));
@@ -4581,9 +4581,15 @@ await check('the tabs stay at the top as the page scrolls, each with its icon; w
   const top = await page.locator('.top').evaluate(el => el.getBoundingClientRect().top);
   assert.ok(Math.abs(top) <= 1, `the tabs at ${top}px`);
   assert.deepEqual(await page.locator('.tabs .tab .ti').evaluateAll(els => els.map(el => getComputedStyle(el).backgroundPosition)),
-    ['0px 0px', '-30px 0px', '-60px 0px', '-90px 0px', '-120px 0px', '-150px 0px', '-180px 0px', '-210px 0px']);
-  // (v3.2: twice the size, 30 pixels)
-  assert.deepEqual(await page.locator('.tabs .tab .ti').first().evaluate(el => [el.offsetWidth, el.offsetHeight]), [30, 30]);
+    ['0px 0px', '-26px 0px', '-52px 0px', '-78px 0px', '-104px 0px', '-130px 0px', '-156px 0px', '-182px 0px']);
+  // (v3.2.1: 26 by 24, drawn at that size; each clear of the active tab's gold line, the bottom 3 pixels inside its border)
+  assert.deepEqual(await page.locator('.tabs .tab .ti').first().evaluate(el => [el.offsetWidth, el.offsetHeight]), [26, 24]);
+  assert.match(await page.locator('.tabs .tab .ti').first().evaluate(el => getComputedStyle(el).backgroundImage), /\/tabicons\.png\?v=[0-9a-f]{10}"\)$/, 'a stamped address');
+  const clear = await page.locator('.tabs .tab').evaluateAll(tabs => tabs.map(t => {
+    const r = t.getBoundingClientRect(), i = t.querySelector('.ti').getBoundingClientRect(), cs = getComputedStyle(t);
+    return [i.top >= r.top + parseFloat(cs.borderTopWidth), i.bottom <= r.bottom - parseFloat(cs.borderBottomWidth) - 3];
+  }));
+  assert.deepEqual(clear, clear.map(() => [true, true]));
   assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'NPCs', 'Bank', 'Prices']);
   const pad = await page.evaluate(() => [parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop), document.querySelector('.top').offsetHeight]);
   assert.equal(pad[0], pad[1] + 8, 'scrolled-to things stop below the tabs');
@@ -4938,7 +4944,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.2\.0 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.2\.1 · /);
   await page.click('#settings-close');
 });
 

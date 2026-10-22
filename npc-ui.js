@@ -395,7 +395,7 @@ export function createNpcUi(P) {
       const list = [...drops].map(([slug, d]) => ({ slug, d, gp: worthOf(slug) }));
       const val = x => (x.gp == null ? -1 : x.d.q * x.gp);
       list.sort((a, b) => val(b) - val(a) || b.d.p - a.d.p);
-      const head = `<th class="l">Item</th><th title="The chance a kill drops it, as the drop table has it">A kill</th><th title="How many one drop is">Each drop</th><th title="How many a kill gives on average">Average</th><th title="The kills it takes for an even chance of one, and for 9 in 10">Kills for 50% / 90%</th><th title="The average a kill gives, at your prices">Value a kill</th>`;
+      const head = `<th class="l">Item</th><th title="The chance a kill drops it, as the drop table has it">A kill</th><th title="How many one drop is">Each drop</th><th title="How many a kill gives on average">Average</th><th title="The kills by which half of players have one, and 9 in 10">Kills for 50% / 90%</th><th title="The average a kill gives, at your prices">Value a kill</th>`;
       const row = ({ slug, d, gp }) => {
         const half = killsFor(d.p, 0.5), most = killsFor(d.p, 0.9);
         const value = untradeable(slug) ? '<span class="c-faint">–</span>' : gp == null ? '<span class="c-faint">?</span>' : gpShort(d.q * gp);
@@ -1068,7 +1068,7 @@ export function createNpcUi(P) {
       <div class="bar wrap"><select class="input small" data-dry-item="1" aria-label="Drop">${opts}</select>
         <span class="c-muted">after</span> <input class="input small num" data-dry-kills="1" inputmode="numeric" value="${k ? fmt(k) : ''}" placeholder="Kills" aria-label="Kills without it"> <span class="c-muted">kills without one</span></div>
       <div class="dry-out">${sentence ? `<span>${esc(sentence)}</span>` : '<span class="c-faint">Type how many kills.</span>'}
-        <span class="c-faint small-note">${esc(`An even chance of one takes ${fmt(killsFor(d.p, 0.5))} kills; 9 players in 10 have one by ${fmt(killsFor(d.p, 0.9))}, and 99 in 100 by ${fmt(killsFor(d.p, 0.99))}.`)}</span></div>
+        <span class="c-faint small-note">${esc(`Half of players have one by ${fmt(killsFor(d.p, 0.5))} kills; 9 in 10 by ${fmt(killsFor(d.p, 0.9))}, and 99 in 100 by ${fmt(killsFor(d.p, 0.99))}.`)}</span></div>
     </div>`;
   }
 
