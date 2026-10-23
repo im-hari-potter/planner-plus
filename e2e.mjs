@@ -487,9 +487,9 @@ await check('bank: All shows everything you have; a skill tab shows only its ite
   assert.match(await text('#bank-head'), /3 kinds of item/);
   assert.deepEqual((await page.$$eval('#bank-body [data-bank]', els => els.map(e => e.dataset.bank))).sort(), ['naturerune', 'ranarr_weed', 'snape_grass']);
   // the skill buttons go in the hiscores' order, like the ones a new goal is picked with (v2.10.1; v3: Slayer, everything a monster drops;
-  // v3.1: Other, everything no skill's tab lists, last)
+  // v3.1: Other, everything no skill's tab lists, last; v3.3: Gear and Rares, right after All)
   assert.deepEqual(await page.$$eval('#bank-head [data-bskill]', els => els.map(e => e.dataset.bskill)),
-    ['all', 'prayer', 'magic', 'cooking', 'fletching', 'firemaking', 'crafting', 'smithing', 'herblore', 'slayer', 'runecraft', 'other']);
+    ['all', 'gear', 'rares', 'prayer', 'magic', 'cooking', 'fletching', 'firemaking', 'crafting', 'smithing', 'herblore', 'slayer', 'runecraft', 'other']);
   // each tab shows what its items are worth, once prices are in
   await page.click('[data-act="bank-prices"]');
   await page.waitForFunction(() => document.querySelectorAll('#bank-head .skill-tab .sw-v').length >= 3, null, { timeout: 30000 });
@@ -699,9 +699,9 @@ await check('prices: each item uses the price you pick (market, high alch or you
   await page.click('#prices-head [data-bskill="herblore"]');
   // the skill buttons go in the hiscores' order here too, after All: the skills a new goal is picked from, less those with nothing to price (v2.10.1)
   const tabs = await page.$$eval('#prices-head [data-bskill]', els => els.map(e => e.dataset.bskill));
-  // (v3: Slayer, with everything a monster drops, in its hiscores place; v3.1: Other last)
-  assert.deepEqual(tabs, ['all', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'thieving', 'slayer', 'runecraft', 'other']);
-  assert.deepEqual(tabs.slice(1, -1), (await page.$$eval('#goal-new [data-nskill]', els => els.map(e => e.dataset.nskill))).filter(k => tabs.includes(k)), "the new goal's order");
+  // (v3: Slayer, with everything a monster drops, in its hiscores place; v3.1: Other last; v3.3: Gear and Rares after All)
+  assert.deepEqual(tabs, ['all', 'gear', 'rares', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'thieving', 'slayer', 'runecraft', 'other']);
+  assert.deepEqual(tabs.slice(3, -1), (await page.$$eval('#goal-new [data-nskill]', els => els.map(e => e.dataset.nskill))).filter(k => tabs.includes(k)), "the new goal's order");
   assert.equal(await page.locator('#prices-head [data-bskill="herblore"].active').count(), 1);
   const row = slug => page.locator(`#prices-body tr:has([data-psrc="${slug}"])`);
   const on = async slug => (await row(slug).locator('td.pc.on input[type=radio]').getAttribute('value'));
@@ -780,9 +780,13 @@ await check('goals: with prices known the plan shows cost, value, gross and net'
   assert.match(rowTip, new RegExp(`Costs [\\d.,]+[KM]?, worth [\\d.,]+[KM]?: net ${row['Net/item'].replace(/[+.]/g, '\\$&')} each$`), rowTip);
   // Gross and Net only: the word profit is gone, tooltips included
   assert.doesNotMatch(await page.content(), /profit/i);
-  // sort by Total net, after Cheapest XP: most gp toward the goal first
-  const sorts = await page.locator('.goal >> nth=0 >> [data-tsort-plan]').allInnerTexts();
-  assert.deepEqual(sorts.map(t => t.trim()), ['Level', 'XP each', 'Cheapest XP', 'Total net']);
+  // sort by Total net: most gp toward the goal first (v3.3: a click on a column's name; every column of numbers sorts,
+  // up to v3.2 four Sort buttons did)
+  const sorts = await page.locator('.goal >> nth=0 >> .plan-t thead th').evaluateAll(ths => ths.map(th => th.querySelector('[data-tsort-plan]')?.dataset.tsortPlan || '-'));
+  assert.deepEqual(sorts, ['-', 'level', 'name', 'xp', 'netitem', 'cheap', 'have', 'xpbank', 'gross', '-', 'xpeven', 'neteven', 'still', '-', 'xptotal', 'netcollect', 'net']);
+  assert.equal(await page.locator('.goal >> nth=0 >> .plan-t thead th[aria-sort="ascending"]').innerText(), 'Lvl', 'by level till then');
+  assert.equal(await page.locator('.goal >> nth=0 >> .bar:has(.hide-off)').count(), 1);
+  assert.doesNotMatch((await page.locator('.goal >> nth=0 >> .bar:has(.hide-off)').innerText()).replace(/\s+/g, ' '), /Sort|XP each|Cheapest XP/, 'no Sort buttons');
   await page.click('.goal >> nth=0 >> [data-tsort-plan="net"]');
   const gp = t => {
     const m = t.replace(/,/g, '').match(/^([+−-]?)([\d.]+)([KMB]?)$/);
@@ -797,7 +801,16 @@ await check('goals: with prices known the plan shows cost, value, gross and net'
   assert.deepEqual(known, [...known].sort((a, b) => b - a), 'most first');
   assert.deepEqual(nets.slice(0, known.length), known, 'rows without a total go last');
   assert.equal(await page.locator('.goal >> nth=0 >> [data-tsort-plan="net"].on').count(), 1);
+  assert.equal(await page.locator('.goal >> nth=0 >> th:has([data-tsort-plan="net"])').getAttribute('aria-sort'), 'descending');
+  // (again: the other way, the least first, rows without a total still last)
+  await page.click('.goal >> nth=0 >> [data-tsort-plan="net"]');
+  await page.waitForSelector('.goal >> nth=0 >> th[aria-sort="ascending"]:has([data-tsort-plan="net"])');
+  const up = (await page.locator('.goal >> nth=0 >> tr[data-method]').allInnerTexts()).map(t => gp(t.split('\t')[netCol].trim()));
+  assert.deepEqual(up.filter(v => v != null), [...known].sort((a, b) => a - b), 'least first');
+  assert.deepEqual(up.slice(0, known.length).filter(v => v != null).length, known.length, 'rows without a total go last either way');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).sort), { key: 'net', desc: false }, 'kept');
   await page.click('.goal >> nth=0 >> [data-tsort-plan="level"]');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).sort), { key: 'level', desc: false });
 });
 
 await check('goals: Round up my supplies shows your bank with nothing left over, in place of the plan as it is', async () => {
@@ -887,9 +900,9 @@ await check('goals: Hide unticked items takes the rows unticked under Use out of
   const label = async () => flat(await goal.locator('label.hide-off').innerText());
   const rows = () => goal.locator('tr[data-method]').evaluateAll(trs => trs.map(tr => tr.dataset.method));
   try {
-    // beside Sort, off until you ask
+    // above the table, off until you ask (up to v3.2 right after the Sort buttons; v3.3: after the line that says a column's name sorts)
     assert.deepEqual([await box().isChecked(), await label()], [false, 'Hide unticked items']);
-    assert.equal(await goal.locator('.plan-sec').last().locator('.bar .seg + label.hide-off').count(), 1, 'right after the Sort buttons');
+    assert.equal(await goal.locator('.plan-sec').last().locator('.bar .small-note + label.hide-off').count(), 1, 'first in the bar');
     assert.match(await goal.locator('label.hide-off').getAttribute('title'), /^Leave the rows you've unticked under Use out of the table\. Untick this to see them again\./);
     const all = await rows();
     // unticked rows stay in the table, dimmed, until they're hidden
@@ -1054,7 +1067,7 @@ await check('goals: a rank goal looks up who holds that rank', async () => {
   assert.match(await page.locator('.goal').nth(1).innerText(), /Rank 568 → 500/);
 });
 
-await check('lookup tiles show the goal of the planned account', async () => {
+await check('lookup tiles show the goal of the planned account (v3.3: its line opens it on the Goals tab; a click picks a tile out)', async () => {
   await page.click('.tab[data-tab="lookup"]');
   await page.fill('#lookup-name', 'demo main');
   await page.click('#lookup-form button');
@@ -1072,13 +1085,40 @@ await check('lookup tiles show the goal of the planned account', async () => {
   await page.waitForFunction(() => document.querySelector('#tiles-grid .tile[data-id="16"] .pbar.goal-bar')?.title.startsWith('2.3%'), null, { timeout: 15000 });
   assert.equal(await page.locator('#tiles-grid .tile[data-id="16"] .pbar.goal-bar > div').evaluate(el => el.style.width), '2.3%', '10,000 of 443,173');
   await page.evaluate(() => { const k = 'lchs.goals.demo_main'; const g = JSON.parse(localStorage.getItem(k)); g[0].startXp10 += 100000; localStorage.setItem(k, JSON.stringify(g)); });
+  // (v3.3) a click on a tile picks it out with the gold border, Overall till then, and it stays picked
+  const picked = () => page.locator('#tiles-grid .tile.on').evaluateAll(ts => ts.map(t => t.dataset.id));
+  const gold = await page.locator('#tiles-grid .tile[data-id="0"]').evaluate(el => getComputedStyle(el).borderTopColor);
+  assert.deepEqual(await picked(), ['0']);
+  await page.click('#tiles-grid .tile[data-id="15"] .ico');
+  assert.deepEqual(await picked(), ['15']);
+  assert.equal(await page.locator('#tiles-grid .tile[data-id="15"]').evaluate(el => getComputedStyle(el).borderTopColor), gold);
+  assert.notEqual(await page.locator('#tiles-grid .tile[data-id="0"]').evaluate(el => getComputedStyle(el).borderTopColor), gold);
+  await page.reload();
+  await page.waitForSelector('#tiles-grid .tile[data-id="16"] .goal-line', { timeout: 15000 });
+  assert.deepEqual(await picked(), ['15'], 'kept');
+  // ...and a tile's goal line opens that goal on the Goals tab: its plan open, in view, lit for a moment
+  const line = page.locator('#tiles-grid .tile[data-id="16"] a.goal-line');
+  const id = await line.getAttribute('data-goal-go');
+  assert.equal(id, (await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.goals.demo_main'))))[0].id);
+  assert.equal(await line.getAttribute('title'), 'Go to this goal on the Goals tab');
+  await line.click();
+  await page.waitForSelector(`#goals-list > .goal.lit[data-goal="${id}"]`);
+  assert.equal(await page.evaluate(() => location.hash), '#goals');
+  assert.ok((await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).open)).includes(id), 'its plan open');
+  // (scrolled to the top of the window, below the tabs, once its plan is drawn)
+  await page.waitForFunction(i => Math.abs(document.querySelector(`#goals-list > .goal[data-goal="${i}"]`).getBoundingClientRect().top - document.querySelector('.top').offsetHeight - 8) < 3, id);
+  await page.click('.tab[data-tab="lookup"]');
+  await page.waitForSelector('#tiles-grid .tile[data-id="16"] .goal-line');
+  assert.deepEqual(await picked(), ['15'], 'the line is not a click on its tile');
+  await page.click('#tiles-grid .tile[data-id="0"] .ico');
+  assert.deepEqual(await picked(), ['0']);
   await page.fill('#lookup-name', 'old badger');
   await page.click('#lookup-form button');
   await page.waitForFunction(() => document.querySelector('.pc-name')?.innerText.includes('Old Badger'), null, { timeout: 15000 });
   assert.equal(await page.locator('.goal-line').count(), 0, "another player's tiles have no goal lines");
 });
 
-await check('goals: move up and down, and filter by status and skill', async () => {
+await check('goals: move up and down (v3.3: to the top or the bottom, or dragged by its head), and filter by status and skill', async () => {
   await page.click('.tab[data-tab="goals"]');
   await page.click('[data-nskill="woodcutting"]');
   await page.click('[data-ntype="level"]');
@@ -1091,6 +1131,36 @@ await check('goals: move up and down, and filter by status and skill', async () 
   await page.locator('.goal').first().locator('[data-act="goal-down"]').click();
   assert.deepEqual(await order(), ['Herblore 500', 'Herblore 78', 'Woodcutting 94']);
   await page.locator('.goal').nth(2).locator('[data-act="goal-up"]').click();
+  assert.deepEqual(await order(), ['Herblore 500', 'Woodcutting 94', 'Herblore 78']);
+  // (v3.3) to the very bottom and the very top, either side of ▲ ▼; the first can't go to the top, the last to the bottom
+  assert.deepEqual(await page.locator('.goal').first().locator('.mv-group .mv').evaluateAll(bs => bs.map(b => [b.dataset.act, b.disabled])),
+    [['goal-top', true], ['goal-up', true], ['goal-down', false], ['goal-bottom', false]]);
+  assert.deepEqual(await page.locator('.goal').last().locator('.mv-group .mv').evaluateAll(bs => bs.map(b => b.disabled)), [false, false, true, true]);
+  assert.equal(await page.locator('.goal').first().locator('[data-act="goal-bottom"]').getAttribute('aria-label'), 'Move to the bottom: Herblore goal');
+  await page.locator('.goal').first().locator('[data-act="goal-bottom"]').click();
+  assert.deepEqual(await order(), ['Woodcutting 94', 'Herblore 78', 'Herblore 500']);
+  await page.locator('.goal').last().locator('[data-act="goal-top"]').click();
+  assert.deepEqual(await order(), ['Herblore 500', 'Woodcutting 94', 'Herblore 78']);
+  // ...and dragged by its head (not by a button in it) to a new place (the plans hidden for it, so the goals fit the window)
+  const wasOpen = await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).open);
+  if (await page.locator('[data-act="close-all"]').count()) await page.click('[data-act="close-all"]');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const a = await page.locator('.goal').nth(2).locator('.goal-name').boundingBox();
+  const b = await page.locator('.goal').first().locator('.goal-head').boundingBox();
+  await page.mouse.move(a.x + 5, a.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 5, a.y + 25, { steps: 4 });
+  await page.mouse.move(b.x + 40, b.y + 3, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('.goal .goal-title')?.innerText.includes('78'));
+  assert.deepEqual(await order(), ['Herblore 78', 'Herblore 500', 'Woodcutting 94']);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.goals.demo_main')).map(g => g.value)), [78, 500, 94], 'kept');
+  for (const id of wasOpen) {
+    const btn = page.locator(`.goal[data-goal="${id}"] [data-act="toggle-plan"][aria-expanded="false"]`);
+    if (await btn.count()) await btn.click();
+  }
+  await page.locator('.goal').first().locator('[data-act="goal-down"]').click();
+  await page.locator('.goal').nth(1).locator('[data-act="goal-down"]').click();
   assert.deepEqual(await order(), ['Herblore 500', 'Woodcutting 94', 'Herblore 78']);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.goals.demo_main')).map(g => g.skill + ' ' + g.value));
   assert.deepEqual(stored, ['herblore 500', 'woodcutting 94', 'herblore 78'], 'the order is saved');
@@ -2233,7 +2303,8 @@ await check("agility: no bank and nothing to price; laps of a course; the Agilit
     assert.equal(await plan.locator('.step .item.blank .ico-agility').count(), 1, 'no item to show: the skill\'s icon in its place');
     // courses, shortcuts and the arena, with no money columns
     assert.deepEqual((await card.locator('.plan-t thead th').allInnerTexts()).map(flat), ['Run', 'Lvl', 'Course or obstacle', 'XP', 'To goal', 'Plan to make']);
-    assert.deepEqual((await card.locator('.bar .seg button').allInnerTexts()).map(flat), ['Level', 'XP each']);
+    // (v3.3: a column's name sorts by it; up to v3.2 the Sort buttons were Level and XP each)
+    assert.deepEqual(await card.locator('.plan-t thead th').evaluateAll(ths => ths.map(th => th.querySelector('[data-tsort-plan]')?.dataset.tsortPlan || '-')), ['-', 'level', 'name', 'xp', 'togoal', '-']);
     assert.deepEqual((await card.locator('.group-pick .chip').allInnerTexts()).map(flat), ['Courses', 'Shortcuts', 'Agility Arena', 'All']);
     const names = async () => (await card.locator('tr[data-method] td:nth-child(3)').allInnerTexts()).map(flat);
     const cells = async id => (await card.locator(`tr[data-method="${id}"]`).innerText()).split('\t').map(c => flat(c)).slice(1);      // (after Run)
@@ -2671,7 +2742,8 @@ await check('combat: Attack is trained on monsters: kills to the goal, the usual
     // (v3.1: Fight first, a tick box for every monster)
     assert.deepEqual((await card.locator('.plan-t thead th').allInnerTexts()).map(flat), ['Fight', 'Lvl', 'Monster', 'HP', 'XP', 'To goal', 'Plan to kill']);
     assert.deepEqual(await card.locator('.plan-t thead th').evaluateAll(ths => ths.map(th => th.title).slice(1, 5)), ['Combat level', '', 'Hitpoints: a kill is this much damage', 'Attack XP a kill, in the style you picked']);
-    assert.deepEqual((await card.locator('.bar .seg button').allInnerTexts()).map(flat), ['Level', 'XP each']);
+    // (v3.3: a column's name sorts by it; up to v3.2 the Sort buttons were Level and XP each)
+    assert.deepEqual(await card.locator('.plan-t thead th').evaluateAll(ths => ths.map(th => th.querySelector('[data-tsort-plan]')?.dataset.tsortPlan || '-')), ['-', 'level', 'name', 'hp', 'xp', 'togoal', '-']);
     assert.match(flat(await card.locator('.plan-sec').last().locator('h4').innerText()), /^Every monster \(on its own, from level 51; click one to train on it\) Hide table$/);
     assert.equal(flat(await card.locator('.plan-sec').last().locator('.bar .small-note').last().innerText()),
       'Lvl = combat level · HP = hitpoints: a kill is that much damage · XP = what a kill gives in the style you picked · To goal = kills of it alone · Plan to kill = your mix of monsters.');
@@ -2919,7 +2991,7 @@ await check("goals: Combat level is a goal like a skill's: picked with the first
     // a goal among the goals: where a new one goes, with a goal's buttons and its progress since it was set
     assert.deepEqual(await names(), ['Cooking', 'Attack', 'Combat level']);
     assert.equal(await combat().locator('.goal-head .ico-combat').count(), 1);
-    assert.equal(flat(await combat().locator('.goal-head').innerText()), 'Combat level Level 67 → 72 Edit Hide Plan (Calculator) ▲ ▼ ✕');
+    assert.equal(flat(await combat().locator('.goal-head').innerText()), 'Combat level Level 67 → 72 Edit Hide Plan (Calculator) ▲ ▲ ▼ ▼ ✕');
     assert.equal(flat(await combat().locator('.goal-sub').innerText()), 'Level 67 now · 5 levels to go · your skill goals reach 70 (Attack 60, Hitpoints 57 from their kills): 2 more to find');
     assert.equal(await combat().locator('.goal-bar').getAttribute('title'), '0.0% of the way since you set this goal');
     const mine = (await stored()).at(-1);
@@ -3055,22 +3127,27 @@ await check("goals: Combat level is a goal like a skill's: picked with the first
     await removeGoal(goalCard('Prayer'));
     await noGoalFor('Prayer');
 
-    // narrowed to one skill: a combat skill's goals come with it, a skill that has nothing to do with combat leaves it out
-    assert.deepEqual(await page.$$eval('.goal-filter [data-gonly]', els => els.map(e => [e.dataset.gonly, e.title])),
-      [['cooking', 'Only Cooking'], ['attack', 'Only Attack, with your Combat level goal'], ['combat', 'Only Combat level']]);
+    // (v3.3) the goals' skill buttons: each on or off, as many as you like; none on, every goal. Nothing comes with
+    // anything (up to v3.2 a combat skill's button brought the Combat level goal with it, and one was on at a time)
+    const buttons = () => page.$$eval('.goal-filter [data-gonly]', els => els.map(e => [e.dataset.gonly, e.title, e.classList.contains('on')]));
+    assert.deepEqual(await buttons(), [['cooking', 'Only Cooking', false], ['attack', 'Only Attack', false], ['combat', 'Only Combat level', false]]);
     await page.click('[data-gonly="attack"]');
+    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 1);
+    assert.deepEqual(await names(), ['Attack']);
+    assert.deepEqual(await buttons(), [['cooking', 'Cooking too', false], ['attack', 'Show every goal', true], ['combat', 'Combat level too', false]]);
+    await page.click('[data-gonly="combat"]');
     await page.waitForFunction(() => document.querySelectorAll('.goal').length === 2);
     assert.deepEqual(await names(), ['Attack', 'Combat level']);
+    assert.deepEqual(await buttons(), [['cooking', 'Cooking too', false], ['attack', 'Leave out Attack', true], ['combat', 'Leave out Combat level', true]]);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).only), ['attack', 'combat'], 'kept');
     await page.click('[data-gonly="attack"]');
     await page.click('[data-gonly="cooking"]');
-    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 1);
-    assert.deepEqual(await names(), ['Cooking']);
-    await page.click('[data-gonly="cooking"]');
-    await page.click('[data-gonly="combat"]');
-    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 1);
-    assert.deepEqual(await names(), ['Combat level']);
-    await page.click('[data-gonly="combat"]');
+    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 2);
+    assert.deepEqual(await names(), ['Cooking', 'Combat level']);
+    // Every skill lets them all go
+    await page.click('[data-act="gonly-clear"]');
     await page.waitForFunction(() => document.querySelectorAll('.goal').length === 3);
+    assert.equal(await page.locator('[data-gonly].on').count(), 0);
     // moved like any goal, and it stays where it's put
     await combat().locator('[data-act="goal-up"]').click();
     assert.deepEqual(await names(), ['Cooking', 'Combat level', 'Attack']);
@@ -3102,7 +3179,7 @@ await check("goals: Combat level is a goal like a skill's: picked with the first
     // Hide all plans and Show all plans take it along with the others
     await page.click('[data-act="close-all"]');
     await page.waitForFunction(() => !document.querySelector('.gc-live') && !document.querySelector('.goal .plan'));
-    assert.equal(flat(await combat().innerText()), "Combat level Level 67 → 70 Edit Plan (Calculator) ▲ ▼ ✕ Level 67 now · 3 levels to go · your skill goals reach 70 (Attack 60, Hitpoints 57 from their kills): that's this goal");
+    assert.equal(flat(await combat().innerText()), "Combat level Level 67 → 70 Edit Plan (Calculator) ▲ ▲ ▼ ▼ ✕ Level 67 now · 3 levels to go · your skill goals reach 70 (Attack 60, Hitpoints 57 from their kills): that's this goal");
     assert.equal(await page.locator('[data-gcalc]').count(), 0, 'the calculator is its plan: shut with it');
     await page.click('[data-act="open-all"]');
     await live().waitFor();
@@ -3221,8 +3298,8 @@ await check('goals: every skill has its planner: no dot on the skill picker, and
     await page.click('.tab[data-tab="bank"]');
     await page.click('[data-bskill="herblore"]');
     const note = flat(await page.locator('#bank-head .note').innerText());
-    // (v3.1: every item, on its skill's tab or under Other)
-    assert.match(note, /A skill's tab lists the items its plans use; Other has everything else you have\. /);
+    // (v3.1: every item, on its skill's tab or under Other; v3.3: and Gear and Rares)
+    assert.match(note, /A skill's button lists the items its plans use, Gear your weapons and armour, Rares the rares, and Other everything else you have\. /);
     for (const where of ['#view-goals', '#view-bank', '#view-prices', '#settings']) {
       assert.doesNotMatch(await page.locator(where).evaluate(el => el.textContent), /later update|more skills|skills follow|marked with a dot|comes in a later/i, where);
     }
@@ -3909,7 +3986,7 @@ async function removeSlayers() {
   }
 }
 
-await check("npcs: the database: every monster with the XP and loot of a kill; search, bands and sort; a monster's page with its stats, the XP of each style and every drop; the address follows (v3)", async () => {
+await check("npcs: the database: every monster with the XP and loot of a kill; search, bands and sort; a monster's page with its stats, the XP of each style and every drop; the address follows (v3); its other stats in the list, every column sorting; a monster's picture, where it is and a minimap (v3.3)", async () => {
   await page.click('.tab[data-tab="npcs"]');
   await page.waitForSelector('#view-npcs:not([hidden]) table.npc-t');
   const rows = '#npcs-body tr[data-npc]';
@@ -3926,19 +4003,34 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
   assert.equal(flat(await text('[data-npc-found]')), '1 found, whatever their level');
   const row = page.locator(`${rows}[data-npc="fire_giant_86"]`);
   const cells = async () => (await row.locator('td').allInnerTexts()).map(flat);
-  assert.deepEqual((await cells()).slice(0, 4), ['86', 'Fire giant', '111', '+444 Attack, +147.6 Hitpoints']);
-  assert.match((await cells())[4], /^≈?[\d.,]+[KM]?$/, 'the loot of a kill');
+  // (v3.3: its Attack, Strength, Defence, Ranged and Magic after its hitpoints; Ranged and Magic faint, as it fights in melee)
+  assert.deepEqual((await cells()).slice(0, 9), ['86', 'Fire giant', '111', '65', '65', '65', '1', '1', '+444 Attack, +147.6 Hitpoints']);
+  assert.deepEqual(await row.locator('td').evaluateAll(tds => tds.slice(3, 8).map(td => td.classList.contains('c-faint'))), [false, false, false, true, true]);
+  assert.match((await cells())[9], /^≈?[\d.,]+[KM]?$/, 'the loot of a kill');
   // the XP of another style
   await page.selectOption('[data-npc-style]', 'controlled');
-  assert.equal((await cells())[3], '+147.6 Attack, +147.6 Strength, +147.6 Defence, +147.6 Hitpoints');
+  assert.equal((await cells())[8], '+147.6 Attack, +147.6 Strength, +147.6 Defence, +147.6 Hitpoints');
   await page.selectOption('[data-npc-style]', 'accurate');
   // sorted by the XP of a kill: the Kalphite Queen first (255 hitpoints), then the King Black Dragon
   await page.fill('[data-npc-search]', '');
   await page.click('#npcs-body [data-npc-band="all"]');
   await page.click('[data-npc-sort="xp"]');
   assert.deepEqual((await page.locator(`${rows}:not([hidden])`).evaluateAll(trs => trs.map(t => t.dataset.npc))).slice(0, 2), ['kalphite_queen_333', 'king_black_dragon_276']);
+  // (v3.3) a click on a column's name sorts by it, the biggest first; again, the other way round
+  assert.equal(await page.locator('th:has([data-npc-sort="xp"])').getAttribute('aria-sort'), 'descending');
+  await page.click('[data-npc-sort="def"]');
+  assert.deepEqual((await page.locator(`${rows}:not([hidden])`).evaluateAll(trs => trs.map(t => t.dataset.npc))).slice(0, 3), ['kalphite_queen_333', 'king_black_dragon_276', 'black_dragon_227']);
+  assert.equal(await page.locator('th:has([data-npc-sort="def"])').getAttribute('aria-sort'), 'descending');
+  await page.click('[data-npc-sort="def"]');
+  await page.waitForSelector('th[aria-sort="ascending"]:has([data-npc-sort="def"])');
+  const defs = await page.locator(`${rows}:not([hidden]) td:nth-child(6)`).evaluateAll(tds => tds.map(td => Number(td.innerText.replace(/,/g, ''))));
+  assert.deepEqual(defs, [...defs].sort((x, y) => x - y), 'the least Defence first');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.npcUi')).sort), { key: 'def', desc: false });
+  // a dark wizard casts spells: its Attack, Strength and Ranged are faint, its Magic isn't
+  assert.deepEqual(await page.locator(`${rows}[data-npc="dark_wizard_7"] td`).evaluateAll(tds => tds.slice(3, 8).map(td => [td.innerText, td.classList.contains('c-faint')])),
+    [['5', true], ['2', true], ['5', false], ['1', true], ['6', false]]);
   await page.click('[data-npc-sort="level"]');
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.npcUi')).sort), 'level', 'the sort sticks');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.npcUi')).sort), { key: 'level', desc: false }, 'the sort sticks');
   // a monster's page
   await page.fill('[data-npc-search]', 'fire giant');
   await row.locator('.npc-name').click();
@@ -3947,6 +4039,24 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
   const pg = page.locator('.npc-page');
   assert.equal(flat(await pg.locator('.npc-head').innerText()), '‹ All monsters Fire giant level 86 111 hitpoints');
   assert.equal(flat(await pg.locator('.nf').innerText()), '65 65 65 111 1 1 Attacks with slash · every 5 ticks (3 s) · back 60 ticks (36 s) after a kill · 2 by 2 squares · 15 in the world, most of them under ground · Leaves Big bones Bonuses: Attack +29, Strength +31, Slash defence +3, Crush defence +2 “A very large elemental adversary.”');
+  // (v3.3) its picture (LostHQ's render of the game's model), where they are, the most first, and a minimap of the biggest
+  // group, as the game draws its minimap from the map files: each from a sheet of its own, loaded once a page shows one
+  assert.equal(await pg.locator('.npc-pic').getAttribute('aria-label'), 'Fire giant');
+  assert.match(await pg.locator('.npc-pic').evaluate(el => getComputedStyle(el).backgroundImage), /\/npcpics\.webp\?v=[0-9a-f]{10}"\)$/);
+  assert.equal(flat(await pg.locator('.npc-where h5').innerText()), 'Where they are');
+  assert.deepEqual((await pg.locator('.npc-where li').allInnerTexts()).map(flat), ['Underground, west of Coal Trucks (9)', "Under Pirates' Hideout, Wilderness level 53–54 (5)", 'Under Coal Trucks (1)']);
+  assert.match(await pg.locator('.npc-map-img').evaluate(el => getComputedStyle(el).backgroundImage), /\/npcmaps\.webp\?v=[0-9a-f]{10}"\)$/);
+  assert.deepEqual(await pg.locator('.npc-map-img').evaluate(el => [el.clientWidth, el.clientHeight]), [384, 288], 'twice its 192 by 144 pixels');
+  assert.equal(flat(await pg.locator('.npc-map figcaption').innerText()), "The biggest group of them: a yellow dot each, as on the game's minimap");
+  await page.waitForFunction(() => performance.getEntriesByType('resource').filter(r => /\/npc(pics|maps)\.webp\?v=/.test(r.name) && r.responseEnd > 0).length >= 2);
+  // (the drops by a column's name: by value a kill till then; the commonest first, Big bones always)
+  assert.equal(await pg.locator('th:has([data-drop-sort="value"])').getAttribute('aria-sort'), 'descending');
+  await pg.locator('[data-drop-sort="chance"]').click();
+  await page.waitForSelector('.npc-page th[aria-sort="descending"]:has([data-drop-sort="chance"])');
+  assert.deepEqual((await page.locator('.npc-page table.loot-t tbody tr td:first-child').allInnerTexts()).slice(0, 3).map(flat), ['Big bones', 'Coins', 'Fire rune']);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.npcUi')).dropSort), { key: 'chance', desc: true });
+  await page.locator('.npc-page [data-drop-sort="value"]').click();
+  await page.waitForSelector('.npc-page th[aria-sort="descending"]:has([data-drop-sort="value"])');
   // (v3.1: the style its plan of kills is in says so: the one your combat goals train)
   assert.deepEqual((await pg.locator('table.xp-t tbody tr').allInnerTexts()).map(flat), [
     'Accurate (Attack) ← your plan +444 Attack, +147.6 Hitpoints', 'Aggressive (Strength) +444 Strength, +147.6 Hitpoints', 'Defensive (Defence) +444 Defence, +147.6 Hitpoints',
@@ -3968,6 +4078,19 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
   await page.reload();
   await page.waitForSelector('.npc-page');
   assert.equal(flat(await page.locator('.npc-page h3').innerText()), 'Fire giant level 86');
+  // (v3.3) many places: the six with the most, then the rest under a line that opens them, which stays open as the page
+  // is drawn again (a ring of wealth ticked, prices in)
+  await page.goto(BASE + '/?api=local#npcs/man_2');
+  await page.waitForSelector('.npc-page .npc-where');
+  assert.deepEqual((await page.locator('.npc-where > ul > li').allInnerTexts()).map(flat).slice(0, 2), ['North of Edgeville (7)', 'South-east of Toll Gate (4)']);
+  assert.equal(await page.locator('.npc-where > ul > li').count(), 6);
+  assert.equal(flat(await page.locator('.npc-where summary').innerText()), '29 more places');
+  await page.click('.npc-where summary');
+  assert.equal(await page.locator('.npc-where details[open] li').count(), 29);
+  await page.locator('.npc-page [data-npc-opt="ring"]').check();
+  await page.waitForFunction(() => document.querySelector('.npc-page [data-npc-opt="ring"]').checked && document.querySelector('.npc-where details')?.open);
+  await page.locator('.npc-page [data-npc-opt="ring"]').uncheck();
+  assert.equal(await page.locator('.npc-where details[open]').count(), 1);
   await page.click('[data-act="npc-back"]');
   await page.waitForSelector('table.npc-t');
   assert.equal(await page.evaluate(() => location.hash), '#npcs');
@@ -4413,7 +4536,7 @@ await check("goals: Total level is a goal, the first button; its plan says what 
     await page.fill('#goal-new input[name=value]', '1007');
     await page.click('#goal-new button[type=submit]');
     await card.locator('.total-plan').waitFor();
-    assert.equal(flat(await card.locator('.goal-head').innerText()), 'Total level Level 1,002 → 1,007 Edit Hide Plan (Calculator) ▲ ▼ ✕');
+    assert.equal(flat(await card.locator('.goal-head').innerText()), 'Total level Level 1,002 → 1,007 Edit Hide Plan (Calculator) ▲ ▲ ▼ ▼ ✕');
     assert.equal(flat(await card.locator('.goal-sub').innerText()), 'Total level 1,002 now · 5 levels to go · none of your skill goals adds a level yet');
     const g = await goalOf('old_badger', 'total');
     assert.deepEqual([g.type, g.value, g.startTotal], ['level', 1007, 1002]);
@@ -4500,12 +4623,15 @@ await check("goals: every skill's table has a tick box, Chop, Mine, Catch, Steal
     await att.locator(`tr.off[data-method="${usual}"]`).waitFor({ state: 'attached' });
     assert.notEqual(await fill.inputValue(), usual, 'the next best monster for your level');
     assert.match(flat(await att.locator('.plan-sec', { hasText: /reach your goal/ }).innerText()), /Not your pick yet: the most XP a kill among monsters no more than half your combat level/);
-    // Attack's filter: its goals, and your Slayer goal (its kills are Attack XP)
-    assert.equal(await page.locator('[data-gonly="attack"]').getAttribute('title'), 'Only Attack, with your Slayer goal');
+    // Attack's button: its goals; Slayer's, its own (v3.3: up to v3.2 Attack's brought your Slayer goals with it)
+    assert.equal(await page.locator('[data-gonly="attack"]').getAttribute('title'), 'Only Attack');
     await page.click('[data-gonly="attack"]');
+    await page.waitForFunction(() => document.querySelectorAll('#goals-list .goal').length === 1);
+    assert.deepEqual((await page.locator('#goals-list .goal .goal-name').allInnerTexts()).map(flat), ['Attack']);
+    await page.click('[data-gonly="slayer"]');
     await page.waitForFunction(() => document.querySelectorAll('#goals-list .goal').length === 2);
     assert.deepEqual((await page.locator('#goals-list .goal .goal-name').allInnerTexts()).map(flat), ['Attack', 'Slayer']);
-    await page.click('[data-gonly="attack"]');
+    await page.click('[data-act="gonly-clear"]');
   } finally {
     await removeSlayers();
     await removeGoal(goalCard('Attack'));
@@ -4535,34 +4661,43 @@ await check("bank and prices: items eight to a row as in the game, each with wha
     await page.fill('[data-add-n]', '2');
     await form.locator('button[type=submit]').click();
     await form.locator('.small-note', { hasText: 'Added 2 Dragon med helm' }).waitFor();
-    assert.equal(flat(await form.locator('.small-note').innerText()), "Added 2 Dragon med helm: you have 2 (it's on the Slayer tab too).");
+    // (v3.3: and where it shows: armour is Gear's, and monsters drop it)
+    assert.equal(flat(await form.locator('.small-note').innerText()), 'Added 2 Dragon med helm: you have 2, under Gear and Slayer.');
     // an item that can't be traded is worth its high alch: a cape of legends, 270
     await page.fill('[data-add-q]', 'cape of legends');
     await form.locator('button[type=submit]').click();
     await form.locator('.small-note', { hasText: 'Added 1 Cape of legends' }).waitFor();
+    assert.equal(flat(await form.locator('.small-note').innerText()), 'Added 1 Cape of legends: you have 1, under Gear.');
     const items = await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.bank.old_badger')).items);
     assert.deepEqual(items, { ranarr_weed: 10, chisel: 1, dragon_med_helm: 2, cape_of_legends: 1 });
+    // (v3.2: Other in sections, by kind; v3.3: never a weapon or a piece of armour, which are Gear's)
+    assert.deepEqual((await page.locator('#bank-body .bank-sec h5').allInnerTexts()).map(flat), ['Tools and containers']);
+    assert.deepEqual(await page.$$eval('#bank-body .bank-sec', els => els.map(el => [...el.querySelectorAll('[data-bank]')].map(e => e.dataset.bank))), [['chisel']]);
+    await page.click('#bank-head [data-bskill="gear"]');
+    assert.deepEqual(await page.$$eval('#bank-body .bank-sec', els => els.map(el => [el.querySelector('h5').innerText.trim(), [...el.querySelectorAll('[data-bank]')].map(e => e.dataset.bank)])), [['Armour', ['dragon_med_helm', 'cape_of_legends']]]);
     assert.equal(flat(await page.locator('.bank-cell[data-slug="cape_of_legends"] .bvals').innerText()), '270 ea 270');
     // (v3.2: its name opens its line on the Prices tab, as every item's does)
     assert.equal(await page.locator('.bank-cell[data-slug="cape_of_legends"] a.bn').getAttribute('title'), "See its price on the Prices tab (it can't be traded: its high alch)");
-    // (v3.2: Other in sections, by kind: armour, tools…)
-    assert.deepEqual((await page.locator('#bank-body .bank-sec h5').allInnerTexts()).map(flat), ['Armour', 'Tools and containers']);
-    assert.deepEqual(await page.$$eval('#bank-body .bank-sec', els => els.map(el => [...el.querySelectorAll('[data-bank]')].map(e => e.dataset.bank))), [['cape_of_legends'], ['chisel']], 'the dragon med helm is on the Slayer tab');
-    // Prices: Other has the same, and the cape's market price is its high alch
+    // Prices: Other has the chisel, Gear every weapon and piece of armour, and the cape, which can't be traded: its market price is its high alch
     await page.click('.tab[data-tab="prices"]');
     await page.click('#prices-head [data-bskill="other"]');
+    await page.waitForSelector('#prices-body [data-psrc="chisel"]');
+    assert.deepEqual(await page.$$eval('#prices-body tr:has([data-price])', trs => trs.map(tr => tr.querySelector('[data-price]').dataset.price)), ['chisel']);
+    assert.deepEqual((await page.locator('#prices-body table thead th:first-child').allInnerTexts()).map(t => flat(t).split(' ')[0]), ['Tools']);
+    await page.click('#prices-head [data-bskill="gear"]');
     await page.waitForSelector('#prices-body [data-psrc="cape_of_legends"]');
-    assert.deepEqual(await page.$$eval('#prices-body tr:has([data-price])', trs => trs.map(tr => tr.querySelector('[data-price]').dataset.price)), ['cape_of_legends', 'chisel']);
-    assert.deepEqual((await page.locator('#prices-body table thead th:first-child').allInnerTexts()).map(t => flat(t).split(' ')[0]), ['Armour', 'Tools']);
+    await page.click('[data-act="prices-stop"]').catch(() => {});
+    assert.deepEqual((await page.locator('#prices-body table thead th:first-child').allInnerTexts()).map(flat), ['Weapons', 'Armour']);
     assert.match(flat(await page.locator('#prices-body tr:has([data-psrc="cape_of_legends"])').innerText()), /^Cape of legends 270 can't be traded: high alch 270/);
     assert.equal(await page.locator('#prices-body tr[data-prow="cape_of_legends"] a.mk').count(), 0, 'no market page for it');
+    await page.click('#prices-head [data-bskill="other"]');
     // a search finds any item, whatever the tab
     await page.fill('[data-price-q]', 'dragon med');
     await page.waitForFunction(() => /^Found: 1/.test(document.querySelector('#prices-body th')?.innerText || ''));
     assert.deepEqual(await page.$$eval('#prices-body [data-price]', els => els.map(e => e.dataset.price)), ['dragon_med_helm']);
     assert.match(flat(await page.locator('#prices-head .bulk').innerText()), /^Every item found:/);
     await page.fill('[data-price-q]', '');
-    await page.waitForFunction(() => /^Armour/.test(document.querySelector('#prices-body th')?.innerText || ''));
+    await page.waitForFunction(() => /^Tools/.test(document.querySelector('#prices-body th')?.innerText || ''));
   } finally {
     await page.evaluate(() => localStorage.removeItem('lchs.bank.old_badger'));
     await page.click('.tab[data-tab="prices"]');
@@ -4602,7 +4737,7 @@ await check('bank and prices: a Slayer tab with everything a monster drops, by k
   try {
     await page.click('.tab[data-tab="bank"]');
     assert.deepEqual(await page.locator('#bank-head [data-bskill]').evaluateAll(els => els.map(e => e.dataset.bskill)),
-      ['all', 'prayer', 'magic', 'cooking', 'fletching', 'firemaking', 'crafting', 'smithing', 'herblore', 'slayer', 'runecraft', 'other']);
+      ['all', 'gear', 'rares', 'prayer', 'magic', 'cooking', 'fletching', 'firemaking', 'crafting', 'smithing', 'herblore', 'slayer', 'runecraft', 'other']);
     await page.click('#bank-head [data-bskill="slayer"]');
     assert.deepEqual((await page.locator('#bank-body .bank-group h4').allInnerTexts()).map(flat), ['Coins and runes', 'Weapons', 'Armour', 'Ammunition and throwing weapons', 'Gems, jewellery and keys', 'Herbs and secondaries', 'Ores and bars', 'Bones and hides', 'Food and potions', 'Tools and containers', 'Other']);
     assert.match(flat(await page.locator('#bank-head .bank-sum').innerText()), /^7 kinds of Slayer item · updated .* Slayer items are worth about [\d.,]+[KM]? gp/);
@@ -4615,7 +4750,8 @@ await check('bank and prices: a Slayer tab with everything a monster drops, by k
     await page.click('#bank-head [data-bskill="all"]');
     await page.click('[data-allsort="skill"]');
     const secs = await page.locator('.bank-sec').evaluateAll(els => els.map(el => [el.querySelector('h5').innerText.trim(), [...el.querySelectorAll('.bn')].map(a => a.innerText.trim())]));
-    assert.deepEqual(secs, [['Prayer', ['Big bones']], ['Cooking', ['Lobster']], ['Smithing', ['Rune scimitar']], ['Herblore', ['Vial of water']], ['Slayer', ['Coins', 'Dragon spear']], ['Runecraft', ['Fire rune']]]);
+    // (v3.3: weapons and armour under Gear, first, as its button is)
+    assert.deepEqual(secs, [['Gear', ['Rune scimitar', 'Dragon spear']], ['Prayer', ['Big bones']], ['Cooking', ['Lobster']], ['Herblore', ['Vial of water']], ['Slayer', ['Coins']], ['Runecraft', ['Fire rune']]]);
     await page.click('[data-allsort="yours"]');
     // Prices: Slayer's tab lists what can be sold (not coins, nor a quest's badge)
     await page.click('.tab[data-tab="prices"]');
@@ -4632,7 +4768,7 @@ await check('bank and prices: a Slayer tab with everything a monster drops, by k
 });
 
 // ── v3.2 ──────────────────────────────────────────────────────────────────
-await check('slayer: alched on the way: a loot screenshot with more coins than its kills drop has what was alched guessed from the drop rates (the drops worth an alch, or what you tick under Alch); you change it; it counts as loot, alched, and only the rest of the coins as coins dropped; a deposit puts it in as coins (v3.2)', async () => {
+await check('slayer: alched on the way: a loot screenshot with more coins than its kills drop has what was alched guessed from the drop rates (the drops worth an alch, or what you tick under Alch); you change it; it counts as loot, alched, and only the rest of the coins as coins dropped; a deposit puts it in as coins (v3.2); with the Coins line unticked, nothing alched on those trips counts, nor the nature runes it took (v3.3)', async () => {
   await planAs('old badger', 'Old Badger');
   await page.evaluate(() => localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: { naturerune: 10 }, updated: Date.now() })));
   await addSlayer('Fire giant (level 86)', 1000);
@@ -4706,6 +4842,41 @@ await check('slayer: alched on the way: a loot screenshot with more coins than i
     assert.deepEqual(await alch.locator('[data-alch-n]').evaluateAll(els => els.map(e => e.dataset.alchN)), ['rune_battleaxe'], 'what you tick under Alch');
     await review.locator('[data-act="loot-discard"]').click();
     await review.waitFor({ state: 'detached' });
+    // (v3.3) the Coins line unticked: those coins aren't these kills' loot, so nothing alched on these trips is counted
+    // either: no alched loot, and none of the nature runes you bring were cast. Ticked again, the guess is back.
+    // 55 kills since loot was added drop about 1,632 coins; 26,592 read is a rune battleaxe more (24,960). You bring 10
+    // nature runes a trip, and 10 are read: with a cast, 9 are yours and 1 dropped; with none, all 10 are yours.
+    await page.evaluate(() => {
+      const k = 'lchs.goals.old_badger', gs = JSON.parse(localStorage.getItem(k));
+      gs.find(g => g.skill === 'slayer').bring = { naturerune: 10 };
+      localStorage.setItem(k, JSON.stringify(gs));
+    });
+    await typeIn(card.locator('[data-done]'), '100');
+    await card.locator('[data-done][value="100"]').waitFor();
+    await pick('trip-c.png', encodePng(fakeInventory({ items: [{ slot: 0, icon: 'coins_10000', count: 26592, stack: true }, { slot: 1, icon: 'naturerune', count: 10, stack: true }, { slot: 2, icon: 'big_bones', count: 1 }] })));
+    const natureLine = () => review.locator('.shot-row', { has: page.locator('[data-loot-n="naturerune"]') }).innerText().then(flat);
+    const coinsLine = () => review.locator('.shot-row', { has: page.locator('[data-loot-n="coins"]') }).innerText().then(flat);
+    assert.deepEqual(await guessed(), { rune_battleaxe: '1' });
+    assert.deepEqual(await amounts(), { coins: '1,632', naturerune: '1', big_bones: '1' });
+    assert.match(await natureLine(), /read 10 · 9 you bring taken off/);
+    assert.match(await coinsLine(), /read 26,592 · 24,960 from alching · you have 7,095$/);
+    await review.locator('[data-loot-shot="coins"]').uncheck();
+    await alch.locator('text=The Coins line is unticked').waitFor();
+    assert.equal(flat(await alch.innerText()), 'The Coins line is unticked, so nothing alched on these trips is counted either.');
+    assert.deepEqual(await amounts(), { coins: '26,592', naturerune: '0', big_bones: '1' });
+    assert.match(await natureLine(), /read 10 · 10 you bring taken off/);
+    assert.match(await coinsLine(), /read 26,592 · you have 7,095$/);
+    await review.locator('[data-loot-shot="coins"]').check();
+    await alch.locator('[data-alch-n="rune_battleaxe"]').waitFor();
+    assert.deepEqual(await guessed(), { rune_battleaxe: '1' });
+    assert.deepEqual(await amounts(), { coins: '1,632', naturerune: '1', big_bones: '1' });
+    await review.locator('[data-loot-shot="coins"]').uncheck();
+    await alch.locator('text=The Coins line is unticked').waitFor();
+    await review.locator('[data-act="loot-apply"]').click();
+    await review.waitFor({ state: 'detached' });
+    assert.equal(flat(await note().innerText()), 'Added to your loot: 1 Big bones. Undo ✕');
+    const g2 = await goalOf('old_badger', 'slayer');
+    assert.deepEqual([g2.got, g2.alch, g2.lootDone], [{ coins: 7095, big_bones: 2, rune_battleaxe: 1 }, ['rune_battleaxe'], 100], 'nothing alched added');
   } finally {
     await page.evaluate(() => { delete window.showOpenFilePicker; localStorage.removeItem('lchs.bank.old_badger'); });
     await removeSlayers();
@@ -4737,7 +4908,7 @@ await check('slayer: Hide unticked loot takes what you leave on the ground out o
   }
 });
 
-await check('prices: an item anywhere opens its line here (a loot table, a plan, your bank); here its name opens the market; type how many you want and its cost is beside it; Your list adds them up, shows only them, and is kept (v3.2)', async () => {
+await check('prices: an item anywhere opens its line here (a loot table, a plan, your bank); here its name opens the market; type how many you want and its cost is beside it (v3.3: or the cost, and how many it buys); Your list adds them up, shows only them, and is kept (v3.2)', async () => {
   await planAs('old badger', 'Old Badger');
   await addSlayer('Fire giant (level 86)', 100);
   const card = slayerCard();
@@ -4755,12 +4926,12 @@ await check('prices: an item anywhere opens its line here (a loot table, a plan,
     await page.waitForFunction(() => window.__skills.prices.gp('rune_scimitar') != null, null, { timeout: 30000 });
     await page.fill('[data-pq="rune_scimitar"]', '3');
     await page.press('[data-pq="rune_scimitar"]', 'Enter');
-    await page.waitForFunction(() => document.querySelector('[data-pcost="rune_scimitar"]')?.innerText.trim());
+    await page.waitForFunction(() => document.querySelector('[data-pcost="rune_scimitar"]')?.value.trim());
     const each = await page.evaluate(() => window.__skills.prices.gp('rune_scimitar'));
-    const cost = flat(await page.locator('[data-pcost="rune_scimitar"]').innerText());
-    assert.match(cost, /^[\d.,]+[KM]?$/);
+    // (v3.3: the cost is a box too, the whole number; the list's total is short)
+    assert.equal(await page.inputValue('[data-pcost="rune_scimitar"]'), Math.round(3 * each).toLocaleString('en-US'));
     assert.deepEqual(await pq(), { rune_scimitar: 3 });
-    assert.equal(flat(await page.locator('.pq-sum span').first().innerText()), `Your list: 1 item, ${cost} gp`);
+    assert.match(flat(await page.locator('.pq-sum span').first().innerText()), /^Your list: 1 item, [\d.,]+[KM]? gp$/);
     // another, found by name: 100 law runes
     await page.fill('[data-price-q]', 'law rune');
     await page.waitForSelector('#prices-body [data-pq="lawrune"]');
@@ -4768,6 +4939,24 @@ await check('prices: an item anywhere opens its line here (a loot table, a plan,
     await page.press('[data-pq="lawrune"]', 'Enter');
     await page.waitForFunction(() => /^Your list: 2 items/.test(document.querySelector('.pq-sum span')?.innerText || ''));
     const law = await page.evaluate(() => window.__skills.prices.gp('lawrune'));
+    assert.deepEqual(await pq(), { rune_scimitar: 3, lawrune: 100 });
+    // (v3.3) or what you'd spend: a cost typed is how many that buys at its price, rounded down (325K of chaos
+    // runes), and the cost is then what that many come to. Cleared, it's off the list.
+    await page.fill('[data-price-q]', 'chaos rune');
+    await page.waitForSelector('#prices-body [data-pcost="chaosrune"]');
+    await page.waitForFunction(() => window.__skills.prices.gp('chaosrune') != null, null, { timeout: 30000 });
+    const chaos = await page.evaluate(() => window.__skills.prices.gp('chaosrune'));
+    const n = Math.floor(325000 / chaos);
+    assert.equal(await page.locator('[data-pcost="chaosrune"]').getAttribute('placeholder'), '0');
+    await page.fill('[data-pcost="chaosrune"]', '325k');
+    await page.press('[data-pcost="chaosrune"]', 'Enter');
+    await page.waitForFunction(v => document.querySelector('[data-pq="chaosrune"]')?.value === v, n.toLocaleString('en-US'));
+    assert.equal(await page.inputValue('[data-pcost="chaosrune"]'), Math.round(n * chaos).toLocaleString('en-US'));
+    assert.deepEqual(await pq(), { rune_scimitar: 3, lawrune: 100, chaosrune: n });
+    assert.match(flat(await page.locator('.pq-sum span').first().innerText()), /^Your list: 3 items, /);
+    await page.fill('[data-pcost="chaosrune"]', '');
+    await page.press('[data-pcost="chaosrune"]', 'Enter');
+    await page.waitForFunction(() => document.querySelector('[data-pq="chaosrune"]')?.value === '');
     assert.deepEqual(await pq(), { rune_scimitar: 3, lawrune: 100 });
     // only these: the search ends, and the list is what's shown
     await page.fill('[data-price-q]', '');
@@ -4937,6 +5126,116 @@ await check('bank: a screenshot review can hide the items that stayed the same, 
   }
 });
 
+await check('bank and prices: Gear and Rares, right after All. Each button picks out what it lists, so a rune platebody is under Gear and Smithing and a dragonhide body under Gear and Crafting, and All counts each once; Rares lists every rare; Other has only what no other button lists (v3.3)', async () => {
+  await planAs('old badger', 'Old Badger');
+  await page.evaluate(() => localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: { rune_platebody: 2, dragonhide_body: 1, red_partyhat: 1, scythe: 1, chisel: 1, lobster: 10 }, updated: Date.now() })));
+  const sum = async () => flat(await page.locator('#bank-head .bank-sum span').first().innerText()).replace(/ · updated .*/, '');
+  const cells = () => page.$$eval('#bank-body [data-bank]', els => els.map(e => [e.dataset.bank, e.value]).filter(([, v]) => v));
+  const RARES = ['christmas_cracker', 'red_partyhat', 'yellow_partyhat', 'blue_partyhat', 'green_partyhat', 'purple_partyhat', 'white_partyhat', 'santa_hat',
+    'halloweenmask_green', 'halloweenmask_blue', 'halloweenmask_red', 'pumpkin', 'easter_egg', 'half_full_wine_jug', 'discofreturning', 'bunnyears', 'scythe'];
+  try {
+    await page.click('.tab[data-tab="bank"]');
+    await page.click('#bank-head [data-bskill="all"]');
+    assert.equal(await sum(), '6 kinds of item', 'each item once');
+    // (their icons: the game's Worn Equipment side icon and a partyhat, at their own sizes)
+    assert.deepEqual(await page.locator('#bank-head [data-bskill="gear"] .ico').evaluate(el => [el.offsetWidth, el.offsetHeight, /gear\.webp/.test(getComputedStyle(el).backgroundImage)]), [25, 28, true]);
+    assert.deepEqual(await page.locator('#bank-head [data-bskill="rares"] .ico').evaluate(el => [el.offsetWidth, el.offsetHeight, /rares\.webp/.test(getComputedStyle(el).backgroundImage)]), [29, 24, true]);
+    assert.deepEqual((await page.locator('#bank-head [data-bskill]').allInnerTexts()).map(t => flat(t).split(' ')[0]).slice(0, 3), ['All', 'Gear', 'Rares']);
+    // Gear: every weapon and piece of armour you have, by kind, whichever skill lists it too; no rare
+    await page.click('#bank-head [data-bskill="gear"]');
+    assert.equal(await sum(), '2 kinds of gear');
+    assert.deepEqual(await page.$$eval('#bank-body .bank-sec', els => els.map(el => [el.querySelector('h5').innerText.trim(), [...el.querySelectorAll('[data-bank]')].map(e => e.dataset.bank).sort()])), [['Armour', ['dragonhide_body', 'rune_platebody']]]);
+    await page.click('#bank-head [data-bskill="smithing"]');
+    assert.deepEqual(await cells(), [['rune_platebody', '2']]);
+    await page.click('#bank-head [data-bskill="crafting"]');
+    assert.deepEqual(await cells(), [['dragonhide_body', '1']]);
+    // Rares: every rare, like a skill's tab, to type in the ones you have
+    await page.click('#bank-head [data-bskill="rares"]');
+    assert.equal(await sum(), '2 rares');
+    assert.deepEqual(await page.$$eval('#bank-body [data-bank]', els => els.map(e => e.dataset.bank)), RARES);
+    await page.fill('[data-bank="white_partyhat"]', '1');
+    await page.press('[data-bank="white_partyhat"]', 'Enter');
+    await page.waitForFunction(() => /^3 rares/.test(document.querySelector('#bank-head .bank-sum span')?.innerText || ''));
+    assert.match(flat(await page.locator('#bank-head .bank-note, #bank-head .note').last().innerText()), /This version's rares: Christmas crackers and the partyhats in them/);
+    // Other: the chisel alone (the lobster is Cooking's; the gear and rares have buttons of their own)
+    await page.click('#bank-head [data-bskill="other"]');
+    assert.equal(await sum(), '1 other kind of item');
+    assert.deepEqual(await page.$$eval('#bank-body [data-bank]', els => els.map(e => e.dataset.bank)), ['chisel']);
+    // All, by skill: each item once, Gear and Rares first
+    await page.click('#bank-head [data-bskill="all"]');
+    await page.click('[data-allsort="skill"]');
+    assert.deepEqual(await page.locator('.bank-sec').evaluateAll(els => els.map(el => [el.querySelector('h5').innerText.trim(), [...el.querySelectorAll('.bank-cell')].map(c => c.dataset.slug)])),
+      [['Gear', ['dragonhide_body', 'rune_platebody']], ['Rares', ['red_partyhat', 'white_partyhat', 'scythe']], ['Cooking', ['lobster']], ['Other', ['chisel']]]);
+    await page.click('[data-allsort="yours"]');
+    // Prices: Rares lists every rare (bunny ears and the scythe can't be traded: their high alch); Gear no rare; Other neither
+    await page.click('.tab[data-tab="prices"]');
+    await page.click('#prices-head [data-bskill="rares"]');
+    await page.waitForSelector('#prices-body [data-prow="scythe"]');
+    assert.deepEqual(await page.$$eval('#prices-body tr[data-prow]', trs => trs.map(tr => tr.dataset.prow)), RARES);
+    assert.match(flat(await page.locator('#prices-body tr[data-prow="scythe"]').innerText()), /^Scythe [\d,]+ can't be traded: high alch/);
+    await page.click('#prices-head [data-bskill="gear"]');
+    await page.waitForSelector('#prices-body [data-prow="rune_platebody"]');
+    await page.click('[data-act="prices-stop"]').catch(() => {});
+    assert.equal(await page.locator('#prices-body [data-prow="red_partyhat"], #prices-body [data-prow="scythe"]').count(), 0, 'no rare under Gear');
+    await page.click('#prices-head [data-bskill="other"]');
+    await page.waitForSelector('#prices-body [data-prow="chisel"]');
+    assert.deepEqual(await page.$$eval('#prices-body tr[data-prow]', trs => trs.map(tr => tr.dataset.prow)), ['chisel']);
+  } finally {
+    await page.click('[data-act="prices-stop"]').catch(() => {});
+    await page.evaluate(() => localStorage.removeItem('lchs.bank.old_badger'));
+    await page.click('#prices-head [data-bskill="all"]').catch(() => {});
+    await page.click('.tab[data-tab="goals"]');
+  }
+});
+
+await check("tables sort by a click on a column's name, the other way on a second click (up to v3.2: Sort buttons): a Slayer goal's loot, and Prices' lists with a way back to their own order (v3.3)", async () => {
+  await planAs('old badger', 'Old Badger');
+  await addSlayer('Fire giant (level 86)', 100);
+  const card = slayerCard();
+  try {
+    await card.locator('.plan table.loot-t').waitFor();
+    const names = async () => (await card.locator('table.loot-t tbody tr[data-loot] td:nth-child(3)').allInnerTexts()).map(t => flat(t).replace(/ alched$/, ''));
+    const now = () => card.locator('table.loot-t thead th[aria-sort]:not([aria-sort="none"])').evaluateAll(ths => ths.map(th => `${th.querySelector('.th-sort').dataset.lootSort} ${th.getAttribute('aria-sort')}`));
+    // Expected value till a column is picked; every column of numbers or names sorts, the tick boxes and Each drop don't
+    assert.deepEqual(await now(), ['value descending']);
+    assert.deepEqual(await card.locator('table.loot-t thead th').evaluateAll(ths => ths.map(th => th.querySelector('.th-sort')?.dataset.lootSort || '-')),
+      ['-', '-', 'name', 'chance', '-', 'expected', 'atleast', 'value', 'looted', 'got']);
+    assert.equal(await card.locator('.bar [data-loot-sort]').count(), 0, 'no Sort buttons');
+    await card.locator('[data-loot-sort="name"]').click();
+    await card.locator('th[aria-sort="ascending"] [data-loot-sort="name"]').waitFor();
+    const az = await names();
+    assert.deepEqual(az, [...az].sort((x, y) => x.localeCompare(y, 'en', { numeric: true, sensitivity: 'base' })), 'A to Z');
+    await card.locator('[data-loot-sort="name"]').click();
+    await card.locator('th[aria-sort="descending"] [data-loot-sort="name"]').waitFor();
+    assert.deepEqual(await names(), [...az].reverse(), 'Z to A');
+    await card.locator('[data-loot-sort="chance"]').click();
+    await card.locator('th[aria-sort="descending"] [data-loot-sort="chance"]').waitFor();
+    assert.deepEqual((await names()).slice(0, 2), ['Big bones', 'Coins'], 'the commonest first');
+    // Prices: a list by its market price, the most first; each list in its own order again
+    await page.click('.tab[data-tab="prices"]');
+    await page.click('#prices-head [data-bskill="herblore"]');
+    const firstList = () => page.$$eval('#prices-body table.prices-t:first-of-type tbody tr[data-prow]', trs => trs.map(tr => tr.dataset.prow));
+    await page.waitForSelector('#prices-body table.prices-t tr[data-prow]');
+    const own = await firstList();
+    assert.equal(await page.locator('[data-act="price-sort-reset"]').count(), 0);
+    await page.locator('#prices-body table.prices-t').first().locator('[data-price-sort="name"]').click();
+    await page.waitForSelector('#prices-body th[aria-sort="ascending"] [data-price-sort="name"]');
+    const byName = await firstList();
+    assert.deepEqual([...byName].sort(), [...own].sort(), 'the same items');
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).priceSort), { key: 'name', desc: false });
+    // (the "all" beside Market and High alch is a button of its own, not the column's)
+    assert.equal(await page.locator('#prices-body .th-sort [data-pall]').count(), 0);
+    assert.ok(await page.locator('#prices-body th:has([data-price-sort="market"]) [data-pall="market"]').count() > 0);
+    await page.click('[data-act="price-sort-reset"]');
+    await page.waitForFunction(() => !document.querySelector('[data-act="price-sort-reset"]'));
+    assert.deepEqual(await firstList(), own, 'its own order again');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.planUi')).priceSort), null);
+  } finally {
+    await page.click('#prices-head [data-bskill="all"]').catch(() => {});
+    await removeSlayers();
+  }
+});
+
 await check('Planner+: the name in the title, the header and Settings, the NPCs tab after Goals, and the version (v3)', async () => {
   assert.equal(await page.title(), 'Planner+');
   assert.equal(flat(await text('.brand')), 'Planner+');
@@ -4944,7 +5243,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.2\.1 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.3\.0 · /);
   await page.click('#settings-close');
 });
 

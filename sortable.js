@@ -8,8 +8,10 @@
 //   onDrop  (el) the item was dropped; the page already shows the new order
 //   onEnd   ({ dropped, stale }) the drag is over. stale: something asked to be
 //           redrawn while it was going on (see hold), so redraw now.
+//   ghost   (el) the part of an item to show under the pointer (v3.3: a goal's
+//           head, not its whole plan); the item itself by default
 
-export function sortable({ root, item, skip = null, onDrop, onEnd = () => {} }) {
+export function sortable({ root, item, skip = null, onDrop, onEnd = () => {}, ghost = null }) {
   let d = null;
   let swallow = false;
 
@@ -49,11 +51,12 @@ export function sortable({ root, item, skip = null, onDrop, onEnd = () => {} }) 
 
   function start() {
     if (!d.el.isConnected) { d = null; return; }     // redrawn under the press: let go and try again
-    const rect = d.el.getBoundingClientRect();
+    const src = (ghost && ghost(d.el)) || d.el;
+    const rect = src.getBoundingClientRect();
     d.active = true;
     d.dx = d.x0 - rect.left; d.dy = d.y0 - rect.top;
     d.before = [...d.el.parentNode.children];
-    d.ghost = d.el.cloneNode(true);
+    d.ghost = src.cloneNode(true);
     d.ghost.classList.add('drag-ghost');
     d.ghost.removeAttribute('id');
     Object.assign(d.ghost.style, { width: rect.width + 'px', height: rect.height + 'px' });

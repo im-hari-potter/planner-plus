@@ -87,10 +87,10 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
    so what's pinned is a line shorter) */
 @media (max-width: 860px) { .brand { order: -2; } .top-right { order: -1; } }
 /* A tab's icon (v3.2.1): 26 by 24, drawn at that size, so never blurry (tabicons.png): the round ones in the
-   frame of the game's own round side icons, Goals the game's Stats side icon. Clear of the active tab's
+   frame of the game's own round side icons (v3.3: Goals the bar chart of its Stats icon, Prices coins). Clear of the active tab's
    gold line under it. Its address carries a stamp of the picture, so a browser fetches the new one with
    these sizes, not an old one it kept. */
-.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=d9de5700ee'); background-size: 208px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
+.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=185f3829b8'); background-size: 208px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
 .tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
 .ti.ti-compare { background-position: -26px 0; }
@@ -332,6 +332,14 @@ form.inline { display: inline-flex; gap: 4px; }
 .ico-combat { background-image: url('combat.webp'); }
 /* Slayer: the skill's icon as the game drew it in 2005 (staticons2, build-data.mjs). It isn't in this version of the game yet */
 .ico-slayer { background-image: url('slayer.webp'); }
+/* (v3.3) Bank and Prices: Gear, the game's Worn Equipment side icon (sideicons 4), and Rares, a blue partyhat (its item
+   sprite), at their own sizes (25 x 28 and 29 x 24): never scaled, so never blurry */
+.ico-gear { background-image: url('gear.webp'); }
+.ico-rares { background-image: url('rares.webp'); }
+.skill-tab .ico.ico-gear, .bank-sec h5 .ico.ico-gear { width: 25px; height: 28px; margin: -2px 0; }
+.skill-tab .ico.ico-rares, .bank-sec h5 .ico.ico-rares { width: 29px; height: 24px; margin: 0 -1px; }
+.bank-sec h5 .ico.ico-gear { margin: -3px 0; }
+.bank-sec h5 .ico.ico-rares { margin: -1px -1px; }
 .tile .ico { margin-bottom: 1px; }
 .tile .v { white-space: nowrap; }
 .tile .top-line { color: var(--top); white-space: normal; }
@@ -355,7 +363,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .tiles-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 2px 6px; font-family: var(--small); font-size: 13px; color: var(--faint); }
 .tiles-bar .seg button { padding: 3px 9px; }
 .tile.unranked .v { color: var(--faint); }
-.tile.overall { border-color: var(--gold-hi); }
+/* (v3.3) the tile picked out: Overall till you click another */
+.tile.on { border-color: var(--gold-hi); }
 .pbar { width: 100%; height: 5px; margin-top: 5px; background: rgba(0, 0, 0, 0.55); border: 1px solid var(--gold-dim); overflow: hidden; }
 .pbar > div { height: 100%; background: var(--level); transition: width 0.3s ease; }
 .pbar.maxed > div { background: var(--gold-hi); }
@@ -447,6 +456,15 @@ table.cmp tfoot td { background: #241e10; font-size: 13px; }
 }
 .th-sort:hover, .th-sort.on { color: var(--text); }
 .th-sort .arrow { display: inline-block; min-width: 10px; margin-left: 3px; font-size: 10px; color: var(--gold-hi); }
+/* (v3.3) the tables a column's name sorts (tablesort.js): the arrow is the order, ▲ the smallest or A first */
+.th-sort.on.asc .arrow::after { content: '▲'; }
+.th-sort.on.desc .arrow::after { content: '▼'; }
+.th-sort:hover:not(.on) { text-decoration: underline dotted; }
+/* (a column's name lines up as its th does, and wraps where its th wraps: as narrow as it was without a button;
+   its arrow takes room only once the column is the order, so till then the name lines up with what's under it) */
+.th-sort { text-align: inherit; }
+table.grid th.wrap .th-sort { white-space: normal; }
+.th-sort:not(.on) .arrow[aria-hidden] { min-width: 0; margin-left: 0; }
 .sort-note { margin: 2px 2px 6px; font-family: var(--small); font-size: 13px; color: var(--muted); }
 .skill-picker { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
 .skill-btn { padding: 2px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
@@ -520,6 +538,15 @@ table.cmp tfoot td { background: #241e10; font-size: 13px; }
 }
 .mv:hover:not(:disabled) { color: #fff; background: #3a3a3a; }
 .mv:disabled { opacity: 0.3; cursor: default; }
+/* (v3.3) to the very top or bottom: the arrow with a bar at its end */
+.mv.mv-end { position: relative; }
+.mv.mv-end::after { content: ''; position: absolute; left: 6px; right: 6px; height: 2px; background: currentColor; }
+.mv.mv-end.top::after { top: 4px; }
+.mv.mv-end.bottom::after { bottom: 4px; }
+/* a goal is dragged by its head into a new place */
+#goals-list > .goal > .goal-head { cursor: grab; }
+#goals-list > .goal > .goal-head :is(button, a, input, select, label) { cursor: pointer; }
+.drag-ghost.goal-head { width: auto; padding: 6px 10px; background: var(--panel, #2b2418); border: 2px solid var(--gold); border-radius: 4px; transform: none; }
 .goal-edit { margin-top: 6px; }
 .goal-edit .input.num { width: 110px; }
 .goal-name { font-size: 17px; color: #fff; }
@@ -667,6 +694,12 @@ a.it-chip.mk:hover b { text-decoration: underline; }
 /* a tile with a goal: its bar is the goal's (gold, like the line under it) */
 .tile .pbar.goal-bar { height: 5px; margin-top: 5px; }
 .tile .goal-line { margin-top: 3px; font-family: var(--small); font-size: 12px; color: var(--gold-hi); white-space: normal; }
+/* (v3.3) it opens the goal on the Goals tab */
+a.goal-line { display: block; text-align: center; text-decoration: none; cursor: pointer; }
+a.goal-line:hover, a.goal-line:focus-visible { text-decoration: underline; }
+/* (v3.3) a goal gone to (from Lookup, a monster's page), lit for a moment */
+#goals-list > .goal.lit { animation: goal-lit 1.8s ease-out; }
+@keyframes goal-lit { 0%, 35% { box-shadow: 0 0 0 2px var(--gold-hi), 0 0 14px rgba(255, 200, 60, 0.45); } 100% { box-shadow: 0 0 0 2px transparent, 0 0 14px transparent; } }
 
 /* ── Status bar ─────────────────────────────────────────────────────────── */
 .status {
@@ -769,6 +802,23 @@ table.npc-t td.npc-best .item.sm { margin-right: 2px; }
 .nf-stat .ico { width: 22px; height: 22px; }
 .nf-stat b { color: #fff; font-weight: normal; }
 .nf-examine { font-style: italic; margin-top: 2px; }
+/* (v3.3) a monster's page: its picture, its numbers and where it is, and a minimap (2 pixels a pixel, as the
+   game drew it: --z; the sheet and its cell are set on the element) */
+.npc-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 16px; align-items: start; margin: 4px 0 8px; }
+.npc-top:not(.has-pic) { grid-template-columns: minmax(0, 1fr) auto; }
+.npc-pic { width: 112px; height: 112px; background-repeat: no-repeat; }
+.npc-where h5 { margin: 8px 0 2px; font-weight: normal; font-size: 14px; color: var(--muted); }
+.npc-where ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.npc-where li { margin: 1px 0; }
+.npc-where summary { cursor: pointer; margin-top: 2px; font-family: var(--small); font-size: 13px; color: var(--top); text-decoration: underline; }
+.npc-map { margin: 0; --z: 2; }
+.npc-map-img { box-sizing: content-box; width: calc(var(--mw) * var(--z) * 1px); height: calc(var(--mh) * var(--z) * 1px); border: 2px solid var(--gold-dim); border-radius: 4px; background-color: #000;
+  background-image: var(--sheet); background-repeat: no-repeat; background-size: calc(var(--sw) * var(--z) * 1px) auto;
+  background-position: calc(var(--mx) * var(--z) * -1px) calc(var(--my) * var(--z) * -1px); image-rendering: pixelated; }
+.npc-map figcaption { margin-top: 3px; max-width: calc(var(--mw) * var(--z) * 1px); }
+@media (max-width: 980px) { .npc-top, .npc-top:not(.has-pic) { grid-template-columns: auto minmax(0, 1fr); } .npc-map { grid-column: 1 / -1; } }
+@media (max-width: 520px) { .npc-top, .npc-top:not(.has-pic) { grid-template-columns: minmax(0, 1fr); } .npc-map { --z: 1.5; } }
+@media (max-width: 380px) { .npc-map { --z: 1.25; } }
 table.xp-t { width: auto; }
 table.xp-t td { padding: 3px 10px 3px 6px; }
 table.loot-t td, table.loot-t th { padding: 3px 6px; }
@@ -860,5 +910,6 @@ table.loot-t tr.off td:not(.c) { opacity: 0.5; }
 /* Prices: how many you want, what they cost, and your list's total */
 table.prices-t th.pq, table.prices-t th.pcost, table.prices-t td.pcost { text-align: right; }
 table.prices-t td.pq .input.num { width: 100%; max-width: 90px; margin: 0; }
-table.prices-t td.pcost { color: var(--xp, #fff); }
+/* (v3.3) the cost is a box too: what you'd spend, the quantity worked out from it */
+table.prices-t td.pcost .input.num { width: 100%; max-width: 104px; margin: 0; }
 .pq-sum { margin: 2px 0 0; font-size: 14px; }

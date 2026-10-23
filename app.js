@@ -14,7 +14,7 @@ import { Prices, LIVE_MARKET } from './prices.js';
 import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 
-const VERSION = '3.2.1';
+const VERSION = '3.3.0';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -69,6 +69,8 @@ const state = {
   // Lookup tiles sorted by the shown player's numbers ({ key: 'level'|'xp'|'rank'|'top', dir }),
   // or null for the dragged/default layout. Dragging a tile turns a sort into a layout.
   tileSort: prefs.tileSort && ['level', 'xp', 'rank', 'top'].includes(prefs.tileSort.key) ? { key: prefs.tileSort.key, dir: prefs.tileSort.dir === -1 ? -1 : 1 } : null,
+  // (v3.3) The tile picked out with the gold border (a click picks another): Overall till then.
+  tileOn: SKILL_BY_ID.has(prefs.tileOn) ? prefs.tileOn : 0,
   calc: null,              // { levels, source } for the combat calculator
 };
 
@@ -88,6 +90,7 @@ function savePrefs() {
     lbPage: state.leaders.page,
     tileOrder: state.tileOrder,
     tileSort: state.tileSort,
+    tileOn: state.tileOn,
     lastLookup: prefs.lastLookup,
   });
 }
@@ -412,7 +415,7 @@ function tileHtml(skill, stat, bounds) {
   if (!stat) {
     const b = bounds[skill.key];
     const lvl = !b ? `&lt;${MIN_RANKED_LEVEL}` : b.min === b.max ? b.min : `${b.min}–${b.max}`;
-    return `<div class="tile unranked" data-id="${skill.id}" title="${esc(skill.name)}: below level ${MIN_RANKED_LEVEL}, so not on the hiscores">
+    return `<div class="tile unranked${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}" title="${esc(skill.name)}: below level ${MIN_RANKED_LEVEL}, so not on the hiscores">
       ${iconImg(skill)}
       <div class="v">Level: ${lvl}</div>
       <div class="v">Not ranked</div>
@@ -434,7 +437,7 @@ function tileHtml(skill, stat, bounds) {
       : `<div class="next">Next: ${fmt(pr.remaining)} XP</div>
          ${goalBar || `<div class="pbar" title="${fmt(pr.remaining)} XP to level ${pr.nextLevel} (${pr.pct.toFixed(1)}%)"><div style="width:${pr.pct.toFixed(1)}%"></div></div>`}`;
   }
-  return `<div class="tile${skill.id === 0 ? ' overall' : ''}" data-id="${skill.id}" title="${esc(skill.name)}">
+  return `<div class="tile${skill.id === 0 ? ' overall' : ''}${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}" title="${esc(skill.name)}">
     ${iconImg(skill)}
     <div class="v c-level">Level: ${fmt(stat.level)}</div>
     <div class="v c-xp">XP: ${fmt(stat.xp)}</div>
@@ -1198,6 +1201,16 @@ function wire() {
     }
     const lbType = t.closest('[data-lb-type]');
     if (lbType) { goLeaders(Number(lbType.dataset.lbType), 1); return; }
+    // (v3.3) A tile's goal line: that goal on the Goals tab. A click on a tile picks it out.
+    const goalGo = t.closest('[data-goal-go]');
+    if (goalGo) { e.preventDefault(); planner.goToGoal(goalGo.dataset.goalGo); return; }
+    const tile = t.closest('#tiles-grid .tile');
+    if (tile) {
+      state.tileOn = Number(tile.dataset.id);
+      savePrefs();
+      for (const el of document.querySelectorAll('#tiles-grid .tile')) el.classList.toggle('on', Number(el.dataset.id) === state.tileOn);
+      return;
+    }
     const tsort = t.closest('[data-tsort]');
     if (tsort) {
       const k = tsort.dataset.tsort;

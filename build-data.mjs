@@ -3044,7 +3044,7 @@ const combatNotes = [];
 let monsters = [], combatStyles = {};
 // What combat() learns about the server's NPCs that the NPC database (npcLoot) goes on from:
 // monster id -> the NPCs it is [{ key, n }], each NPC's config, the scripts, and which spawn underground.
-const npcWorld = { rowsOf: new Map(), npcs: null, blocks: null, byCategory: null, underground: new Map() };
+const npcWorld = { rowsOf: new Map(), originsOf: new Map(), npcs: null, blocks: null, byCategory: null, underground: new Map(), spawnAt: new Map(), packIds: null };
 // The server's drop scripts, read by build-drops.mjs's evaluator: what an NPC
 // leaves when it dies, every value a random() can take followed through (asTable:
 // what always drops, and rows with their chances). From v3 both what a monster
@@ -3119,12 +3119,16 @@ async function combat() {
     const from = text.indexOf('==== NPC ====');
     if (from < 0) continue;
     const to = text.indexOf('\n====', from + 5);
+    const [mx, mz] = f.match(/^m(\d+)_(\d+)\.jm2$/).slice(1).map(Number);
     for (const line of text.slice(from, to < 0 ? undefined : to).split(/\r?\n/).slice(1)) {
       if (!/^\d/.test(line)) continue;
+      // (v3.3: and where: "level x z" in the square, for a monster's page)
+      const [level, x, z] = line.slice(0, line.indexOf(':')).trim().split(/\s+/).map(Number);
       for (const id of line.slice(line.indexOf(':') + 1).trim().split(/\s+/).map(Number)) {
         const name = npcIds.get(id);
         if (!name || !npcs.has(name)) throw new Error(`combat: map ${f} spawns NPC ${id}, which has no config`);
         spawns.set(name, (spawns.get(name) || 0) + 1);
+        (npcWorld.spawnAt.get(name) || npcWorld.spawnAt.set(name, []).get(name)).push([level, mx * 64 + x, mz * 64 + z]);
         // (a map square from z 100 on is underground: the server's coordz above 6400)
         if (Number(f.match(/^m\d+_(\d+)\.jm2$/)[1]) >= 100) npcWorld.underground.set(name, (npcWorld.underground.get(name) || 0) + 1);
       }
@@ -3385,8 +3389,11 @@ async function combat() {
   if (ids.size !== monsters.length) throw new Error('combat: two monsters got the same id');
   // (for the NPC database: the NPCs each monster is, with how many of each the world has)
   const sorted = [...rows.values()].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name) || a.hp - b.hp);
-  sorted.forEach((r, i) => npcWorld.rowsOf.set(monsters[i].id, r.keys.map(key => ({ key, n: count(key) }))));
-  Object.assign(npcWorld, { npcs, blocks, byCategory, placed, turns });
+  sorted.forEach((r, i) => {
+    npcWorld.rowsOf.set(monsters[i].id, r.keys.map(key => ({ key, n: count(key) })));
+    npcWorld.originsOf.set(monsters[i].id, [...r.from]);       // (v3.3: the NPCs on the map it comes from, for where it is)
+  });
+  Object.assign(npcWorld, { npcs, blocks, byCategory, placed, turns, packIds: npcIds });
   if (monsters.length < 280 || monsters.length > 360) throw new Error(`combat: ${monsters.length} monsters: far from what was there when this was written (315)`);
   for (const [name, lvl, hp] of [['Chicken', 1, 3], ['Cow', 2, 8], ['Giant', 28, 35], ['Moss giant', 42, 60], ['Lesser demon', 82, 79], ['Fire giant', 86, 111], ['Rock Crab', 13, 50], ['Loar Shade', 40, 38]]) {
     if (!monsters.some(m => m.name === name && m.level === lvl && m.hp === hp)) throw new Error(`combat: no ${name} (level ${lvl}, ${hp} hitpoints) any more`);
@@ -3566,6 +3573,42 @@ async function npcLoot() {
   const styleDefault = STYLES[Number((await readConfig(scripts('skill_combat/configs/npc_combat.param'))).get('damagetype')?.props.default)];
   const speedDefault = Number((await readConfig(scripts('skill_combat/configs/combat.param'))).get('attackrate')?.props.default);
   if (styleDefault !== 'crush' || speedDefault !== 4) throw new Error(`npc loot: an NPC's default style or speed is ${styleDefault}, ${speedDefault} now`);
+  // (v3.3) How it fights: what its attack triggers come to (its own, its category's, or every NPC's), as far
+  // as the server's attacks: a spell cast, a ranged hit, a melee hit, dragonfire; or a hit roll or protect
+  // prayer of a style (a monster's attack of its own: the Kalphite Queen's spines). Not into those.
+  const ATTACKS = {
+    'proc,npc_cast_spell': 'magic', 'proc,npc_cast_spell_with_forced_max_hit': 'magic', 'proc,npc_magic_attack_roll': 'magic',
+    'proc,playerhit_n_ranged': 'ranged', 'proc,npc_ranged_attack_roll': 'ranged', 'proc,npc_rangeattack': 'ranged',
+    'proc,playerhit_n_melee': 'melee', 'proc,playerhit_n_melee_viking': 'melee', 'proc,npc_melee_attack_roll': 'melee', 'proc,npc_meleeattack': 'melee', 'proc,npc_default_attack': 'melee',
+    'proc,dragon_fire': 'dragonfire', 'proc,npc_player_hit_roll': null,
+  };
+  for (const k of Object.keys(ATTACKS)) if (!raw.has(k)) throw new Error(`npc loot: the server's scripts have no ${k} any more`);
+  const callsIn = body => [
+    ...[...body.matchAll(/~(\w+)/g)].map(m => `proc,${m[1]}`), ...[...body.matchAll(/\bgosub\(\s*(\w+)/g)].map(m => `proc,${m[1]}`), ...[...body.matchAll(/@(\w+)/g)].map(m => `label,${m[1]}`),
+  ].filter(k => raw.has(k));
+  const HIT_ORDER = ['melee', 'ranged', 'magic', 'dragonfire'];
+  const hitsOf = keys => {
+    const ways = new Set();
+    for (const key of keys) {
+      const cat = npcs.get(key)?.props.category;
+      const starts = [];
+      for (const trig of ['ai_opplayer2', 'ai_applayer2']) {
+        if (raw.has(`${trig},${key}`)) starts.push(`${trig},${key}`);
+        else if (cat && raw.has(`${trig},_${cat}`)) starts.push(`${trig},_${cat}`);
+        else if (trig === 'ai_opplayer2' && raw.has(`${trig},_`)) starts.push(`${trig},_`);
+      }
+      const seen = new Set(starts), todo = [...starts];
+      while (todo.length) {
+        const body = raw.get(todo.pop());
+        for (const m of body.matchAll(/\b(?:npc_player_hit_roll|check_protect_prayer)\(\s*\^(magic|ranged|melee)_style/g)) ways.add(m[1]);
+        for (const c of callsIn(body)) {
+          if (c in ATTACKS) { if (ATTACKS[c]) ways.add(ATTACKS[c]); continue; }
+          if (!seen.has(c)) { seen.add(c); todo.push(c); }
+        }
+      }
+    }
+    return HIT_ORDER.filter(w => ways.has(w));
+  };
   const differs = [];
   for (const m of monsters) {
     const parts = rowsOf.get(m.id);
@@ -3590,9 +3633,12 @@ async function npcLoot() {
     const num = v => (v == null || v === '' ? undefined : Number(v));
     const bonus = {};
     for (const p of ['attackbonus', 'strengthbonus', 'rangebonus', 'magicbonus', 'stabdefence', 'slashdefence', 'crushdefence', 'rangedefence', 'magicdefence']) if (b.params[p] != null) bonus[p] = Number(b.params[p]);
+    // (melee only, the usual, isn't said)
+    const hits = hitsOf(parts.map(p => p.key));
     out.npcs[m.id] = {
       drops: tables.get(sig),
       ...(under ? { under: 1 } : {}),
+      ...(hits.length && hits.join() !== 'melee' ? { hits } : {}),
       stats: [num(b.props.attack) ?? 1, num(b.props.strength) ?? 1, num(b.props.defence) ?? 1, num(b.props.hitpoints) ?? 1, num(b.props.ranged) ?? 1, num(b.props.magic) ?? 1],
       ...(Object.keys(bonus).length ? { bonus } : {}),
       style: b.params.damagetype ? b.params.damagetype.replace(/^\^|_style$/g, '') : styleDefault,
@@ -4050,6 +4096,31 @@ await writeFile('gamedata.js', out);
 // ── npcdata.js (v3): the NPC database ─────────────────────────────────────
 // (an entry: [item, count] with count a number or [lo, hi], or ['~table'])
 const fmtTable = t => JSON.stringify(t);
+// ── A monster's page (v3.3): its picture, where it is, a minimap (build-npcmaps.mjs) ──
+// The picture: LostHQ's render of the NPC most of them are. Where: every NPC on the map it comes from.
+const npcPage = {};
+{
+  const { npcPictures, npcPlaces } = await import('./build-npcmaps.mjs');
+  const packOf = new Map([...npcWorld.packIds].map(([id, name]) => [name, id]));
+  const list = monsters.map(m => {
+    const main = [...npcWorld.rowsOf.get(m.id)].sort((a, b) => b.n - a.n)[0].key;
+    const spawns = (npcWorld.originsOf.get(m.id) || []).flatMap(o => npcWorld.spawnAt.get(o) || []);
+    return { id: m.id, pack: packOf.get(main), spawns };
+  });
+  const pics = await npcPictures({ lostHq: LOSTHQ, list });
+  const places = await npcPlaces({ content: CONTENT, list });
+  for (const { id } of list) {
+    const info = npcData.npcs[id];
+    if (pics.index.has(id)) info.pic = pics.index.get(id);
+    if (places.index.has(id)) info.map = places.index.get(id);
+    if (places.where.has(id)) info.where = places.where.get(id);
+  }
+  const noPic = list.filter(({ id }) => !pics.index.has(id)).map(({ id }) => id), nowhere = list.filter(({ id }) => !places.where.has(id)).map(({ id }) => id);
+  npcPage.pics = { sheet: await stamped('npcpics.webp', pics.sheet), size: pics.size, perRow: pics.perRow };
+  npcPage.maps = { sheet: await stamped('npcmaps.webp', places.sheet), w: places.cell.w, h: places.cell.h, perRow: places.perRow };
+  for (const o of places.odd) console.log(`  npc maps: ${o}`);
+  console.log(`npcpics.webp: ${pics.count} pictures (${pics.sheet.length} bytes)${noPic.length ? `; none for ${noPic.join(', ')}` : ''}; npcmaps.webp: ${places.index.size} minimaps (${places.sheet.length} bytes)${nowhere.length ? `; not on the map: ${nowhere.join(', ')}` : ''}`);
+}
 await writeFile('npcdata.js', `// Generated by build-data.mjs. Do not edit by hand; change the script and re-run it.
 // What each monster drops, read from Lost City's server scripts (LostCityRS/Content,
 // rev 274, MIT: "scripts/drop tables" and the NPCs' own death scripts) by
@@ -4067,7 +4138,12 @@ await writeFile('npcdata.js', `// Generated by build-data.mjs. Do not edit by ha
 //   underground, stats: [attack, strength, defence, hitpoints, ranged, magic], bonus,
 //   style: how it hits (stab, slash or crush: crush where its config doesn't say),
 //   speed: ticks between its attacks (4 where its config doesn't say), aggressive,
-//   respawn: ticks (only where its config says), size, examine }
+//   respawn: ticks (only where its config says), size, examine,
+//   (v3.3) hits: how it attacks where that's not melee alone (melee, ranged, magic, dragonfire: the
+//   server's attack scripts), pic: its picture in NPC_PICS, map: its minimap in NPC_MAPS, where: the
+//   places it stands, [[place, how many]] (build-npcmaps.mjs) }
+// NPC_PICS: LostHQ's renders of the NPCs (GPL-3.0), { sheet, size, perRow }; NPC_MAPS: the minimaps
+//   drawn from Lost City's map files, { sheet, w, h, perRow }. Each loads only once a page shows one.
 export const DROP_TABLES = {
 ${Object.entries(npcData.tables).map(([k, t]) => `  ${JSON.stringify(k)}: ${fmtTable(t)},`).join('\n')}
 };
@@ -4075,6 +4151,8 @@ export const SHARED_DROPS = ${JSON.stringify(npcData.shared)};
 export const NPC_INFO = {
 ${Object.entries(npcData.npcs).map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v)},`).join('\n')}
 };
+export const NPC_PICS = ${JSON.stringify(npcPage.pics)};
+export const NPC_MAPS = ${JSON.stringify(npcPage.maps)};
 `);
 // (a monster only Magic works on is a row of Hitpoints alone)
 const combatRows = Object.keys(combatStyles).reduce((a, skill) => a + monsters.filter(mon => !(mon.magic && skill !== 'hitpoints')).length, 0);
@@ -4282,173 +4360,9 @@ ${entries.map(({ e }) => '  ' + JSON.stringify(e)).join(',\n')},
 
 await bankScreenshots();
 
-// ── The app's own icons (v3.1) ─────────────────────────────────────────────
-// slayer.webp: the game's own Slayer icon, a skull with a dagger through it. It's
-// on the skills tab's second sheet (sprites/staticons2.png, after Runecraft's) in
-// rev 274 already, though that skills tab only shows it from rev 377 on (Slayer
-// came in 2005). Drawn the way the client draws it, like the other skills' icons:
-// magenta is nothing, and black is the client's near black (1).
-// tabicons.png: an icon for each tab, in the round style of the game's map icons
-// (sprites/mapfunction.png): the bank's own "$" and a sword from those, and the
-// rest drawn here on the same frame (a magnifying glass, scales, an arrow, a
-// trophy, a target, gold).
-async function appIcons() {
-  const cellOf = async (sheet, size, index) => {
-    const cell = (await readFile(join(CONTENT, `sprites/meta/${sheet}.opt`), 'ascii')).trim();
-    if (cell !== `${size}x${size}`) throw new Error(`sprites/${sheet}.png is in cells of ${cell} now, not ${size}x${size}`);
-    const { data, info } = await sharp(join(CONTENT, `sprites/${sheet}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const perRow = info.width / size, sx = (index % perRow) * size, sy = Math.floor(index / perRow) * size;
-    const px = Buffer.alloc(size * size * 4);
-    let drawn = 0;
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      const f = ((sy + y) * info.width + sx + x) * 4, t = (y * size + x) * 4;
-      if (data[f] === 0xff && data[f + 1] === 0 && data[f + 2] === 0xff) continue;
-      px[t] = data[f]; px[t + 1] = data[f + 1]; px[t + 2] = data[f + 2] || (data[f] || data[f + 1] ? 0 : 1); px[t + 3] = 0xff;
-      drawn++;
-    }
-    if (drawn < 30) throw new Error(`sprites/${sheet}.png: icon ${index} is empty`);
-    return px;
-  };
-  const slayer = await cellOf('staticons2', 25, 1);
-  await writeFile('slayer.webp', await sharp(slayer, { raw: { width: 25, height: 25, channels: 4 } }).webp({ lossless: true }).toBuffer());
-
-  const W = 15;
-  const bank = await cellOf('mapfunction', W, 5), sword = await cellOf('mapfunction', W, 1);
-  // (the bank's "$" is gold on the frame: the frame is its black ring, light grey inside)
-  const frame = Buffer.alloc(W * W * 4);
-  for (let i = 0; i < W * W; i++) {
-    if (!bank[i * 4 + 3]) continue;
-    const ring = !bank[i * 4] && !bank[i * 4 + 1] && bank[i * 4 + 2] === 1;
-    frame.set(ring ? [0, 0, 1, 255] : [191, 191, 191, 255], i * 4);
-  }
-  if ([...bank].filter((v, i) => i % 4 === 0 && v === 232).length < 10) throw new Error('sprites/mapfunction.png: icon 5 is no longer the bank\'s');
-  const PAL = {
-    k: [36, 30, 24], w: [255, 255, 255], l: [176, 216, 240], L: [104, 156, 206],
-    h: [140, 88, 36], H: [92, 54, 20],
-    y: [232, 209, 78], g: [176, 159, 65], d: [117, 100, 3],
-    r: [214, 36, 36], R: [128, 12, 12], G: [72, 182, 64], D: [22, 98, 22], s: [150, 150, 150],
-    m: [120, 120, 128], M: [78, 78, 86],
-  };
-  const draw = rows => {
-    const px = Buffer.from(frame);
-    rows.forEach((row, y) => [...row].forEach((ch, x) => {
-      if (ch === '.') return;
-      const at = (y * W + x) * 4;
-      if (!frame[at + 3] || !frame[at]) throw new Error(`tab icons: a pixel on the frame or outside it at ${x},${y}`);
-      px.set([...PAL[ch], 255], at);
-    }));
-    return px;
-  };
-  const ICONS = {
-    lookup: draw([
-      '...............',
-      '...............',
-      '....kkkk.......',
-      '...kwwllk......',
-      '..kwllllLk.....',
-      '..kwllllLk.....',
-      '..klllllLk.....',
-      '..kLlllLLk.....',
-      '...kLLLLkhk....',
-      '....kkkkhhHk...',
-      '........khhHk..',
-      '.........khHk..',
-      '..........kk...',
-      '...............',
-      '...............',
-    ]),
-    compare: draw([
-      '...............',
-      '...............',
-      '.......k.......',
-      '......kyk......',
-      '...kkkkgkkkk...',
-      '...k...g...k...',
-      '..k.k..g..k.k..',
-      '.k...k.g.k...k.',
-      '.kyyyk.g.kyyyk.',
-      '..kgk..g..kgk..',
-      '...k...g...k...',
-      '......kgk......',
-      '.....kdddk.....',
-      '...............',
-      '...............',
-    ]),
-    gains: draw([
-      '...............',
-      '...............',
-      '.......k.......',
-      '......kGk......',
-      '.....kGGGk.....',
-      '....kGGGGGk....',
-      '...kGGGGGGDk...',
-      '...kkkGGGDkkk..',
-      '.....kGGGDk....',
-      '.....kGGGDk....',
-      '.....kGGGDk....',
-      '.....kGGDDk....',
-      '.....kkkkkk....',
-      '...............',
-      '...............',
-    ]),
-    leaders: draw([
-      '...............',
-      '...............',
-      '...............',
-      '...kkkkkkkkk...',
-      '..kkwyyyyygkk..',
-      '.k.kwyyyyygk.k.',
-      '.k.kyyyyyygk.k.',
-      '..kkyyyyyygkk..',
-      '...kkyyyyyykk..',
-      '.....kyyyk.....',
-      '......kgk......',
-      '.....kyygk.....',
-      '....kkkkkkk....',
-      '...............',
-      '...............',
-    ]),
-    goals: draw([
-      '...............',
-      '...............',
-      '.....kkkkk.....',
-      '....kRrrrRk....',
-      '...kRwwwwwRk...',
-      '..kRwrrrrrwRk..',
-      '..krwrwwwrwrk..',
-      '..krwrwRwrwrk..',
-      '..krwrwwwrwrk..',
-      '..kRwrrrrrwRk..',
-      '...kRwwwwwRk...',
-      '....kRrrrRk....',
-      '.....kkkkk.....',
-      '...............',
-      '...............',
-    ]),
-    npcs: sword,
-    bank,
-    prices: draw([
-      '...............',
-      '...............',
-      '...............',
-      '......kkkk.....',
-      '.....kyyyyk....',
-      '.....kgyydk....',
-      '...kkkkkkkkk...',
-      '..kyyyykyyyyk..',
-      '..kgyydkgyydk..',
-      '..kkkkkkkkkkk..',
-      '..kyyyykyyyyk..',
-      '..kgyydkgyydk..',
-      '...kkkkkkkkk...',
-      '...............',
-      '...............',
-    ]),
-  };
-  const names = Object.keys(ICONS);
-  const sheet = Buffer.alloc(names.length * W * W * 4);
-  names.forEach((n, k) => { for (let y = 0; y < W; y++) ICONS[n].copy(sheet, (y * names.length * W + k * W) * 4, y * W * 4, (y + 1) * W * 4); });
-  await writeFile('tabicons.png', await sharp(sheet, { raw: { width: names.length * W, height: W, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer());
-  console.log(`slayer.webp: the game's Slayer icon (staticons2 #1); tabicons.png: ${names.join(', ')} (${W}px)`);
+// ── The app's own icons (v3.1; v3.3: build-icons.mjs) ───────────────────────
+// slayer.webp, tabicons.png, and the Bank and Prices tabs' gear.webp and rares.webp: see build-icons.mjs.
+{
+  const { appIcons } = await import('./build-icons.mjs');
+  await appIcons(CONTENT, { partyhat: iconPx(ITEM.get('blue_partyhat').id) });
 }
-await appIcons();

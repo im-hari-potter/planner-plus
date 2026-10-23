@@ -285,3 +285,50 @@ test('recent players: one can be removed, or the list cleared, and it stays gone
   assert.deepEqual(players.saved(), ['Alice']);
   delete globalThis.localStorage;
 });
+
+// ── (v3.3) Tables sorted by their columns' names (tablesort.js) ──────────────
+import { sortTh, sortFrom, savedSort, sortedBy } from './tablesort.js';
+
+test('sortedBy: numbers and names either way, nothing to sort by last, ties as they were', () => {
+  const rows = [{ k: 'a', v: 3 }, { k: 'b', v: null }, { k: 'c', v: 10 }, { k: 'd', v: 3 }, { k: 'e', v: -Infinity }, { k: 'f', v: 1 }, { k: 'g', v: NaN }];
+  const keys = list => list.map(r => r.k).join('');
+  assert.equal(keys(sortedBy(rows, r => r.v)), 'fadcbeg');
+  assert.equal(keys(sortedBy(rows, r => r.v, true)), 'cadfbeg');
+  // (A to Z, numbers in names as numbers, case aside)
+  const names = ['Rune 2h sword', 'rune arrow', 'Rune 10', 'Rune 9', 'Adamant axe'].map(k => ({ k }));
+  assert.deepEqual(sortedBy(names, r => r.k).map(r => r.k), ['Adamant axe', 'Rune 2h sword', 'Rune 9', 'Rune 10', 'rune arrow']);
+  assert.deepEqual(sortedBy(names, r => r.k, true).map(r => r.k), ['rune arrow', 'Rune 10', 'Rune 9', 'Rune 2h sword', 'Adamant axe']);
+  // (the list given isn't changed)
+  assert.equal(keys(rows), 'abcdefg');
+});
+
+test('sortTh: a column name that sorts, its th as it was around it', () => {
+  const th = '<th class="wrap" title="More > less: the most first">XP from<br>bank</th>';
+  const off = sortTh(th, 'tsort-plan', { key: 'xpbank', desc: true }, { key: 'level', desc: false });
+  assert.equal(off, '<th class="wrap" title="More > less: the most first" aria-sort="none"><button type="button" class="th-sort" data-tsort-plan="xpbank" data-desc-first="1">XP from<br>bank<span class="arrow" aria-hidden="true"></span></button></th>');
+  const on = sortTh(th, 'tsort-plan', { key: 'xpbank', desc: true }, { key: 'xpbank', desc: true }, ' <button>all</button>');
+  assert.match(on, /aria-sort="descending"/);
+  assert.match(on, /class="th-sort on desc" data-tsort-plan="xpbank" data-sort-now="desc" data-desc-first="1">/);
+  assert.match(on, /<\/span><\/button> <button>all<\/button><\/th>$/);
+  assert.match(sortTh('<th>Lvl</th>', 'npc-sort', { key: 'level' }, { key: 'level', desc: false }), /aria-sort="ascending".*class="th-sort on asc"/);
+  // (not a th: left as it is)
+  assert.equal(sortTh('<td>1</td>', 'x', { key: 'a' }, null), '<td>1</td>');
+});
+
+test('sortFrom: a click goes the other way round, or a new column its first way', () => {
+  const btn = d => ({ dataset: d });
+  assert.deepEqual(sortFrom(btn({ sortNow: 'desc', descFirst: '1' }), 'xp'), { key: 'xp', desc: false });
+  assert.deepEqual(sortFrom(btn({ sortNow: 'asc' }), 'name'), { key: 'name', desc: true });
+  assert.deepEqual(sortFrom(btn({ descFirst: '1' }), 'net'), { key: 'net', desc: true });
+  assert.deepEqual(sortFrom(btn({}), 'level'), { key: 'level', desc: false });
+});
+
+test('savedSort: as saved, an older version\'s Sort button, or the first column', () => {
+  const keys = ['level', 'xp', 'cheap', 'net'], desc = ['xp', 'net'];
+  assert.deepEqual(savedSort('net', keys, desc), { key: 'net', desc: true });
+  assert.deepEqual(savedSort('cheap', keys, desc), { key: 'cheap', desc: false });
+  assert.deepEqual(savedSort({ key: 'xp', desc: false }, keys, desc), { key: 'xp', desc: false });
+  assert.deepEqual(savedSort({ key: 'gone', desc: true }, keys, desc), { key: 'level', desc: false });
+  assert.deepEqual(savedSort('gone', keys, desc), { key: 'level', desc: false });
+  assert.deepEqual(savedSort(undefined, keys, desc), { key: 'level', desc: false });
+});

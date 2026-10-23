@@ -26,14 +26,21 @@
 
 import { SLAYER, SKILL_BY_KEY, MAX_LEVEL } from './skills.js';
 import { ITEMS, MONSTERS, UNID_HERBS, METHODS } from './gamedata.js';
-import { NPC_INFO } from './npcdata.js';
+import { NPC_INFO, NPC_PICS, NPC_MAPS } from './npcdata.js';
 import { killDrops, killXp, KILL_STYLES, atLeastOne, dryChance, killsFor, luck, rateText, styleOfSkillGoal, MONSTER_BY_ID, CLEAN_HERBS, COUNTED_SKILLS, xpGained, killsXp, killsFromHp, leftOver, guessAlchs, coinsDropped } from './loot.js';
 import { levelForXp10, MAX_XP10 } from './planner.js';
 import { highAlch } from './prices.js';
 import { store, snapshots } from './store.js';
+import { sortTh, sortFrom, savedSort, sortedBy } from './tablesort.js';
 
 const MAX_KILLS = 10_000_000;
 const STAT_NAMES = ['Attack', 'Strength', 'Defence', 'Hitpoints', 'Ranged', 'Magic'];
+// (v3.3) What the NPCs tab's list sorts by (a column's name clicked), and the ones that sort the biggest first the first time.
+const NPC_SORTS = ['level', 'name', 'hp', 'att', 'str', 'def', 'rng', 'mag', 'xp', 'loot'];
+const NPC_SORTS_DESC = ['hp', 'att', 'str', 'def', 'rng', 'mag', 'xp', 'loot'];
+// (and a monster's drops on its page)
+const DROP_SORTS = ['value', 'name', 'chance', 'avg', 'kills'];
+const DROP_SORTS_DESC = ['value', 'chance', 'avg'];
 const BONUS_NAMES = { attackbonus: 'Attack', strengthbonus: 'Strength', rangebonus: 'Ranged', stabdefence: 'Stab defence', slashdefence: 'Slash defence', crushdefence: 'Crush defence', rangedefence: 'Ranged defence', magicdefence: 'Magic defence' };
 const BANDS = [...new Set(MONSTERS.map(m => m.group))];
 const monsterName = m => `${m.name} (level ${m.level})`;
@@ -90,22 +97,23 @@ export function createNpcUi(P) {
   const N = {
     q: '',
     band: BANDS.includes(saved.band) ? saved.band : null,
-    sort: ['level', 'name', 'xp', 'loot', 'hp'].includes(saved.sort) ? saved.sort : 'level',
-    dir: saved.dir === -1 ? -1 : 1,
+    // (v3.3: { key, desc }; up to v3.2 a Sort button's name, and dir: -1 for Level or Name the other way)
+    sort: savedSort(typeof saved.sort === 'string' && saved.dir === -1 && ['level', 'name'].includes(saved.sort) ? { key: saved.sort, desc: true } : saved.sort, NPC_SORTS, NPC_SORTS_DESC),
     style: KILL_STYLES.some(s => s.id === saved.style) ? saved.style : 'accurate',
     ring: !!saved.ring,
     legends: !!saved.legends,
     herbs: saved.herbs === 'grimy' ? 'grimy' : 'clean',
+    dropSort: savedSort(saved.dropSort, DROP_SORTS, DROP_SORTS_DESC),      // (v3.3) a monster page's drops
     open: null,                       // the monster shown on its own, or null for the list
     kills: {},                        // monster id -> kills typed into its Plan kills box
     planStyle: {},                    // monster id -> the style picked in its Plan kills box
   };
-  const saveNpcUi = () => store.set('npcUi', { band: N.band, sort: N.sort, dir: N.dir, style: N.style, ring: N.ring, legends: N.legends, herbs: N.herbs });
+  const saveNpcUi = () => store.set('npcUi', { band: N.band, sort: N.sort, dropSort: N.dropSort, style: N.style, ring: N.ring, legends: N.legends, herbs: N.herbs });
   // A goal's loot read from screenshots, waiting for you to check it: goal id -> { busy | error | rows, … }
   const shots = new Map();
   // A goal's dry checker: goal id -> { item, kills }
   const dryPick = new Map();
-  // A goal's loot table sort: goal id -> 'value' | 'got' | 'chance' | 'name'
+  // A goal's loot table sort: goal id -> { key, desc } (v3.3: a column's name clicked; till then, Expected value)
   const lootSort = new Map();
   // (v3.1) What a goal's plan says about what was just done, with a way back: goal id -> { html, kind, undo }
   const notes = new Map();
@@ -217,6 +225,9 @@ export function createNpcUi(P) {
   const ticks = t => `${t} tick${t === 1 ? '' : 's'} (${(t * 0.6).toFixed(1).replace(/\.0$/, '')} s)`;
   const listText = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0] || '');
 
+  // (v3.3) How it attacks, from the server's scripts: melee (as stab, slash or crush), ranged, magic, dragonfire.
+  const hitsOf = i => i?.hits || ['melee'];
+  const attackText = i => listText(hitsOf(i).map(h => (h === 'melee' ? i.style || 'crush' : h)));
   // The monster's own numbers: stats, how it fights, where it is.
   function monsterFacts(m) {
     const i = info(m.id);
@@ -224,7 +235,7 @@ export function createNpcUi(P) {
     const stats = STAT_NAMES.map((name, k) => `<span class="nf-stat" title="${esc(name)}">${iconImg(SKILL_BY_KEY.get(name.toLowerCase()))}<b>${fmt(i.stats[k])}</b></span>`).join('');
     const bonus = Object.entries(i.bonus || {}).filter(([, v]) => v).map(([k, v]) => `${BONUS_NAMES[k] || k} ${v > 0 ? '+' : ''}${v}`);
     const facts = [
-      `Attacks with ${esc(i.style || 'crush')}`,
+      `Attacks with ${esc(attackText(i))}`,
       i.speed ? `every ${ticks(i.speed)}` : '',
       i.aggressive ? '<b>aggressive</b>' : '',
       i.respawn ? `back ${ticks(i.respawn)} after a kill` : '',
@@ -240,13 +251,39 @@ export function createNpcUi(P) {
     </div>`;
   }
 
+  // (v3.3) A monster's page: its picture (LostHQ's render of the game's model), its numbers, a minimap of
+  // where most of them are (drawn from Lost City's map files, a yellow dot each, as the game's minimap has
+  // them) and every place they are, the most first. The pictures and minimaps are two sheets, each loaded
+  // once a page shows one (npcdata.js NPC_PICS, NPC_MAPS).
+  const PLACES_SHOWN = 6;
+  function monsterTop(m) {
+    const i = info(m.id);
+    const pic = i?.pic == null ? '' : `<div class="npc-pic" role="img" aria-label="${esc(m.name)}" title="${esc(`${m.name}: LostHQ's render of the game's model`)}"
+      style="background-image:url('${NPC_PICS.sheet}');background-size:${NPC_PICS.perRow * NPC_PICS.size}px auto;background-position:-${(i.pic % NPC_PICS.perRow) * NPC_PICS.size}px -${Math.floor(i.pic / NPC_PICS.perRow) * NPC_PICS.size}px"></div>`;
+    const where = i?.where || [];
+    const place = ([text, n]) => `<li>${esc(text)}${where.length > 1 || n > 1 ? ` <span class="c-faint">(${fmt(n)})</span>` : ''}</li>`;
+    const places = !where.length ? (m.note ? '' : '<p class="c-faint small-note">Not on the map: a script puts it in the world.</p>')
+      : `<div class="npc-where"><h5>Where ${m.n === 1 ? 'it is' : 'they are'}</h5><ul>${where.slice(0, PLACES_SHOWN).map(place).join('')}</ul>${where.length > PLACES_SHOWN
+        ? `<details><summary>${fmt(where.length - PLACES_SHOWN)} more place${where.length - PLACES_SHOWN === 1 ? '' : 's'}</summary><ul>${where.slice(PLACES_SHOWN).map(place).join('')}</ul></details>` : ''}</div>`;
+    const map = i?.map == null ? '' : `<figure class="npc-map"><div class="npc-map-img" role="img" aria-label="${esc(m.n === 1 ? 'A minimap of where it is' : 'A minimap of where the biggest group of them is')}"
+      style="--sheet:url('${NPC_MAPS.sheet}');--mw:${NPC_MAPS.w};--mh:${NPC_MAPS.h};--sw:${NPC_MAPS.perRow * NPC_MAPS.w};--mx:${(i.map % NPC_MAPS.perRow) * NPC_MAPS.w};--my:${Math.floor(i.map / NPC_MAPS.perRow) * NPC_MAPS.h}"></div>
+      <figcaption class="c-faint small-note">${m.n === 1 ? 'Where it is, as on the game\'s minimap' : `${where.length > 1 ? 'The biggest group of them' : 'Where they are'}: a yellow dot each, as on the game's minimap`}</figcaption></figure>`;
+    return `<div class="npc-top${pic ? ' has-pic' : ''}">${pic}<div class="npc-facts">${monsterFacts(m)}${places}</div>${map}</div>`;
+  }
+
   // ── The NPCs tab ────────────────────────────────────────────────────────
   function renderNpcs() {
     P.renderAccount('npcs-account', 'npcs');
     const body = $('npcs-body');
     if (!body) return;
     const m = N.open && MONSTER_BY_ID.get(N.open);
-    if (m) { body.innerHTML = npcPage(m); return; }
+    if (m) {
+      // (v3.3: its places shown in full stay that way through a redraw, as prices come in)
+      const more = body.querySelector(`[data-npc-page="${CSS.escape(m.id)}"] .npc-where details`)?.open;
+      body.innerHTML = npcPage(m);
+      if (more) body.querySelector('.npc-where details').open = true;
+      return;
+    }
     N.open = null;
     body.innerHTML = npcList();
     applyNpcSearch();
@@ -262,16 +299,22 @@ export function createNpcUi(P) {
       const value = lootValue(drops, true);
       return { m, xp, xpOwn, drops, value };
     });
-    const by = {
-      level: (a, b) => a.m.level - b.m.level || a.m.name.localeCompare(b.m.name),
-      name: (a, b) => a.m.name.localeCompare(b.m.name) || a.m.level - b.m.level,
-      xp: (a, b) => b.xpOwn - a.xpOwn || a.m.level - b.m.level,
-      loot: (a, b) => b.value.total - a.value.total || a.m.level - b.m.level,
-      hp: (a, b) => b.m.hp - a.m.hp || a.m.level - b.m.level,
-    }[N.sort];
-    rows.sort((a, b) => by(a, b) * (N.sort === 'level' || N.sort === 'name' ? N.dir : 1));
+    // (v3.3) Sorted by a column's name: the list's own order (level, then name) breaks ties.
+    const stat = (r, k) => info(r.m.id)?.stats[k];
+    const value = {
+      level: r => r.m.level, name: r => r.m.name, hp: r => r.m.hp,
+      att: r => stat(r, 0), str: r => stat(r, 1), def: r => stat(r, 2), rng: r => stat(r, 4), mag: r => stat(r, 5),
+      xp: r => (r.xpOwn >= 0 ? r.xpOwn : null), loot: r => r.value.total,
+    }[N.sort.key];
+    const sorted = sortedBy(rows, value, N.sort.desc);
     const style = KILL_STYLES.find(s => s.id === N.style);
+    // (v3.3: its attack stats are faint where it doesn't attack that way: Attack and Strength for melee,
+    // Ranged for shooting or throwing, Magic for spells; Defence is always there)
+    const statTd = (v, on) => `<td${on ? '' : ' class="c-faint"'}>${v == null ? '–' : fmt(v)}</td>`;
     const tr = ({ m, xp, drops, value }) => {
+      const st = info(m.id)?.stats || [];
+      const hits = hitsOf(info(m.id));
+      const on = [hits.includes('melee'), hits.includes('melee'), true, hits.includes('ranged'), hits.includes('magic')];
       // the three drops worth most on average (what a kill is mostly worth)
       const best = [...drops].map(([slug, d]) => [slug, d, d.q * roughWorth(slug).gp]).filter(([, , v]) => v > 0).sort((a, b) => b[2] - a[2]).slice(0, 4);
       const title = `${monsterName(m)}: ${fmt(m.hp)} hitpoints${m.n === 1 ? ', one of a kind' : `, ${fmt(m.n)} in the world`}${m.note ? `\n${m.note}` : ''}\nClick for its stats, every drop and a plan of kills.`;
@@ -279,19 +322,34 @@ export function createNpcUi(P) {
         <td>${m.level}</td>
         <td class="l"><span class="sk-cell"><button type="button" class="linkish npc-name" data-npc-open="${m.id}">${esc(m.name)}</button>${m.note ? ' <span class="catch" aria-hidden="true">*</span>' : ''}</span></td>
         <td>${fmt(m.hp)}</td>
+        ${[0, 1, 2, 4, 5].map((k, n) => statTd(st[k], on[n])).join('')}
         <td class="l">${xp ? `<span class="small-note">${xpList(xp)}</span>` : '<span class="c-faint small-note">Magic only</span>'}</td>
         <td title="${esc(value.rough ? `${value.rough} of its drops have no market price checked yet: their high alch stands in. Its own page checks them.` : 'The average loot of a kill at your prices')}">${value.total ? `${value.rough ? '≈' : ''}${gpShort(value.total)}` : '<span class="c-faint">–</span>'}</td>
         <td class="l npc-best">${best.map(([slug, d]) => `<span title="${esc(`${ITEMS[slug]?.name || slug}: ${rateText(d.p)} a kill`)}">${itemIcon(slug, true)}</span>`).join('')}</td>
         <td><button type="button" class="btn small" data-npc-open="${m.id}" data-npc-plan="1" title="Open it, with a plan of kills to add as a Slayer goal">Plan kills</button></td>
       </tr>`;
     };
-    const groups = N.sort === 'level' ? BANDS : [null];
+    // (by level, the bands' own headings, the highest first the other way round)
+    const groups = N.sort.key === 'level' ? (N.sort.desc ? [...BANDS].reverse() : BANDS) : [null];
+    const cols = [
+      ['<th title="Combat level">Lvl</th>', { key: 'level' }],
+      ['<th class="l">Monster</th>', { key: 'name' }],
+      ['<th title="Hitpoints: a kill is this much damage">HP</th>', { key: 'hp', desc: true }],
+      ['<th title="Its Attack level (faint where it doesn\'t fight in melee)">Att</th>', { key: 'att', desc: true }],
+      ['<th title="Its Strength level (faint where it doesn\'t fight in melee)">Str</th>', { key: 'str', desc: true }],
+      ['<th title="Its Defence level: the higher, the harder it is to hit">Def</th>', { key: 'def', desc: true }],
+      ['<th title="Its Ranged level (faint where it doesn\'t shoot or throw)">Rng</th>', { key: 'rng', desc: true }],
+      ['<th title="Its Magic level (faint where it doesn\'t cast spells)">Mag</th>', { key: 'mag', desc: true }],
+      [`<th class="l" title="${esc(`The XP of a kill: ${style.name}`)}">XP a kill</th>`, { key: 'xp', desc: true }],
+      ['<th title="The average loot of a kill">Loot a kill</th>', { key: 'loot', desc: true }],
+      ['<th class="l" title="What a kill is mostly worth">Best drops</th>', null],
+      ['<th></th>', null],
+    ];
     // (every row is there, for the search to show: applyNpcSearch hides what the band leaves out)
     const body = groups.map(g => {
-      const list = g ? rows.filter(r => r.m.group === g) : rows;
-      return (g ? `<tr class="grp" data-grp="${esc(g)}"><td colspan="7">${esc(g)}</td></tr>` : '') + list.map(tr).join('');
+      const list = g ? sorted.filter(r => r.m.group === g) : sorted;
+      return (g ? `<tr class="grp" data-grp="${esc(g)}"><td colspan="${cols.length}">${esc(g)}</td></tr>` : '') + list.map(tr).join('');
     }).join('');
-    const sBtn = (k, label, tip) => `<button type="button" class="${N.sort === k ? 'on' : ''}" data-npc-sort="${k}" title="${esc(tip)}" aria-pressed="${N.sort === k}">${label}${N.sort === k && (k === 'level' || k === 'name') ? (N.dir === 1 ? ' ▲' : ' ▼') : ''}</button>`;
     const band = (g, label) => `<button type="button" class="chip${(N.band || 'all') === g ? ' on' : ''}" data-npc-band="${esc(g)}" aria-pressed="${(N.band || 'all') === g}">${esc(label)}</button>`;
     return `<div class="card npc-db">
       <div class="bar wrap find-bar"><input class="input small find-in" type="search" data-npc-search="1" value="${esc(N.q)}" placeholder="Search monsters: a name, or a combat level" aria-label="Search monsters" autocomplete="off" spellcheck="false">
@@ -301,12 +359,10 @@ export function createNpcUi(P) {
         <span class="c-muted small-note">XP in</span> ${styleSelect('data-npc-style="1"', N.style)}
         <label class="check" title="A ring of wealth makes the gem table's rolls land on a gem more often (from 1 in 128 rolls of nothing to none)"><input type="checkbox" data-npc-opt="ring"${N.ring ? ' checked' : ''}> Ring of wealth</label>
         <label class="check" title="With Legends' Quest done, the gem table's rarest roll is the mega rare table instead of a talisman"><input type="checkbox" data-npc-opt="legends"${N.legends ? ' checked' : ''}> Legends' Quest done</label>
-        <span class="grow"></span>
-        <span class="c-muted small-note">Sort</span><div class="seg">${sBtn('level', 'Level', 'By combat level (again: the other way)')}${sBtn('name', 'Name', 'A to Z (again: Z to A)')}${sBtn('xp', 'XP a kill', 'Most XP a kill first, in the style picked')}${sBtn('loot', 'Loot a kill', 'Most loot a kill first, at your prices (high alch where none is checked yet)')}${sBtn('hp', 'HP', 'Most hitpoints first')}</div>
       </div>
-      <p class="note">Every monster, ${fmt(MONSTERS.length)} of them, with the server's own numbers: its stats, the XP a kill gives (a point of damage is 4 XP to the style's skill and 1.33 to Hitpoints) and its drop table, read from the server's scripts and checked against <a href="https://2004.losthq.rs/?p=npcdb" target="_blank" rel="noopener">LostHQ's NPC database</a> (where the two differ, the server's is used). Drops assume a members world. Loot a kill is the average at your prices; ≈ where some drops have no market price checked yet (their high alch stands in). Click a monster for every drop and a plan of kills.</p>
+      <p class="note">Every monster, ${fmt(MONSTERS.length)} of them, with the server's own numbers: its stats, the XP a kill gives (a point of damage is 4 XP to the style's skill and 1.33 to Hitpoints) and its drop table, read from the server's scripts and checked against <a href="https://2004.losthq.rs/?p=npcdb" target="_blank" rel="noopener">LostHQ's NPC database</a> (where the two differ, the server's is used). Drops assume a members world. Loot a kill is the average at your prices; ≈ where some drops have no market price checked yet (their high alch stands in). A monster's attack stats are faint where it doesn't attack that way (the server's scripts say how each one does). Click a column's name to sort by it, and a monster for its picture (<a href="https://2004.losthq.rs/?p=npcdb" target="_blank" rel="noopener">LostHQ</a>'s render of the game's model), a minimap of where it is, every drop and a plan of kills.</p>
       <div class="table-wrap"><table class="grid npc-t" data-band="${esc(N.band || '')}">
-        <thead><tr><th title="Combat level">Lvl</th><th class="l">Monster</th><th title="Hitpoints: a kill is this much damage">HP</th><th class="l" title="${esc(`The XP of a kill: ${style.name}`)}">XP a kill</th><th title="The average loot of a kill">Loot a kill</th><th class="l" title="What a kill is mostly worth">Best drops</th><th></th></tr></thead>
+        <thead><tr>${cols.map(([th, spec]) => (spec ? sortTh(th, 'npc-sort', spec, N.sort) : th)).join('')}</tr></thead>
         <tbody>${body}</tbody></table></div>
     </div>`;
   }
@@ -370,7 +426,7 @@ export function createNpcUi(P) {
       <div class="npc-head"><button type="button" class="linkish" data-act="npc-back">‹ All monsters</button>
         <h3>${esc(m.name)} <span class="c-faint">level ${m.level}</span></h3><span class="grow"></span>
         <span class="c-muted small-note">${fmt(m.hp)} hitpoints</span></div>
-      ${monsterFacts(m)}
+      ${monsterTop(m)}
       <div class="plan-sec"><h4>Plan kills</h4>${planBox}</div>
       <div class="plan-sec"><h4>XP a kill <span class="c-faint small-note">(highlighted: the style your plan is in; click another to plan in it)</span></h4>
         <div class="table-wrap"><table class="grid xp-t"><thead><tr><th class="l">Style</th><th class="l">XP</th></tr></thead><tbody>${xpRows}</tbody></table></div>
@@ -391,41 +447,60 @@ export function createNpcUi(P) {
   // A monster's drops: per kill, or over a plan's kills (n) with what you got after done.
   // goal: a Slayer goal (its loot table), or null (the NPCs tab)
   function dropTable(drops, goal) {
+    // (v3.3: sorted by a column's name; rows level on it keep the commonest first)
+    const byChance = [...drops].map(([slug, d]) => ({ slug, d })).sort((a, b) => b.d.p - a.d.p);
     if (!goal) {
-      const list = [...drops].map(([slug, d]) => ({ slug, d, gp: worthOf(slug) }));
-      const val = x => (x.gp == null ? -1 : x.d.q * x.gp);
-      list.sort((a, b) => val(b) - val(a) || b.d.p - a.d.p);
-      const head = `<th class="l">Item</th><th title="The chance a kill drops it, as the drop table has it">A kill</th><th title="How many one drop is">Each drop</th><th title="How many a kill gives on average">Average</th><th title="The kills by which half of players have one, and 9 in 10">Kills for 50% / 90%</th><th title="The average a kill gives, at your prices">Value a kill</th>`;
+      const list = byChance.map(x => ({ ...x, gp: worthOf(x.slug) }));
+      const cols = [
+        ['<th class="l">Item</th>', { key: 'name', value: x => ITEMS[x.slug]?.name || x.slug }],
+        ['<th title="The chance a kill drops it, as the drop table has it">A kill</th>', { key: 'chance', desc: true, value: x => x.d.p }],
+        ['<th title="How many one drop is">Each drop</th>', null],
+        ['<th title="How many a kill gives on average">Average</th>', { key: 'avg', desc: true, value: x => x.d.q }],
+        ['<th title="The kills by which half of players have one, and 9 in 10">Kills for 50% / 90%</th>', { key: 'kills', value: x => (x.d.p >= 1 ? 1 : killsFor(x.d.p, 0.5)) }],
+        ['<th title="The average a kill gives, at your prices">Value a kill</th>', { key: 'value', desc: true, value: x => (untradeable(x.slug) || x.gp == null ? null : x.d.q * x.gp) }],
+      ];
+      const spec = cols.find(([, c]) => c?.key === N.dropSort.key)?.[1] || cols[5][1];
+      const head = cols.map(([th, c]) => (c ? sortTh(th, 'drop-sort', c, { key: spec.key, desc: N.dropSort.key === spec.key ? N.dropSort.desc : true }) : th)).join('');
+      const sorted = sortedBy(list, spec.value, N.dropSort.key === spec.key ? N.dropSort.desc : true);
       const row = ({ slug, d, gp }) => {
         const half = killsFor(d.p, 0.5), most = killsFor(d.p, 0.9);
         const value = untradeable(slug) ? '<span class="c-faint">–</span>' : gp == null ? '<span class="c-faint">?</span>' : gpShort(d.q * gp);
         return `<tr title="${esc(itemTitle(slug, d))}"><td class="l">${itemLink(slug, d)}</td><td>${esc(rateText(d.p))}</td><td>${esc(amountText(d))}</td><td>${amt(d.q)}</td><td>${d.p >= 1 ? '1' : `${fmt(half)} / ${fmt(most)}`}</td><td>${value}</td></tr>`;
       };
-      return `<div class="table-wrap"><table class="grid loot-t"><thead><tr>${head}</tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>`;
+      return `<div class="table-wrap"><table class="grid loot-t"><thead><tr>${head}</tr></thead><tbody>${sorted.map(row).join('')}</tbody></table></div>`;
     }
     const n = goal.value;
     const done = goal.done || 0;
     const got = goal.got || {}, banked = goal.banked || {};
-    const sort = lootSort.get(goal.id) || 'value';
-    const list = [...drops].map(([slug, d]) => ({ slug, d, gp: priceIn(goal, slug) }));
-    const val = x => (x.gp == null ? -1 : x.d.q * x.gp);
-    const gotVal = x => (x.gp == null ? -1 : (got[x.slug] || 0) * x.gp);
-    if (sort === 'value') list.sort((a, b) => val(b) - val(a) || b.d.p - a.d.p);
-    else if (sort === 'got') list.sort((a, b) => gotVal(b) - gotVal(a) || val(b) - val(a));
-    else if (sort === 'chance') list.sort((a, b) => b.d.p - a.d.p || val(b) - val(a));
-    else list.sort((a, b) => itemName(a.slug).localeCompare(itemName(b.slug)));
+    const list = byChance.map(x => ({ ...x, gp: priceIn(goal, x.slug) }));
     // ...and anything you got that it doesn't drop (typed in by hand before the monster was changed)
     const extra = Object.keys(got).filter(s => got[s] > 0 && !drops.has(s));
     const inBank = Object.values(banked).some(x => x > 0);
-    const head = `<th title="Take: untick what you leave on the ground. It's left out of the value, the screenshots and your bank.">Take</th>`
-      + `<th title="Alch: tick what you high alch. It's counted as its high alch in coins, and goes into your bank as coins.">Alch</th>`
-      + `<th class="l">Item</th><th title="The chance a kill drops it, as the drop table has it">A kill</th><th title="How many one drop is">Each drop</th>`
-      + `<th title="How many on average in ${esc(fmt(n))} kills">Expected</th><th class="wrap" title="The chance of at least one in ${esc(fmt(n))} kills">At least one<br>in ${esc(gpShort(n))}</th>`
-      + `<th class="wrap" title="Expected, at your prices (alched: its high alch)">Expected<br>value</th>`
-      + (done ? `<th class="wrap sep-l" title="How many on average after the ${esc(fmt(done))} kills you've done">Expected<br>after ${esc(gpShort(done))}</th><th class="wrap" title="Your loot: type it in, or − and + by one drop">Looted</th><th class="l" title="How your loot compares with other players' after as many kills">Luck</th>`
-        : `<th class="wrap sep-l" title="Your loot: type it in, or − and + by one drop">Looted</th>`)
-      + `<th class="wrap" title="What your loot is worth, at your prices (alched: its high alch)">Actual<br>value</th>`
-      + (inBank ? `<th class="wrap" title="How much of your loot you've put in your bank (alched: as coins)">Banked</th>` : '');
+    // (a gp sum, or nothing to sort by where its cell is a ? or a –; what's left on the ground is worth nothing)
+    const worth = (x, k) => (!taken(goal, x.slug) ? 0 : untradeable(x.slug) || x.gp == null ? null : k * x.gp);
+    const looted = `<th class="wrap${done ? '' : ' sep-l'}" title="Your loot: type it in, or − and + by one drop">Looted</th>`;
+    const cols = [
+      [`<th title="Take: untick what you leave on the ground. It's left out of the value, the screenshots and your bank.">Take</th>`, null],
+      [`<th title="Alch: tick what you high alch. It's counted as its high alch in coins, and goes into your bank as coins.">Alch</th>`, null],
+      ['<th class="l">Item</th>', { key: 'name', value: x => ITEMS[x.slug]?.name || x.slug }],
+      ['<th title="The chance a kill drops it, as the drop table has it">A kill</th>', { key: 'chance', desc: true, value: x => x.d.p }],
+      ['<th title="How many one drop is">Each drop</th>', null],
+      [`<th title="How many on average in ${esc(fmt(n))} kills">Expected</th>`, { key: 'expected', desc: true, value: x => x.d.q }],
+      [`<th class="wrap" title="The chance of at least one in ${esc(fmt(n))} kills">At least one<br>in ${esc(gpShort(n))}</th>`, { key: 'atleast', desc: true, value: x => atLeastOne(x.d.p, n) }],
+      ['<th class="wrap" title="Expected, at your prices (alched: its high alch)">Expected<br>value</th>', { key: 'value', desc: true, value: x => worth(x, x.d.q * n) }],
+      ...(done ? [
+        [`<th class="wrap sep-l" title="How many on average after the ${esc(fmt(done))} kills you've done">Expected<br>after ${esc(gpShort(done))}</th>`, { key: 'expdone', desc: true, value: x => x.d.q }],
+        [looted, { key: 'looted', desc: true, value: x => got[x.slug] || 0 }],
+        ['<th class="l" title="How your loot compares with other players\' after as many kills">Luck</th>', null],
+      ] : [[looted, { key: 'looted', desc: true, value: x => got[x.slug] || 0 }]]),
+      ['<th class="wrap" title="What your loot is worth, at your prices (alched: its high alch)">Actual<br>value</th>', { key: 'got', desc: true, value: x => worth(x, got[x.slug] || 0) }],
+      ...(inBank ? [['<th class="wrap" title="How much of your loot you\'ve put in your bank (alched: as coins)">Banked</th>', { key: 'banked', desc: true, value: x => banked[x.slug] || 0 }]] : []),
+    ];
+    const asked = lootSort.get(goal.id);
+    const spec = cols.find(([, c]) => c && c.key === asked?.key)?.[1] || cols.find(([, c]) => c?.key === 'value')[1];
+    const sort = spec.key === asked?.key ? asked : { key: 'value', desc: true };
+    const head = cols.map(([th, c]) => (c ? sortTh(th, 'loot-sort', c, sort) : th)).join('');
+    const sortedList = sortedBy(list, spec.value, sort.desc);
     const row = ({ slug, d, gp }) => {
       const take = taken(goal, slug), alch = alched(goal, slug);
       const at1 = atLeastOne(d.p, n);
@@ -441,13 +516,11 @@ export function createNpcUi(P) {
         <td class="l">${itemLink(slug, d)}${alch ? ' <span class="alch-tag" title="High alched: counted in coins">alched</span>' : ''}</td><td>${esc(rateText(d.p))}</td><td>${esc(amountText(d))}</td><td>${amt(d.q * n)}</td><td>${d.p >= 1 ? '–' : chanceText(at1)}</td><td>${value}</td>${doneCells}<td>${actual}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`;
     };
     const extraRows = extra.map(slug => `<tr data-loot="${slug}" title="${esc(`${ITEMS[slug]?.name || slug}: not something this monster drops`)}"><td></td><td></td><td class="l"><span class="sk-cell">${itemIcon(slug, true)} ${itemName(slug)} <span class="c-faint small-note">(not its drop)</span></span></td><td colspan="5"></td>${done ? `<td class="sep-l"></td><td class="got">${gotBox(slug, got[slug], null)}</td><td></td>` : `<td class="got sep-l">${gotBox(slug, got[slug], null)}</td>`}<td>${worthOf(slug) != null ? gpShort(worthOf(slug) * got[slug]) : '<span class="c-faint">?</span>'}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`).join('');
-    const sBtn = (k, label, tip) => `<button type="button" class="${sort === k ? 'on' : ''}" data-loot-sort="${k}" aria-pressed="${sort === k}" title="${esc(tip)}">${label}</button>`;
     // (v3.2) Hide unticked loot: what you leave on the ground, out of the table (the one switch every table has)
-    const shown = S.hideOff ? list.filter(x => taken(goal, x.slug)) : list;
+    const shown = S.hideOff ? sortedList.filter(x => taken(goal, x.slug)) : sortedList;
     const hidden = list.length - shown.length;
-    const cols = head.split('<th').length - 1;
-    const body = shown.length || extraRows ? `${shown.map(row).join('')}${extraRows}` : `<tr><td class="l c-faint" colspan="${cols}">Everything is unticked under Take, and hidden. Untick Hide unticked loot to see it.</td></tr>`;
-    return `<div class="bar wrap"><span class="c-muted small-note">Sort</span><div class="seg">${sBtn('value', 'Expected value', 'What it\'s worth on average over your kills, most first')}${sBtn('got', 'Actual value', 'What your loot is worth, most first')}${sBtn('chance', 'Chance', 'Commonest first')}${sBtn('name', 'A to Z', 'By name')}</div>
+    const body = shown.length || extraRows ? `${shown.map(row).join('')}${extraRows}` : `<tr><td class="l c-faint" colspan="${cols.length}">Everything is unticked under Take, and hidden. Untick Hide unticked loot to see it.</td></tr>`;
+    return `<div class="bar wrap"><span class="c-muted small-note">Click a column's name to sort by it.</span>
         ${P.hideOffBox('Take', 'loot', hidden)}</div>
       <div class="table-wrap"><table class="grid loot-t"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
@@ -584,10 +657,7 @@ export function createNpcUi(P) {
         <button type="button" class="linkish small-note" data-act="edit-goal" aria-expanded="${editing}" title="Change this goal: the monster or the kills">Edit</button>
         <span class="grow"></span>
         ${m ? `<button type="button" class="btn small" data-act="toggle-plan" aria-expanded="${open}">${open ? `Hide ${P.PLAN_LABEL}` : P.PLAN_LABEL}</button>` : ''}
-        <span class="mv-group">
-          <button type="button" class="mv" data-act="goal-up" title="Move up" aria-label="Move Slayer goal up"${first ? ' disabled' : ''}>▲</button>
-          <button type="button" class="mv" data-act="goal-down" title="Move down" aria-label="Move Slayer goal down"${last ? ' disabled' : ''}>▼</button>
-        </span>
+        ${P.moveButtons('Slayer', first, last)}
         <button type="button" class="x" data-act="remove-goal" title="Remove this goal" aria-label="Remove goal">✕</button>
       </div>
       ${editing ? editHtml(goal) : ''}
@@ -722,7 +792,7 @@ export function createNpcUi(P) {
     const natures = P.bank().items.naturerune || 0;
     return xpRow('magic', Math.round(c.plan * HIGH_ALCH.xp), 'if you alch them',
       `(about ${fmt(Math.round(c.plan))} casts of High Level Alchemy, ${xpText(HIGH_ALCH.xp)} each${c.soFar ? `; +${xpText(c.soFar * HIGH_ALCH.xp)} for the ${fmt(c.soFar)} you've alched` : ''}: a nature rune a cast, and 5 fire runes unless you wield a staff of fire)${low}`,
-      `<label class="check alch-runes" title="When something you alched goes into your bank (as the coins it made), a nature rune for each cast comes out of it"><input type="checkbox" data-sopt="runes"${goal.runesKept ? '' : ' checked'}> Take the nature runes out of my bank when it goes in <span class="c-faint">(you have ${fmt(natures)})</span></label>`);
+      `<label class="check alch-runes" title="When something you alched goes into your bank (as the coins it made), a nature rune for each cast comes out of it"><input type="checkbox" data-sopt="runes"${goal.runesKept ? '' : ' checked'}> When I deposit something I alched, take a nature rune per cast out of my bank <span class="c-faint">(you have ${fmt(natures)})</span></label>`);
   }
   const alchCoins = (goal, drops) => {
     const c = alchCasts(goal, drops);
@@ -1178,7 +1248,7 @@ export function createNpcUi(P) {
       const unsure = it.unsure ? ' <span class="shot-check" title="A close call between items that look alike: check this one">check</span>' : '';
       const brought = sh.brought[it.key] ? ` · ${fmt(sh.brought[it.key])} you bring taken off` : '';
       const left = !taken(goal, it.slug) ? ' · you leave it on the ground' : '';
-      const alching = it.key === sh.coinsKey && alchCoinsOf(sh) ? ` · ${fmt(alchCoinsOf(sh))} from alching` : '';
+      const alching = it.key === sh.coinsKey && alchOn(sh) && alchCoinsOf(sh) ? ` · ${fmt(alchCoinsOf(sh))} from alching` : '';
       return `<label class="shot-row"><input type="checkbox" data-loot-shot="${it.key}"${sh.off.has(it.key) ? '' : ' checked'}>
         ${itemIcon(it.slug, true)} <span class="shot-name">${name}${unsure}</span>
         <input class="input small num" data-loot-n="${it.key}" inputmode="numeric" value="${fmt(sh.amounts[it.key] ?? it.count)}" aria-label="${esc(ITEMS[it.slug]?.name || it.slug)} to add" title="How many to add to your loot">
@@ -1219,7 +1289,7 @@ export function createNpcUi(P) {
     const undo = snapshot();
     const add = shotAmounts(sh);
     // (what was alched on the way: loot too, alched; the coins it made aren't coins dropped)
-    const alchedNow = Object.entries(sh.alch || {}).filter(([, n]) => n > 0);
+    const alchedNow = alchOn(sh) ? Object.entries(sh.alch || {}).filter(([, n]) => n > 0) : [];
     for (const [slug, n] of alchedNow) add[slug] = (add[slug] || 0) + n;
     P.updateGoal(goalId, g => {
       const got = { ...(g.got || {}) };
@@ -1274,9 +1344,11 @@ export function createNpcUi(P) {
     syncAlch(goal, sh);
   }
   // The coins dropped are what's read less what alching made; the runes the casts took come off what you bring.
+  // (v3.3) The Coins line unticked: the coins aren't these kills', so nothing was alched on these trips either.
+  const alchOn = sh => !(sh.coinsKey && sh.off?.has(sh.coinsKey));
   function syncAlch(goal, sh) {
-    const casts = Object.values(sh.alch || {}).reduce((t, n) => t + (n > 0 ? n : 0), 0);
-    if (sh.coinsKey && !sh.edited.has(sh.coinsKey)) sh.amounts[sh.coinsKey] = Math.max(0, sh.coinsRead - alchCoinsOf(sh));
+    const casts = alchOn(sh) ? Object.values(sh.alch || {}).reduce((t, n) => t + (n > 0 ? n : 0), 0) : 0;
+    if (sh.coinsKey && !sh.edited.has(sh.coinsKey)) sh.amounts[sh.coinsKey] = Math.max(0, sh.coinsRead - (casts ? alchCoinsOf(sh) : 0));
     const bring = goal.bring || {};
     for (const [slug, per] of [['naturerune', 1], ['firerune', 5]]) {
       const r = sh.rows.find(x => x.slug === slug);
@@ -1291,6 +1363,7 @@ export function createNpcUi(P) {
     const drops = dropsOf(goal.npc, goalOpts(goal));
     const alchable = [...drops.keys()].filter(s => canAlch(s) && taken(goal, s));
     if (!alchable.length) return '';
+    if (!alchOn(sh)) return '<div class="alch-guess c-faint small-note">The Coins line is unticked, so nothing alched on these trips is counted either.</div>';
     if (!sh.alchOpen) return `<div class="alch-guess c-faint small-note">The ${fmt(sh.coinsRead)} coins are counted as dropped. <button type="button" class="linkish small-note" data-act="alch-open">Alched something on these trips?</button></div>`;
     const { mean, sd } = coinsDropped(drops.get('coins'), sh.alchKills);
     const counts = sh.alch || {};
@@ -1325,11 +1398,13 @@ export function createNpcUi(P) {
     if (openBtn) { showNpc(openBtn.dataset.npcOpen, !!openBtn.dataset.npcPlan); return true; }
     const sort = t.closest('[data-npc-sort]');
     if (sort) {
-      const k = sort.dataset.npcSort;
-      if (N.sort === k && (k === 'level' || k === 'name')) N.dir = -N.dir; else { N.sort = k; N.dir = 1; }
+      N.sort = sortFrom(sort, sort.dataset.npcSort);
       saveNpcUi(); renderNpcs();
       return true;
     }
+    // (v3.3: a monster page's drops, by a column's name)
+    const dropSort = t.closest('[data-drop-sort]');
+    if (dropSort) { N.dropSort = sortFrom(dropSort, dropSort.dataset.dropSort); saveNpcUi(); renderNpcs(); return true; }
     const band = t.closest('[data-npc-band]');
     if (band) { N.band = band.dataset.npcBand === 'all' ? null : band.dataset.npcBand; N.q = ''; saveNpcUi(); renderNpcs(); return true; }
     const npcRow = t.closest('tr[data-npc]');
@@ -1359,7 +1434,7 @@ export function createNpcUi(P) {
         return true;
       }
       const ls = t.closest('[data-loot-sort]');
-      if (ls) { lootSort.set(goal.id, ls.dataset.lootSort); P.renderGoals(); return true; }
+      if (ls) { lootSort.set(goal.id, sortFrom(ls, ls.dataset.lootSort)); P.renderGoals(); return true; }
     }
     if (!act) return false;
     switch (act.dataset.act) {
@@ -1576,7 +1651,12 @@ export function createNpcUi(P) {
         return true;
       }
       if (t.dataset.alchAdd) { if (t.value && ITEMS[t.value]) { sh.alch = { ...sh.alch, [t.value]: sh.alch[t.value] || 0 }; sh.alchOpen = true; } P.renderGoals(); return true; }
-      if (t.dataset.lootShot) { if (t.checked) sh.off.delete(t.dataset.lootShot); else sh.off.add(t.dataset.lootShot); return true; }
+      if (t.dataset.lootShot) {
+        if (t.checked) sh.off.delete(t.dataset.lootShot); else sh.off.add(t.dataset.lootShot);
+        // (the Coins line: what was alched goes with it, and the runes the casts took)
+        if (t.dataset.lootShot === sh.coinsKey) { syncAlch(goal, sh); P.renderGoals(); }
+        return true;
+      }
       if (t.dataset.lootAs) { const r = sh.rows.find(x => x.key === t.dataset.lootAs); if (r && r.choices?.includes(t.value)) r.slug = t.value; P.renderGoals(); return true; }
       if (t.dataset.lootN) {
         const n = P.parseAmount(t.value);
@@ -1621,17 +1701,8 @@ export function createNpcUi(P) {
     if (S.tab === 'npcs' && !$('view-npcs')?.hidden) { renderNpcs(); P.routeChanged(); window.scrollTo({ top: 0 }); }
     if (plan && N.open) document.querySelector('#npcs-body [data-npc-kills]')?.focus();
   }
-  // A goal on the Goals tab, its plan open, in view (shown whatever the filter).
-  function goTo(id) {
-    const g = goalOf(id);
-    if (!g) return;
-    S.open.add(id);
-    if (S.only && S.only !== g.skill) S.only = null;
-    if (S.show !== 'all') S.show = 'all';
-    P.saveUi();
-    if (S.tab !== 'goals') P.goTab('goals'); else P.renderGoals();
-    requestAnimationFrame(() => document.querySelector(`[data-goal="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
-  }
+  // A goal on the Goals tab, its plan open, in view (shown whatever the filter): planner-ui.js's goToGoal.
+  const goTo = id => P.goToGoal(id);
 
   // Screenshots for a goal: its loot, or (v3.1) what you bring. The same picker as the Bank tab's.
   let lootFor = null;
