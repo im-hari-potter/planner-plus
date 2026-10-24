@@ -14,7 +14,7 @@ import { topPercent, formatPercent } from './totals.js';
 import { sortable } from './sortable.js';
 import { LIVE_MARKET, highAlch } from './prices.js';
 import { createNpcUi, isSlayerGoal } from './npc-ui.js';
-import { sortTh, sortFrom, savedSort, sortedBy } from './tablesort.js';
+import { sortTh, sortFrom, savedSort, sortedBy, tableScrolls, restoreTableScrolls } from './tablesort.js';
 
 // One method index per skill that has calculator data.
 const INDEX = {};
@@ -349,6 +349,7 @@ export function createPlanner(ctx) {
     show: ['all', 'active', 'done'].includes(ui.show) ? ui.show : 'all',     // goal filter: status
     // goal filter (v3.3): the skills picked, any number of them (none: every goal); was one skill
     only: new Set((Array.isArray(ui.only) ? ui.only : ui.only ? [ui.only] : []).filter(pickable)),
+    onlyOne: !!ui.onlyOne,                                                   // (v3.3.1) the skills' buttons one at a time
     visible: [],                                                              // goal ids shown, in order
     bankView: ui.bankView === 'all' || BANK_VIEWS.includes(ui.bankView) ? ui.bankView : 'all',   // Bank tab: everything, one skill's items, or Other
     allSort: ['value', 'skill'].includes(ui.allSort) ? ui.allSort : 'yours',   // Bank tab, All: your order, most valuable first, or by skill (v3)
@@ -379,7 +380,7 @@ export function createPlanner(ctx) {
   let stepDrag = null;
   // (v3.3) And the goals themselves, by their heads.
   let goalDrag = null;
-  const saveUi = () => store.set('planUi', { newSkill: S.newGoal.skill, newType: S.newGoal.type, open: [...S.open], sort: S.sort, show: S.show, only: [...S.only], priceView: S.priceView, priceSort: S.priceSort, bankView: S.bankView, allSort: S.allSort, tgroup: S.tgroup, hideOff: S.hideOff, tableOff: [...S.tableOff] });
+  const saveUi = () => store.set('planUi', { newSkill: S.newGoal.skill, newType: S.newGoal.type, open: [...S.open], sort: S.sort, show: S.show, only: [...S.only], onlyOne: S.onlyOne, priceView: S.priceView, priceSort: S.priceSort, bankView: S.bankView, allSort: S.allSort, tgroup: S.tgroup, hideOff: S.hideOff, tableOff: [...S.tableOff] });
   // The items of one skill's bank tab, or of the whole bank ('all'), that you have.
   // (v3.3: or Gear's, Rares' or Other's: Other is what no other button lists)
   function bankSubset(items, view) {
@@ -1240,9 +1241,10 @@ export function createPlanner(ctx) {
   // Moves a goal past its neighbour among the goals on screen, so it works the
   // same with a filter on.
   // (v3.3) A goal card's ▲ ▼ and, either side, ⤒ to the top and ⤓ to the bottom of the list.
+  // (v3.3.1: their classes are to-top and to-bottom: "top" is the header bar's, whose look a button took on)
   function moveButtons(name, first, last) {
     const b = (act, sym, title, off, cls = '') => `<button type="button" class="mv${cls}" data-act="${act}" title="${title}" aria-label="${esc(`${title}: ${name} goal`)}"${off ? ' disabled' : ''}>${sym}</button>`;
-    return `<span class="mv-group">${b('goal-top', '▲', 'Move to the top', first, ' mv-end top')}${b('goal-up', '▲', 'Move up', first)}${b('goal-down', '▼', 'Move down', last)}${b('goal-bottom', '▼', 'Move to the bottom', last, ' mv-end bottom')}</span>`;
+    return `<span class="mv-group">${b('goal-top', '▲', 'Move to the top', first, ' mv-end to-top')}${b('goal-up', '▲', 'Move up', first)}${b('goal-down', '▼', 'Move down', last)}${b('goal-bottom', '▼', 'Move to the bottom', last, ' mv-end to-bottom')}</span>`;
   }
   function moveGoal(id, dir) {
     const vi = S.visible.indexOf(id);
@@ -1339,16 +1341,23 @@ export function createPlanner(ctx) {
           const sk = k === COMBAT_PICK ? combatCard.icon : k === TOTAL_PICK ? TOTAL : skillOf(k);
           const on = S.only.has(k);
           const name = esc(sk.name);
-          const title = on ? (S.only.size === 1 ? 'Show every goal' : `Leave out ${name}`) : S.only.size ? `${name} too` : `Only ${name}`;
+          // (v3.3.1: one at a time, a button shows its goals alone, or every goal again)
+          const title = S.onlyOne ? (on ? 'Show every goal' : `Only ${name}`)
+            : on ? (S.only.size === 1 ? 'Show every goal' : `Leave out ${name}`) : S.only.size ? `${name} too` : `Only ${name}`;
           return `<button type="button" class="skill-btn${on ? ' on' : ''}" data-gonly="${k}" title="${title}" aria-pressed="${on}">${iconImg(sk)}</button>`;
-        }).join('')}</div>${S.only.size ? '<button type="button" class="linkish small-note" data-act="gonly-clear">Every skill</button>' : ''}` : ''}
+        }).join('')}</div>
+        <label class="check small-note gonly-one" title="Ticked, a skill's button shows its goals alone, and another click shows every goal again. Unticked, each button turns its goals on or off, as many as you like."><input type="checkbox" data-gonly-one="1"${S.onlyOne ? ' checked' : ''}> One at a time</label>
+        ${S.only.size ? '<button type="button" class="linkish small-note" data-act="gonly-clear">Every skill</button>' : ''}` : ''}
       </div>${links ? `<div class="goal-links">${links}</div>` : ''}` : '';
     // (a "Remove?" waiting for its second click stays that way through a redraw)
     const armed = box.querySelector('[data-act="remove-goal"][data-armed]')?.closest('[data-goal]')?.dataset.goal;
     // (v3.1) Above the goals: new combat XP to count as Slayer goals' kills (npc-ui.js)
+    // (v3.3.1: each plan's tables kept where they were scrolled to)
+    const scrolls = tableScrolls(box);
     box.innerHTML = title + bar + npc().sessionHtml() + (shown.length
       ? shown.map((g, i) => (isCombatGoal(g) ? combatGoalCard : isTotalGoal(g) ? totalGoalCard : isSlayerGoal(g) ? npc().goalCard : goalCard)(g, i === 0, i === shown.length - 1)).join('')
       : `<div class="empty">No goals match. <button type="button" class="linkish" data-act="show-all-goals">Show all goals</button></div>`);
+    restoreTableScrolls(box, scrolls);
     const again = armed && [...box.querySelectorAll('[data-goal]')].find(c => c.dataset.goal === armed)?.querySelector('[data-act="remove-goal"]');
     if (again) arm(again);
     for (const card of box.querySelectorAll('[data-goal]')) applySearch(card);
@@ -2929,6 +2938,7 @@ export function createPlanner(ctx) {
     const ps = S.priceSort;
     const allBtn = (use, gi, what) => ` <button type="button" class="linkish th-all" data-pall="${use}" data-pgroup="${gi}" title="Use ${what} for every item in this list (prices you typed in stay)">all</button>`;
     const th = (html, key, desc, after = '') => sortTh(html, 'price-sort', { key, desc }, ps, after);
+    const scrolls = tableScrolls($('prices-body'));        // (v3.3.1)
     $('prices-body').innerHTML = groups.map((g, gi) => {
       const own = priceItems(g.items, { untradeable: !!g.any });
       const items = ps ? sortedBy(own, PRICE_VALUE[ps.key], ps.desc) : own;
@@ -2940,6 +2950,7 @@ export function createPlanner(ctx) {
         ${th('<th class="pq" title="How many you want: Your list adds up what they cost">Qty</th>', 'qty', true)}${th('<th class="pcost" title="What that many cost, at the price ticked">Cost</th>', 'cost', true)}</tr></thead>
       <tbody>${items.length ? items.map(priceRow).join('') : `<tr><td class="l c-faint" colspan="6">${S.pqOnly && !S.priceQ.trim() ? 'Nothing on your list.' : S.priceQ.trim() ? 'No item is called anything like that.' : 'Nothing here yet: what you have that no skill uses shows here once your bank is read from screenshots.'}</td></tr>`}</tbody></table></div>`;
     }).join('');
+    restoreTableScrolls($('prices-body'), scrolls);
     // (the item a link came to see: its line stands out, and is scrolled to once)
     const hl = S.priceHl && $('prices-body').querySelector(`tr[data-prow="${S.priceHl}"]`);
     if (hl) {
@@ -3234,7 +3245,13 @@ export function createPlanner(ctx) {
     const gshow = t.closest('[data-gshow]');
     if (gshow) { S.show = gshow.dataset.gshow; saveUi(); renderGoals(); return; }
     const gonly = t.closest('[data-gonly]');
-    if (gonly) { const k = gonly.dataset.gonly; if (S.only.has(k)) S.only.delete(k); else S.only.add(k); saveUi(); renderGoals(); return; }
+    if (gonly) {
+      const k = gonly.dataset.gonly;
+      // (v3.3.1: one at a time, it's that skill alone, or, clicked again, every goal)
+      if (S.onlyOne) S.only = S.only.has(k) ? new Set() : new Set([k]);
+      else if (S.only.has(k)) S.only.delete(k); else S.only.add(k);
+      saveUi(); renderGoals(); return;
+    }
     const psort = t.closest('[data-tsort-plan]');
     if (psort) { S.sort = sortFrom(psort, psort.dataset.tsortPlan); saveUi(); renderGoals(); return; }
     const card = t.closest('[data-goal]');
@@ -3271,9 +3288,14 @@ export function createPlanner(ctx) {
       case 'refresh-xp': S.goalErr = {}; loadProfile({ force: true }); break;
       case 'goal-top':
       case 'goal-bottom': {
-        moveGoalTo(card.dataset.goal, act.dataset.act === 'goal-top' ? 'top' : 'bottom');
+        // (v3.3.1) followed to where it went: its name at the top of the window (below the tabs), lit for a
+        // moment. (Up to v3.3.0 the page went to the nearest end of the goal: with its plan open, the middle
+        // of its plan, the goal's name out of sight.)
+        const id = card.dataset.goal;
+        moveGoalTo(id, act.dataset.act === 'goal-top' ? 'top' : 'bottom');
+        S.lit = { id, at: Date.now() };
         renderGoals();
-        document.querySelector(`[data-goal="${card.dataset.goal}"]`)?.scrollIntoView({ block: 'nearest' });
+        document.querySelector(`#goals-list > .goal[data-goal="${CSS.escape(id)}"] > .goal-head`)?.scrollIntoView({ block: 'start' });
         break;
       }
       case 'goal-up':
@@ -3282,7 +3304,8 @@ export function createPlanner(ctx) {
         renderGoals();
         // keep the button under the keyboard, so pressing again keeps moving it
         document.querySelector(`[data-goal="${card.dataset.goal}"] [data-act="${act.dataset.act}"]:not([disabled])`)?.focus({ preventScroll: true });
-        document.querySelector(`[data-goal="${card.dataset.goal}"]`)?.scrollIntoView({ block: 'nearest' });
+        // (v3.3.1: its head in view, the buttons with it, not the nearest end of a plan that may be open)
+        document.querySelector(`#goals-list > .goal[data-goal="${CSS.escape(card.dataset.goal)}"] > .goal-head`)?.scrollIntoView({ block: 'nearest' });
         break;
       }
       case 'open-all':
@@ -3434,6 +3457,12 @@ export function createPlanner(ctx) {
       return;
     }
     if (t.dataset.topt === 'hideOff') { S.hideOff = t.checked; saveUi(); renderGoals(); return; }
+    // (v3.3.1) the skills' buttons one at a time: of several on, the last one turned on stays
+    if (t.dataset.gonlyOne) {
+      S.onlyOne = t.checked;
+      if (S.onlyOne && S.only.size > 1) S.only = new Set([[...S.only].pop()]);
+      saveUi(); renderGoals(); return;
+    }
     const card = t.closest('[data-goal]');
     // (a Total level goal's skills: untick one you won't train)
     if (card && t.dataset.totalSkip) {

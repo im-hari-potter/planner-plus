@@ -39,6 +39,22 @@ export const SKILL_IDS = CATEGORY_IDS.filter(id => id !== 0); // the 19 real ski
 export const COMBAT_KEYS = ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'prayer', 'magic'];
 export const COMBAT_IDS = SKILLS.filter(s => s.combat).map(s => s.id);
 
+// (v3.3.1) Where the game's own skills tab puts each skill: [row, column], three across (Lost City's
+// scripts/player/interfaces/stats.if, rev 274). Runecraft is alone in the seventh row, and the tab's
+// bottom, with the total level on it, is the eighth: Overall's here, across all three columns.
+export const GAME_LAYOUT = new Map([
+  ['attack', 1, 1], ['hitpoints', 1, 2], ['mining', 1, 3],
+  ['strength', 2, 1], ['agility', 2, 2], ['smithing', 2, 3],
+  ['defence', 3, 1], ['herblore', 3, 2], ['fishing', 3, 3],
+  ['ranged', 4, 1], ['thieving', 4, 2], ['cooking', 4, 3],
+  ['prayer', 5, 1], ['crafting', 5, 2], ['firemaking', 5, 3],
+  ['magic', 6, 1], ['fletching', 6, 2], ['woodcutting', 6, 3],
+  ['runecraft', 7, 1],
+  ['overall', 8, 1],
+].map(([key, row, col]) => [SKILL_BY_KEY.get(key).id, { row, col }]));
+// (its ids row by row, as they're drawn)
+export const GAME_ORDER = [...GAME_LAYOUT.keys()];
+
 // A skill only gets a hiscores row once it reaches this level (server rule).
 export const MIN_RANKED_LEVEL = 15;
 export const MAX_LEVEL = 99;

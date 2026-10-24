@@ -31,7 +31,7 @@ import { killDrops, killXp, KILL_STYLES, atLeastOne, dryChance, killsFor, luck, 
 import { levelForXp10, MAX_XP10 } from './planner.js';
 import { highAlch } from './prices.js';
 import { store, snapshots } from './store.js';
-import { sortTh, sortFrom, savedSort, sortedBy } from './tablesort.js';
+import { sortTh, sortFrom, savedSort, sortedBy, tableScrolls, restoreTableScrolls } from './tablesort.js';
 
 const MAX_KILLS = 10_000_000;
 const STAT_NAMES = ['Attack', 'Strength', 'Defence', 'Hitpoints', 'Ranged', 'Magic'];
@@ -277,16 +277,20 @@ export function createNpcUi(P) {
     const body = $('npcs-body');
     if (!body) return;
     const m = N.open && MONSTER_BY_ID.get(N.open);
+    // (v3.3.1: and its tables where they were scrolled to)
+    const scrolls = tableScrolls(body);
     if (m) {
       // (v3.3: its places shown in full stay that way through a redraw, as prices come in)
       const more = body.querySelector(`[data-npc-page="${CSS.escape(m.id)}"] .npc-where details`)?.open;
       body.innerHTML = npcPage(m);
       if (more) body.querySelector('.npc-where details').open = true;
+      restoreTableScrolls(body, scrolls);
       return;
     }
     N.open = null;
     body.innerHTML = npcList();
     applyNpcSearch();
+    restoreTableScrolls(body, scrolls);
   }
 
   // Every monster: a row each, with the XP and loot of a kill.

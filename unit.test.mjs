@@ -332,3 +332,21 @@ test('savedSort: as saved, an older version\'s Sort button, or the first column'
   assert.deepEqual(savedSort('gone', keys, desc), { key: 'level', desc: false });
   assert.deepEqual(savedSort(undefined, keys, desc), { key: 'level', desc: false });
 });
+
+// ── (v3.3.1) Lookup's In-game layout: the game's own skills tab ──────────────
+import { GAME_LAYOUT, GAME_ORDER, SKILLS } from './skills.js';
+
+test('GAME_LAYOUT: every skill once, three across, each in its own place; Runecraft alone in the seventh row, Overall the eighth', () => {
+  assert.deepEqual([...GAME_LAYOUT.keys()].sort((a, b) => a - b), SKILLS.map(s => s.id).sort((a, b) => a - b));
+  const places = [...GAME_LAYOUT.values()].map(p => `${p.row}/${p.col}`);
+  assert.equal(new Set(places).size, places.length, 'no two in one place');
+  assert.ok([...GAME_LAYOUT.values()].every(p => p.col >= 1 && p.col <= 3 && p.row >= 1 && p.row <= 8));
+  const name = id => SKILLS.find(s => s.id === id).name;
+  const row = r => GAME_ORDER.filter(id => GAME_LAYOUT.get(id).row === r).map(name);
+  assert.deepEqual(row(1), ['Attack', 'Hitpoints', 'Mining']);
+  assert.deepEqual(row(6), ['Magic', 'Fletching', 'Woodcutting']);
+  assert.deepEqual(row(7), ['Runecraft']);
+  assert.deepEqual(row(8), ['Overall']);
+  // (row by row, left to right)
+  assert.deepEqual(GAME_ORDER, [...GAME_ORDER].sort((a, b) => GAME_LAYOUT.get(a).row - GAME_LAYOUT.get(b).row || GAME_LAYOUT.get(a).col - GAME_LAYOUT.get(b).col));
+});

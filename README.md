@@ -65,9 +65,10 @@ restore or move it.
 *Lookup: a player's levels, XP, rank and **Top %**, worked out as their rank among everyone ranked
 in that skill.*
 
-- Sort the tiles by level, XP, rank or Top %, or drag them into your own order.
-- **Combat** shows the combat skills, your combat level by the game's own formula, what the next
-  level takes, and a calculator to try other levels.
+- Sort the tiles by level, XP, rank or Top %, or drag them into your own order. **In-game** lays
+  them out as the game's own skills tab: three across, Total level along the bottom.
+- **Combat** shows the combat skills, your combat level by the game's own formula, a calculator to
+  try other levels, and what the next level takes.
 - Once you have goals, a tile's bar is your progress toward its goal, and its goal line takes you
   to that goal on the Goals tab.
 - Click a tile to pick it out in gold (Overall is, till then).
@@ -76,6 +77,11 @@ in that skill.*
 
 **Compare** puts up to 5 players side by side, **Gains** shows what someone gained since last time
 (a day, a week, a month), and **Leaderboard** any skill's hiscores with Top % beside every rank.
+
+![Compare: up to 5 players side by side, the best in each skill highlighted](readme-15-compare.png)
+
+*Compare: each skill's best highlighted; switch between levels, XP, ranks and Top %, and click a
+name to sort the skills by that player's.*
 
 ## Goals and Plan (Calculator)
 
@@ -100,7 +106,8 @@ sits under **Your goals** with its progress since you set it, and its **Plan (Ca
 - Move a goal up or down, to the very top or bottom (the arrows with a bar), or drag it by its
   name. Filter your goals: in progress or reached, and by skill. Each skill's button shows its goals
   or leaves them out, as many as you like (with none on, every goal shows); Total level, Combat
-  level and Slayer have buttons of their own. **Every skill** shows them all again.
+  level and Slayer have buttons of their own. **Every skill** shows them all again. Tick **One at a
+  time** for one skill's goals at a time.
 
 **Plan (Calculator)** opens a goal's plan, in three parts:
 

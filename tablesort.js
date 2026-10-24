@@ -1,4 +1,5 @@
-// Tables sorted by their columns' names (v3.3; up to v3.2 each had Sort buttons of its own). A click on a
+// Tables sorted by their columns' names (v3.3; up to v3.2 each had Sort buttons of its own), and (v3.3.1) kept
+// where they were scrolled to when they're drawn again (tableScrolls, restoreTableScrolls, at the end). A click on a
 // column's name sorts by it, first the way that's of most use (the most XP or gp first, the lowest level or
 // cost first, A to Z), and a click again the other way. The arrow is the order now: ▲ the smallest (or A)
 // first, ▼ the biggest first. A row with nothing in that column (a ?, a –) goes last either way, and rows
@@ -45,4 +46,33 @@ export function sortedBy(list, value, desc = false) {
       : a.x - b.x;
     return (desc ? -c : c) || a.i - b.i;
   }).map(v => v.item);
+}
+
+// (v3.3.1) A view drawn again keeps each of its tables where it was scrolled to, sideways and down: up to
+// v3.3.0 a redraw (prices coming in, a click) put a table scrolled sideways back at its left. A table is
+// known by the goal or monster page it's in, its kind, the name of its first column, and how many such
+// tables come before it; one that isn't there any more is let go.
+const scrollKeys = root => {
+  const seen = new Map();
+  return [...root.querySelectorAll('.table-wrap')].map(w => {
+    const owner = w.closest('[data-goal]')?.dataset.goal ?? w.closest('[data-npc-page]')?.dataset.npcPage ?? '';
+    const k = `${owner}|${w.querySelector('table')?.className ?? ''}|${w.querySelector('thead th')?.textContent.trim() ?? ''}`;
+    const n = seen.get(k) || 0;
+    seen.set(k, n + 1);
+    return [`${k}|${n}`, w];
+  });
+};
+// Where root's tables are scrolled to: key -> [left, top] (only the ones scrolled at all)
+export function tableScrolls(root) {
+  const out = new Map();
+  if (root) for (const [k, w] of scrollKeys(root)) if (w.scrollLeft || w.scrollTop) out.set(k, [w.scrollLeft, w.scrollTop]);
+  return out;
+}
+// ...and back there, once root is drawn again
+export function restoreTableScrolls(root, saved) {
+  if (!root || !saved?.size) return;
+  for (const [k, w] of scrollKeys(root)) {
+    const v = saved.get(k);
+    if (v) { w.scrollLeft = v[0]; w.scrollTop = v[1]; }
+  }
 }

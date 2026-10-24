@@ -347,6 +347,10 @@ form.inline { display: inline-flex; gap: 4px; }
 .tile .next { font-family: var(--small); font-size: 12px; color: var(--muted); margin-top: 1px; }
 .tile .next.maxed { color: var(--gold-hi); font-weight: bold; }
 .tile { cursor: grab; user-select: none; -webkit-user-select: none; }
+/* (v3.3.1) In-game: the tiles as the game's own skills tab has them, three across, each in its place
+   (app.js: grid-area), Overall along the bottom; a click picks one out, nothing is dragged */
+.stats-grid.game { grid-template-columns: repeat(3, minmax(0, 168px)); }
+.stats-grid.game .tile { cursor: pointer; }
 .tile.unranked { opacity: 0.55; }
 /* Dragging into a new order (sortable.js): Lookup tiles, the bank's All view */
 .drag-placeholder { opacity: 0.25 !important; border-style: dashed !important; }
@@ -541,8 +545,8 @@ table.grid th.wrap .th-sort { white-space: normal; }
 /* (v3.3) to the very top or bottom: the arrow with a bar at its end */
 .mv.mv-end { position: relative; }
 .mv.mv-end::after { content: ''; position: absolute; left: 6px; right: 6px; height: 2px; background: currentColor; }
-.mv.mv-end.top::after { top: 4px; }
-.mv.mv-end.bottom::after { bottom: 4px; }
+.mv.mv-end.to-top::after { top: 4px; }
+.mv.mv-end.to-bottom::after { bottom: 4px; }
 /* a goal is dragged by its head into a new place */
 #goals-list > .goal > .goal-head { cursor: grab; }
 #goals-list > .goal > .goal-head :is(button, a, input, select, label) { cursor: pointer; }
@@ -606,6 +610,9 @@ table.plan-t .catch { color: var(--gold-hi); cursor: help; }
 .combat-goal .goal-sub b { color: var(--text); }
 /* A Combat level goal's plan: what each kind of level takes to get to the goal, above the calculator */
 .cc-goal { margin: 2px 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+/* (v3.3.1) on Lookup's card it's at the bottom, under the calculator */
+#cc-needs .cc-goal { margin: 10px 0 0; padding: 8px 0 0; border-bottom: 0; border-top: 1px solid var(--line); }
+#cc-needs:empty { display: none; }
 .cc-goal-head { font-size: 14px; color: var(--text); }
 .cc-goal-head b { color: var(--gold-hi); font-weight: normal; }
 .cc-goal .need .c-faint { font-family: var(--small); font-size: 12px; }

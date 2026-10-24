@@ -97,7 +97,7 @@ await check('saving a player adds a chip', async () => {
   assert.match(await text('#lookup-chips'), /Demo Main/);
 });
 
-await check('combat filter shows 7 tiles, the formula and next-level hints', async () => {
+await check('combat filter shows 7 tiles, the formula, the calculator and next-level hints (v3.3.1: those last)', async () => {
   await page.click('#filter-seg [data-filter="combat"]');
   await page.waitForSelector('.combat-card');
   assert.equal(await page.locator('.stats-grid .tile').count(), 7);
@@ -106,10 +106,12 @@ await check('combat filter shows 7 tiles, the formula and next-level hints', asy
   assert.doesNotMatch(card, /build/i);
   assert.ok(await page.locator('.combat-card .ico-combat').count() >= 1, 'crossed swords on the combat card');
   assert.match(card, /86\.75/);
-  // at the top, laid out like a Combat level goal's plan: what gets the next level from the player's levels now,
-  // kind by kind, each enough by itself; Ranged and Magic can't, and it says why (v2.10.4)
+  // laid out like a Combat level goal's plan: what gets the next level from the player's levels now, kind by kind,
+  // each enough by itself; Ranged and Magic can't, and it says why (v2.10.4). v3.3.1: at the bottom, under the
+  // calculator (from v2.10.4 to v3.3.0 at the top)
   const flat = t => t.replace(/\s+/g, ' ').trim();
-  await page.waitForSelector('.combat-card > #cc-needs:first-child .cc-goal');
+  await page.waitForSelector('.combat-card > #cc-needs:last-child .cc-goal');
+  assert.deepEqual(await page.locator('.combat-card > *').evaluateAll(els => els.map(e => e.id || e.className)), ['cc-live', 'calc', 'cc-needs']);
   assert.equal(flat(await page.locator('#cc-needs .cc-goal-head').innerText()), "To reach 87 from Demo Main's levels now (86.75), any one of these:");
   assert.deepEqual((await page.locator('#cc-needs .need').allInnerTexts()).map(flat), ['Attack 61 or Strength 91 +1', 'Defence 46 or Hitpoints 87 +1', 'Prayer 44 +1']);
   assert.equal(flat(await page.locator('#cc-needs .cc-line').innerText()), "Each is enough by itself. Levels from more than one add up too. Ranged and Magic don't count here: even at 99 they'd stay behind your melee.");
@@ -285,6 +287,12 @@ await check('leaderboard pages, jumps to a rank and finds a player', async () =>
 await page.screenshot({ path: `${SHOTS}/6-leaders.png`, fullPage: true });
 
 await check('last page is short and corrects the player count for free', async () => {
+  // (v3.3.1) A count below the mock's, as the bundled seed's is: the daily job's real count is above the mock's now
+  // (14,324 on 2026-10-23, the mock has 14,311), and its last page is past the mock's.
+  await page.evaluate(() => localStorage.setItem('lchs.totals', JSON.stringify({ 1: { t: 14138, at: Date.now() } })));
+  await page.reload();
+  await page.waitForSelector('#view-leaders:not([hidden]) table.lb tbody tr');
+  await page.waitForFunction(() => !document.querySelector('#lb-last').disabled);
   await page.click('#lb-last');
   // Seed says 14,138 for Attack; the mock has more, so this page is full and the count gets fixed from it only if short.
   await page.waitForFunction(() => !document.querySelector('#lb-last').disabled && document.querySelectorAll('table.lb tbody tr').length > 0, null, { timeout: 15000 });
@@ -332,7 +340,7 @@ await check('lookup tiles can be dragged into a new order that sticks', async ()
   assert.deepEqual(await order(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21]);
 });
 
-await check('lookup tiles sort by level/XP/rank/Top %, Overall first, and can be dragged after', async () => {
+await check('lookup tiles sort by level/XP/rank/Top %, Overall first, and can be dragged after; or laid out as the game\'s skills tab (v3.3.1)', async () => {
   await page.click('.tab[data-tab="lookup"]');
   await page.waitForSelector('#tiles-grid .tile');
   const tiles = () => page.$$eval('#tiles-grid .tile', ts => ts.map(t => ({ id: Number(t.dataset.id), text: t.innerText })));
@@ -369,6 +377,32 @@ await check('lookup tiles sort by level/XP/rank/Top %, Overall first, and can be
   assert.deepEqual((await tiles()).map(t => t.id), afterDrag, 'the adjusted layout survives a reload');
   await page.click('[data-action="tiles-reset"]');
   assert.deepEqual((await tiles()).map(t => t.id), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21]);
+  // (v3.3.1) In-game: the tiles as the game's own skills tab has them (Lost City's stats interface), three across, each in
+  // its place, Runecraft alone in the seventh row and Overall along the bottom; not dragged; kept; clicked again, your order
+  await page.click('[data-tsort="game"]');
+  await page.waitForSelector('#tiles-grid.game');
+  const places = () => page.$$eval('#tiles-grid .tile', ts => ts.map(t => { const cs = getComputedStyle(t); return `${t.dataset.id}@${cs.gridRowStart}/${cs.gridColumnStart}${cs.gridColumnEnd === 'auto' ? '' : `-${cs.gridColumnEnd}`}`; }).join(' '));
+  const GAME = '1@1/1 4@1/2 15@1/3 3@2/1 17@2/2 14@2/3 2@3/1 16@3/2 11@3/3 5@4/1 18@4/2 8@4/3 6@5/1 13@5/2 12@5/3 7@6/1 10@6/2 9@6/3 21@7/1 0@8/1--1';
+  assert.equal(await places(), GAME);
+  assert.equal(await page.locator('#tiles-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 3);
+  const [att, over] = await Promise.all([page.locator('#tiles-grid .tile[data-id="1"]').boundingBox(), page.locator('#tiles-grid .tile[data-id="0"]').boundingBox()]);
+  assert.ok(over.width > att.width * 2.9 && over.y > att.y, 'Overall: along the bottom, across all three');
+  assert.equal(await page.getAttribute('[data-tsort="game"]', 'aria-pressed'), 'true');
+  assert.match(await text('.tiles-bar'), /as the game's skills tab has them\./);
+  // (a drag does nothing here)
+  const m = await page.locator('#tiles-grid .tile[data-id="15"]').boundingBox();
+  await page.mouse.move(att.x + att.width / 2, att.y + att.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(att.x + att.width / 2 + 15, att.y + att.height / 2, { steps: 3 });
+  await page.mouse.move(m.x + m.width / 2, m.y + m.height / 2, { steps: 10 });
+  await page.mouse.up();
+  assert.equal(await places(), GAME, 'each tile stays in its place');
+  await page.reload();
+  await page.waitForSelector('#tiles-grid.game .tile');
+  assert.equal(await places(), GAME, 'kept');
+  await page.click('[data-tsort="game"]');
+  await page.waitForFunction(() => !document.querySelector('#tiles-grid.game'));
+  assert.deepEqual((await tiles()).map(t => t.id), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21], 'your own order again');
 });
 
 await check('lookup: a recent name can be taken off the list, or the list cleared, and stays gone until you look them up again', async () => {
@@ -941,6 +975,27 @@ await check('goals: Hide unticked items takes the rows unticked under Use out of
   }
 });
 
+await check('goals: a table scrolled sideways stays where it was as the page is drawn again (v3.3.1: up to v3.3.0 a redraw put it back at its left)', async () => {
+  await page.click('.tab[data-tab="goals"]');
+  const goal = page.locator('.goal').first();
+  await goal.locator('.plan-t').waitFor();
+  const wrap = goal.locator('.plan-sec:last-child .table-wrap');
+  const at = () => wrap.evaluate(w => [w.scrollLeft, w.scrollWidth - w.clientWidth]);
+  const max = (await at())[1];
+  assert.ok(max > 150, `the table is wider than its place (by ${max}px)`);
+  await wrap.evaluate(w => { w.scrollLeft = 140; });
+  // (a redraw: Hide unticked items on and off, above the table)
+  const hide = goal.locator('input[data-topt="hideOff"]');
+  const before = await page.evaluateHandle(() => document.querySelector('.goal .plan-t'));
+  await hide.check();
+  await page.waitForFunction(old => document.querySelector('.goal .plan-t') !== old, before);
+  assert.equal((await at())[0], 140, 'kept through a redraw');
+  await hide.uncheck();
+  await page.waitForFunction(() => !JSON.parse(localStorage.getItem('lchs.planUi')).hideOff);
+  assert.equal((await at())[0], 140);
+  await wrap.evaluate(w => { w.scrollLeft = 0; });
+});
+
 await check("goals: a plan's table can be hidden, one plan at a time or all at once; the rest of the plan stays (v2.10.1)", async () => {
   await page.click('.tab[data-tab="goals"]');
   const goal = page.locator('.goal').first();
@@ -1137,6 +1192,11 @@ await check('goals: move up and down (v3.3: to the top or the bottom, or dragged
     [['goal-top', true], ['goal-up', true], ['goal-down', false], ['goal-bottom', false]]);
   assert.deepEqual(await page.locator('.goal').last().locator('.mv-group .mv').evaluateAll(bs => bs.map(b => b.disabled)), [false, false, true, true]);
   assert.equal(await page.locator('.goal').first().locator('[data-act="goal-bottom"]').getAttribute('aria-label'), 'Move to the bottom: Herblore goal');
+  // (v3.3.1: the buttons look like the others: up to v3.3.0 "to the top" had the header bar's class, and its look, its
+  // arrow off to one side, a gold border, and it drew over the pinned tabs)
+  const looks = await page.locator('.goal').last().locator('.mv-group .mv').evaluateAll(bs => bs.map(b => { const cs = getComputedStyle(b); return [cs.display, cs.zIndex, cs.borderTopWidth, cs.paddingLeft, cs.marginBottom, cs.width, cs.height].join(' '); }));
+  assert.deepEqual(looks, looks.map(() => looks[1]), 'the four alike');
+  assert.match(looks[0], /^\S+ auto 1px 0px 0px 24px 24px$/);
   await page.locator('.goal').first().locator('[data-act="goal-bottom"]').click();
   assert.deepEqual(await order(), ['Woodcutting 94', 'Herblore 78', 'Herblore 500']);
   await page.locator('.goal').last().locator('[data-act="goal-top"]').click();
@@ -3071,10 +3131,11 @@ await check("goals: Combat level is a goal like a skill's: picked with the first
     await page.click('#filter-seg [data-filter="combat"]');
     await page.waitForFunction(() => /67\.30/.test(document.querySelector('#cc-live')?.innerText || ''));
     const lookup = (await page.locator('#cc-live .cc-line').allInnerTexts()).map(flat);
-    // (Lookup's has no goal to be short of: what gets the next level is at the top of its card, laid out like the goal's, v2.10.4)
+    // (Lookup's has no goal to be short of: what gets the next level is on its card, laid out like the goal's, v2.10.4;
+    // at its bottom from v3.3.1, at its top till then)
     assert.equal(lookup[2], '= 67.30, rounded down to 67.');
     assert.equal(await page.locator('#cc-live .cc-next, #cc-live .need').count(), 0);
-    assert.equal(flat(await page.locator('.combat-card > #cc-needs:first-child .cc-goal-head').innerText()), "To reach 68 from Old Badger's levels now (67.30), any one of these:");
+    assert.equal(flat(await page.locator('.combat-card > #cc-needs:last-child .cc-goal-head').innerText()), "To reach 68 from Old Badger's levels now (67.30), any one of these:");
     assert.deepEqual((await page.locator('#cc-needs .need').allInnerTexts()).map(flat), ['Attack 54 or Strength 56 +3', 'Defence 55 or Hitpoints 57 +3', 'Prayer 62 +6', 'Ranged 72 +17', 'Magic 72 +22']);
     assert.equal(flat(await page.locator('#cc-needs .cc-line').innerText()), 'Each is enough by itself. Levels from more than one add up too.');
     assert.equal(await page.locator('#cc-needs .need').first().getAttribute('title'), "Attack and Strength count the same (melee, 0.325 of a combat level a level while it's your best style): 3 more levels between them, like Attack 51 → 54 or Strength 53 → 56.");
@@ -3144,6 +3205,21 @@ await check("goals: Combat level is a goal like a skill's: picked with the first
     await page.click('[data-gonly="cooking"]');
     await page.waitForFunction(() => document.querySelectorAll('.goal').length === 2);
     assert.deepEqual(await names(), ['Cooking', 'Combat level']);
+    // (v3.3.1) or one at a time: of those on, the last stays; a click shows that skill's alone, again every goal
+    await page.check('[data-gonly-one]');
+    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 1);
+    assert.deepEqual(await names(), ['Cooking']);
+    assert.deepEqual(await buttons(), [['cooking', 'Show every goal', true], ['attack', 'Only Attack', false], ['combat', 'Only Combat level', false]]);
+    await page.click('[data-gonly="attack"]');
+    await page.waitForFunction(() => document.querySelector('.goal .goal-name')?.innerText.trim() === 'Attack');
+    assert.deepEqual(await names(), ['Attack']);
+    assert.deepEqual(await page.evaluate(() => { const u = JSON.parse(localStorage.getItem('lchs.planUi')); return [u.only, u.onlyOne]; }), [['attack'], true], 'kept');
+    await page.click('[data-gonly="attack"]');
+    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 3);
+    await page.uncheck('[data-gonly-one]');
+    await page.click('[data-gonly="cooking"]');
+    await page.click('[data-gonly="combat"]');
+    await page.waitForFunction(() => document.querySelectorAll('.goal').length === 2);
     // Every skill lets them all go
     await page.click('[data-act="gonly-clear"]');
     await page.waitForFunction(() => document.querySelectorAll('.goal').length === 3);
@@ -5243,7 +5319,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.3\.0 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.3\.1 · /);
   await page.click('#settings-close');
 });
 

@@ -3,7 +3,7 @@
 // Prices (planner-ui.js; the NPCs tab and Slayer goals are npc-ui.js's).
 
 import {
-  SKILLS, SKILL_BY_ID, SKILL_IDS, COMBAT_IDS, COMBAT_KEYS, MIN_RANKED_LEVEL, MAX_LEVEL, SLAYER,
+  SKILLS, SKILL_BY_ID, SKILL_IDS, COMBAT_IDS, COMBAT_KEYS, MIN_RANKED_LEVEL, MAX_LEVEL, SLAYER, GAME_LAYOUT, GAME_ORDER,
   levelProgress, combatFromProfile, combatBreakdown, combatNeeds, combatLevel, boundUnrankedLevels,
 } from './skills.js';
 import { HiscoresApi, LIVE_API, isElectron, toSafeName, toDisplayName, checkName } from './api.js';
@@ -13,8 +13,9 @@ import { store, players, snapshots, exportBackup, importBackup } from './store.j
 import { Prices, LIVE_MARKET } from './prices.js';
 import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
+import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.3.0';
+const VERSION = '3.3.1';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -68,7 +69,8 @@ const state = {
   tileOrder: normalizeOrder(prefs.tileOrder),
   // Lookup tiles sorted by the shown player's numbers ({ key: 'level'|'xp'|'rank'|'top', dir }),
   // or null for the dragged/default layout. Dragging a tile turns a sort into a layout.
-  tileSort: prefs.tileSort && ['level', 'xp', 'rank', 'top'].includes(prefs.tileSort.key) ? { key: prefs.tileSort.key, dir: prefs.tileSort.dir === -1 ? -1 : 1 } : null,
+  // (v3.3.1: or { key: 'game' }, the game's own skills tab: three across, Total level along the bottom)
+  tileSort: prefs.tileSort && ['level', 'xp', 'rank', 'top', 'game'].includes(prefs.tileSort.key) ? { key: prefs.tileSort.key, dir: prefs.tileSort.dir === -1 ? -1 : 1 } : null,
   // (v3.3) The tile picked out with the gold border (a click picks another): Overall till then.
   tileOn: SKILL_BY_ID.has(prefs.tileOn) ? prefs.tileOn : 0,
   calc: null,              // { levels, source } for the combat calculator
@@ -371,22 +373,27 @@ function renderTiles() {
   const ids = fullTileOrder(p).filter(id => shown.includes(id));
   const custom = state.tileSort || state.tileOrder.some((id, i) => id !== DEFAULT_ORDER[i]);
   const ts = state.tileSort;
+  // (v3.3.1) In-game: each tile in its place on the game's skills tab, Overall along the bottom (not dragged)
+  const game = ts?.key === 'game';
+  const place = id => { const at = GAME_LAYOUT.get(id); return !game || !at ? '' : id === 0 ? ` style="grid-area:${at.row} / 1 / ${at.row + 1} / -1"` : ` style="grid-area:${at.row} / ${at.col}"`; };
   const sortBtn = (k, label) => {
     const on = ts?.key === k;
     return `<button type="button" class="${on ? 'on' : ''}" data-tsort="${k}" title="Sort the tiles by ${label}${on ? ' (click again to flip)' : ''}">${label}${on ? (ts.dir === 1 ? ' ▼' : ' ▲') : ''}</button>`;
   };
+  const gameBtn = `<button type="button" class="${game ? 'on' : ''}" data-tsort="game" aria-pressed="${game}" title="${game ? 'Back to your own order of the tiles' : 'The tiles as the game\'s own skills tab has them: three across, Total level along the bottom'}">In-game</button>`;
   el.innerHTML = `<div class="tiles-bar">
       <span>Sort by</span>
-      <div class="seg" role="group" aria-label="Sort tiles">${sortBtn('level', 'Level')}${sortBtn('xp', 'XP')}${sortBtn('rank', 'Rank')}${sortBtn('top', 'Top %')}</div>
-      <span>or drag the tiles.</span>
+      <div class="seg" role="group" aria-label="Sort tiles">${sortBtn('level', 'Level')}${sortBtn('xp', 'XP')}${sortBtn('rank', 'Rank')}${sortBtn('top', 'Top %')}${gameBtn}</div>
+      <span>${game ? 'as the game\'s skills tab has them.' : 'or drag the tiles.'}</span>
       ${custom ? `<button type="button" class="linkish" data-action="tiles-reset">Reset layout</button>` : ''}
     </div>
-    <div class="stats-grid" id="tiles-grid">${ids.map(id => tileHtml(SKILL_BY_ID.get(id), p.stats[id], bounds)).join('')}</div>`;
+    <div class="stats-grid${game ? ' game' : ''}" id="tiles-grid">${ids.map(id => tileHtml(SKILL_BY_ID.get(id), p.stats[id], bounds, place(id))).join('')}</div>`;
 }
 
 // Every tile id in the order they're shown: sorted by the player's numbers (Overall
 // first), or the saved drag layout.
 function fullTileOrder(p) {
+  if (state.tileSort?.key === 'game') return GAME_ORDER;          // (v3.3.1: the game's skills tab, row by row)
   if (!state.tileSort || !p) return state.tileOrder;
   return [0, ...sortSkillsBy(SKILL_IDS, p.stats, state.tileSort.key, state.tileSort.dir)];
 }
@@ -398,7 +405,7 @@ let tileDrag = null;
 function wireTileDrag() {
   tileDrag = sortable({
     root: $('lookup-result'),
-    item: '#tiles-grid .tile',
+    item: '#tiles-grid:not(.game) .tile',          // (v3.3.1: in the game's layout, each tile stays in its place)
     onDrop(tile) {
       const moved = [...tile.parentNode.children].map(t => Number(t.dataset.id));
       const slots = new Set(moved);
@@ -411,11 +418,12 @@ function wireTileDrag() {
   });
 }
 
-function tileHtml(skill, stat, bounds) {
+// place: the tile's grid-area in the game's layout (v3.3.1), as a style attribute, or nothing
+function tileHtml(skill, stat, bounds, place = '') {
   if (!stat) {
     const b = bounds[skill.key];
     const lvl = !b ? `&lt;${MIN_RANKED_LEVEL}` : b.min === b.max ? b.min : `${b.min}–${b.max}`;
-    return `<div class="tile unranked${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}" title="${esc(skill.name)}: below level ${MIN_RANKED_LEVEL}, so not on the hiscores">
+    return `<div class="tile unranked${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}"${place} title="${esc(skill.name)}: below level ${MIN_RANKED_LEVEL}, so not on the hiscores">
       ${iconImg(skill)}
       <div class="v">Level: ${lvl}</div>
       <div class="v">Not ranked</div>
@@ -437,7 +445,7 @@ function tileHtml(skill, stat, bounds) {
       : `<div class="next">Next: ${fmt(pr.remaining)} XP</div>
          ${goalBar || `<div class="pbar" title="${fmt(pr.remaining)} XP to level ${pr.nextLevel} (${pr.pct.toFixed(1)}%)"><div style="width:${pr.pct.toFixed(1)}%"></div></div>`}`;
   }
-  return `<div class="tile${skill.id === 0 ? ' overall' : ''}${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}" title="${esc(skill.name)}">
+  return `<div class="tile${skill.id === 0 ? ' overall' : ''}${skill.id === state.tileOn ? ' on' : ''}" data-id="${skill.id}"${place} title="${esc(skill.name)}">
     ${iconImg(skill)}
     <div class="v c-level">Level: ${fmt(stat.level)}</div>
     <div class="v c-xp">XP: ${fmt(stat.xp)}</div>
@@ -554,15 +562,16 @@ function renderCombatCard() {
     state.calc = p ? { levels: calcLevelsFrom(p), source: p.name } : { levels: { ...FRESH }, source: null };
   }
   const L = state.calc.levels;
+  // (v3.3.1: what gets the next level at the bottom, under the calculator; v2.10.4 to v3.3.0 had it at the top)
   el.innerHTML = `
     <div class="card combat-card">
-      <div id="cc-needs"></div>
       <div id="cc-live"></div>
       <details class="calc" ${p ? '' : 'open'}>
         <summary>Combat calculator${p ? ` (starts from ${esc(p.name)}'s levels)` : ''}</summary>
         ${calcGridHtml(L)}
         <div class="bar"><button type="button" class="btn small" data-action="calc-reset">${p ? `Reset to ${esc(p.name)}` : 'Reset'}</button></div>
       </details>
+      <div id="cc-needs"></div>
     </div>`;
   renderCombatLive();
 }
@@ -582,7 +591,7 @@ function renderCombatLive() {
   const unknown = p && !differs && real.min !== real.max
     ? `<div class="cc-line">Some combat skills are below 15, so they're not on the hiscores. Their lowest possible levels are used below, and you can change them in the calculator.</div>` : '';
   el.innerHTML = combatLiveHtml(L, head, unknown);
-  // At the top: what gets the next level, from the player's levels now (a what-if
+  // At the bottom (v3.3.1; till then the top): what gets the next level, from the player's levels now (a what-if
   // typed into the calculator changes none of it), or with no player, from the
   // calculator's levels. Redrawn only when it reads differently.
   const top = $('cc-needs');
@@ -738,7 +747,10 @@ function renderCompare() {
   const foot = cols.filter(c => c.p).length > 1
     ? `<tfoot><tr><td class="sk">Skills led</td>${cols.map((c, i) => `<td class="p">${c.p ? `<span class="lead-count">${leads[i]}</span> / ${ids.filter(id => id !== 0).length}` : ''}</td>`).join('')}</tr></tfoot>`
     : '';
+  // (v3.3.1: the table kept where it was scrolled to, as each player comes in)
+  const scrolls = tableScrolls(box);
   box.innerHTML = `${compareSortNote(cols, mode)}<div class="table-wrap"><table class="grid cmp"><thead><tr>${skillHead}${head}</tr></thead><tbody>${rows.join('')}</tbody>${foot}</table></div>`;
+  restoreTableScrolls(box, scrolls);
 }
 
 // Skills (never Combat or Overall, which stay on top) in the order the table is sorted by.
@@ -885,6 +897,7 @@ function renderGains() {
     totalXp = overallNow.xp - overallThen.xp;
     totalLevels = overallNow.level - overallThen.level;
   }
+  const scrolls = tableScrolls(box);           // (v3.3.1)
   box.innerHTML = `
     <div class="summary">
       <span><b>${esc(state.gains.player)}</b></span>
@@ -898,6 +911,7 @@ function renderGains() {
       <tbody>${rows || `<tr><td class="l" colspan="7">No changes in this period.</td></tr>`}</tbody>
     </table></div>
     ${historyFoot(snaps)}`;
+  restoreTableScrolls(box, scrolls);
 }
 
 // The snapshots themselves can be listed, and deleted one at a time (newest first).
@@ -1214,7 +1228,9 @@ function wire() {
     const tsort = t.closest('[data-tsort]');
     if (tsort) {
       const k = tsort.dataset.tsort;
-      state.tileSort = state.tileSort?.key === k ? { key: k, dir: -state.tileSort.dir } : { key: k, dir: 1 };
+      // (v3.3.1: In-game clicked again is your own order again)
+      state.tileSort = k === 'game' ? (state.tileSort?.key === 'game' ? null : { key: 'game', dir: 1 })
+        : state.tileSort?.key === k ? { key: k, dir: -state.tileSort.dir } : { key: k, dir: 1 };
       savePrefs(); renderTiles();
       return;
     }
