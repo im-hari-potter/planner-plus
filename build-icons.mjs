@@ -11,9 +11,13 @@
 // blurry), in the frame of the game's own round side icon: the quest list's (sprites/sideicons.png #2),
 // a light grey disc in a black ring that's heavier at the bottom right, its star painted out, and a
 // symbol drawn on it here pixel by pixel (a magnifying glass, scales, an arrow, a trophy, a bar chart,
-// a sword, a money bag, coins).
+// coins, a sword). Bank's (v3.3.2) is the game's own: the gold "$" of the bank's minimap icon
+// (sprites/mapfunction.png #5), drawn bigger by drawing some of its rows and columns twice (18 x 11 from
+// 13 x 8), so its pixels stay whole. In the tabs' order (v3.3.2: NPCs last).
 // gear.webp, rares.webp (v3.3): the Bank and Prices tabs' Gear and Rares buttons: the game's Worn
 // Equipment side icon (sideicons #4) and a blue partyhat (its item icon), each cut to what's drawn.
+// (v3.3.2) Gear's figure 4 pixels shorter in the legs (4 of the 8 rows they're the same for), so it's
+// 24 tall like the skills' icons and Rares, and clear of a button's gold line.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -179,25 +183,6 @@ const SYMBOLS = {
     '..KK....K........',
     '.................',
   ],
-  bank: [
-    '........K........',
-    '.....KKKyKKK.....',
-    '....KyyyyyggK....',
-    '...KyyKKyKKdgK...',
-    '...KygK.yK.KK....',
-    '...KygKKyK.......',
-    '....KyyyygKKK....',
-    '.....KKKyyyggK...',
-    '.......KyKKdgK...',
-    '...KK..KyK.KdgK..',
-    '...KygKKyKKKdgK..',
-    '....KyyyygggdK...',
-    '.....KKKgKKKK....',
-    '........K........',
-    '.................',
-    '.................',
-    '.................',
-  ],
   // (two stacks of coins)
   prices: [
     '.................',
@@ -220,7 +205,13 @@ const SYMBOLS = {
   ],
 };
 // (the sheet's order: the tabs')
-const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'npcs', 'bank', 'prices'];
+const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'npcs'];
+// (v3.3.2) The bank's "$": the minimap icon's rows 1 to 13 and columns 4 to 11, each that many pixels here
+// (18 rows, 11 columns), drawn from (9, 6) of the frame: the bar of the "$" down the middle of the disc,
+// from its top to its bottom, as on the minimap.
+const BANK_ROWS = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1];
+const BANK_COLS = [1, 2, 1, 2, 1, 2, 1, 1];
+const BANK_AT = [9, 6];
 
 // partyhat: the blue partyhat's 32 x 32 item icon, RGBA.
 export async function appIcons(content, { partyhat }) {
@@ -249,11 +240,42 @@ export async function appIcons(content, { partyhat }) {
     }));
     return px;
   };
+  // (v3.3.2) Bank: the minimap's bank icon, its "$" on this frame. The icon's grey disc and black ring are
+  // left out (the frame has its own), and so is a pixel of its grey shadow that would fall on the ring.
+  const map = await cellOf(content, 'mapfunction', 15, 5);
+  const mapAt = (x, y) => (y * 15 + x) * 4;
+  const same = (i, r, g, b) => map[i] === r && map[i + 1] === g && map[i + 2] === b;
+  let gold = 0;
+  for (let i = 0; i < map.length; i += 4) if (map[i + 3] && same(i, 232, 209, 78)) gold++;
+  if (gold < 10) throw new Error('sprites/mapfunction.png: icon 5 is no longer the bank\'s');
+  const bank = () => {
+    const px = Buffer.from(frame);
+    let Y = BANK_AT[1];
+    BANK_ROWS.forEach((rows, r) => {
+      for (let k = 0; k < rows; k++, Y++) {
+        let X = BANK_AT[0];
+        BANK_COLS.forEach((cols, c) => {
+          for (let j = 0; j < cols; j++, X++) {
+            const s = mapAt(4 + c, 1 + r);
+            if (!map[s + 3] || same(s, 191, 191, 191) || (map[s] <= 1 && map[s + 1] <= 1 && map[s + 2] <= 1)) continue;
+            const i = at(X, Y);
+            if (!frame[i + 3]) throw new Error(`tab icons: bank has a pixel outside the frame at ${X},${Y}`);
+            if (ring(i)) {
+              if (same(s, 159, 159, 159)) continue;       // (its shadow)
+              throw new Error(`tab icons: bank has a pixel on the ring at ${X},${Y}`);
+            }
+            px.set([map[s], map[s + 1], map[s + 2], 255], i);
+          }
+        });
+      }
+    });
+    return px;
+  };
   // (the sheet's cells: x 2..27, y 3..26 of the 30 x 30)
   const CW = 26, CH = 24, OX = 2, OY = 3;
   const sheet = Buffer.alloc(TAB_ORDER.length * CW * CH * 4);
   TAB_ORDER.forEach((name, k) => {
-    const px = draw(name, SYMBOLS[name]);
+    const px = name === 'bank' ? bank() : draw(name, SYMBOLS[name]);
     for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
       if (!px[at(x, y) + 3]) continue;
       const X = x - OX, Y = y - OY;
@@ -264,13 +286,22 @@ export async function appIcons(content, { partyhat }) {
   const tabs = await sharp(sheet, { raw: { width: TAB_ORDER.length * CW, height: CH, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
   await writeFile('tabicons.png', tabs);
 
-  const gear = trim(await cellOf(content, 'sideicons', F, 4), F, F);
-  await writeFile('gear.webp', await webp(gear));
+  // (Gear: its legs 4 pixels shorter, v3.3.2: rows 21 to 24 left out of the 8 the same, 17 to 24)
+  const worn = trim(await cellOf(content, 'sideicons', F, 4), F, F);
+  const row = y => worn.px.subarray(y * worn.width * 4, (y + 1) * worn.width * 4);
+  if (worn.width !== 25 || worn.height !== 28 || [18, 19, 20, 21, 22, 23, 24].some(y => !row(y).equals(row(17)))) {
+    throw new Error(`sprites/sideicons.png: icon 4 (Worn Equipment) isn't the one this knows: ${worn.width} x ${worn.height}, its legs not rows 17 to 24`);
+  }
+  const keep = [...Array(worn.height).keys()].filter(y => y < 21 || y > 24);
+  const gear = { px: Buffer.concat(keep.map(row)), width: worn.width, height: keep.length };
+  const gearFile = await webp(gear);
+  await writeFile('gear.webp', gearFile);
   const rares = trim(partyhat, 32, 32);
   await writeFile('rares.webp', await webp(rares));
-  // (style.css asks for the sheet stamped with what's in it, so a browser never keeps an old one)
-  const stamp = createHash('sha1').update(tabs).digest('hex').slice(0, 10);
-  console.log(`slayer.webp: the game's Slayer icon (staticons2 #1); tabicons.png: ${TAB_ORDER.join(', ')} (${CW} x ${CH}; style.css: tabicons.png?v=${stamp}); gear.webp ${gear.width} x ${gear.height} (sideicons #4); rares.webp ${rares.width} x ${rares.height} (a blue partyhat)`);
+  // (style.css asks for the sheet, and Gear's icon (v3.3.2), stamped with what's in them, so a browser never
+  // keeps an old one at the old size)
+  const stamp = buf => createHash('sha1').update(buf).digest('hex').slice(0, 10);
+  console.log(`slayer.webp: the game's Slayer icon (staticons2 #1); tabicons.png: ${TAB_ORDER.join(', ')} (${CW} x ${CH}; style.css: tabicons.png?v=${stamp(tabs)}); gear.webp ${gear.width} x ${gear.height} (sideicons #4; style.css: gear.webp?v=${stamp(gearFile)}); rares.webp ${rares.width} x ${rares.height} (a blue partyhat)`);
 }
 
 // On its own: the partyhat from the app's own sheet.

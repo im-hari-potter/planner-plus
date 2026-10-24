@@ -22,9 +22,9 @@
         <button class="tab" data-tab="leaders" type="button"><span class="ti ti-leaders" aria-hidden="true"></span>Leaderboard</button>
         <span class="tab-sep" aria-hidden="true"></span>
         <button class="tab plan-tab" data-tab="goals" type="button"><span class="ti ti-goals" aria-hidden="true"></span>Goals</button>
-        <button class="tab plan-tab" data-tab="npcs" type="button" title="The NPC database: every monster's stats, XP and drops, and plans of kills"><span class="ti ti-npcs" aria-hidden="true"></span>NPCs</button>
         <button class="tab plan-tab" data-tab="bank" type="button"><span class="ti ti-bank" aria-hidden="true"></span>Bank</button>
         <button class="tab plan-tab" data-tab="prices" type="button"><span class="ti ti-prices" aria-hidden="true"></span>Prices</button>
+        <button class="tab plan-tab" data-tab="npcs" type="button" title="The NPC database: every monster's stats, XP and drops, and plans of kills"><span class="ti ti-npcs" aria-hidden="true"></span>NPCs</button>
       </nav>
       <div class="top-right">
         <div class="seg" id="filter-seg" role="group" aria-label="Which skills to show">
@@ -116,13 +116,6 @@
         <div id="goals-list"></div>
       </section>
 
-      <!-- NPCs: the monster database -->
-      <section class="view" id="view-npcs" hidden>
-        <div id="npcs-account"></div>
-        <div class="msg" id="npcs-msg" hidden></div>
-        <div id="npcs-body"></div>
-      </section>
-
       <!-- Bank -->
       <section class="view" id="view-bank" hidden>
         <div id="bank-account"></div>
@@ -137,6 +130,13 @@
         <div id="prices-head"></div>
         <div class="msg" id="prices-msg" hidden></div>
         <div id="prices-body"></div>
+      </section>
+
+      <!-- NPCs: the monster database -->
+      <section class="view" id="view-npcs" hidden>
+        <div id="npcs-account"></div>
+        <div class="msg" id="npcs-msg" hidden></div>
+        <div id="npcs-body"></div>
       </section>
     </main>
 

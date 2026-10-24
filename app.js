@@ -15,7 +15,7 @@ import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.3.1';
+const VERSION = '3.3.2';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -36,8 +36,8 @@ const prices = new Prices(LOCAL
   ? { origin: new URL('market', location.href).href, routes: ['page', 'api'], gapMs: 50 }
   : { origin: LIVE_MARKET, routes: isElectron() ? ['page', 'api'] : ['api'] });
 if (LOCAL) window.__skills = { prices };                   // for the test scripts
-const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'npcs', 'bank', 'prices'];
-const PLAN_TABS = ['goals', 'npcs', 'bank', 'prices'];
+const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'npcs'];
+const PLAN_TABS = ['goals', 'bank', 'prices', 'npcs'];
 
 // ── State ────────────────────────────────────────────────────────────────
 const prefs = store.get('prefs', {});
@@ -562,16 +562,17 @@ function renderCombatCard() {
     state.calc = p ? { levels: calcLevelsFrom(p), source: p.name } : { levels: { ...FRESH }, source: null };
   }
   const L = state.calc.levels;
-  // (v3.3.1: what gets the next level at the bottom, under the calculator; v2.10.4 to v3.3.0 had it at the top)
+  // (v3.3.2: the combat level, then what gets the next level, then the calculator at the bottom; v3.3.1 had
+  // the calculator in the middle, v2.10.4 to v3.3.0 what gets the next level at the top)
   el.innerHTML = `
     <div class="card combat-card">
       <div id="cc-live"></div>
+      <div id="cc-needs"></div>
       <details class="calc" ${p ? '' : 'open'}>
         <summary>Combat calculator${p ? ` (starts from ${esc(p.name)}'s levels)` : ''}</summary>
         ${calcGridHtml(L)}
         <div class="bar"><button type="button" class="btn small" data-action="calc-reset">${p ? `Reset to ${esc(p.name)}` : 'Reset'}</button></div>
       </details>
-      <div id="cc-needs"></div>
     </div>`;
   renderCombatLive();
 }
@@ -591,7 +592,7 @@ function renderCombatLive() {
   const unknown = p && !differs && real.min !== real.max
     ? `<div class="cc-line">Some combat skills are below 15, so they're not on the hiscores. Their lowest possible levels are used below, and you can change them in the calculator.</div>` : '';
   el.innerHTML = combatLiveHtml(L, head, unknown);
-  // At the bottom (v3.3.1; till then the top): what gets the next level, from the player's levels now (a what-if
+  // Under the combat level, above the calculator (v3.3.2; v3.3.1 under the calculator, till then the top): what gets the next level, from the player's levels now (a what-if
   // typed into the calculator changes none of it), or with no player, from the
   // calculator's levels. Redrawn only when it reads differently.
   const top = $('cc-needs');

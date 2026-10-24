@@ -3,7 +3,7 @@
 //
 // npcPictures: LostHQ's renders of the game's NPC models (LostHQ/2004, img/npc_spritesheet.png:
 //   256 x 256 cells, one for each NPC by its id in the cache, which is Content's pack/npc.pack id),
-//   made smaller, into npcpics.webp.
+//   made smaller (176 x 176: v3.3.2, 112 till then), into npcpics.webp.
 // npcPlaces: the minimaps, drawn here from Lost City's own map files the way the game client draws
 //   its minimap (Client-TS: ClientBuild, World, Client): each square of ground 4 by 4 pixels, its
 //   underlay's colour blended with the ones around it (10 by 10 squares) and its overlay's over it in
@@ -20,7 +20,7 @@ const sharp = createRequire(import.meta.url)('sharp');   // from NODE_PATH / a g
 
 // ── Pictures ──────────────────────────────────────────────────────────────
 // list: [{ id, pack }] (pack: the NPC's id). -> { sheet: PNG/WebP buffer, size, perRow, index: Map id -> cell }
-export async function npcPictures({ lostHq, list, size = 112, perRow = 16 }) {
+export async function npcPictures({ lostHq, list, size = 176, perRow = 16 }) {
   const { data, info } = await sharp(join(lostHq, 'img/npc_spritesheet.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const CELL = 256, cols = info.width / CELL, rows = info.height / CELL;
   if (!Number.isInteger(cols) || !Number.isInteger(rows)) throw new Error(`npc pictures: the sheet is ${info.width} x ${info.height}, not in cells of ${CELL}`);

@@ -254,20 +254,22 @@ export function createNpcUi(P) {
   // (v3.3) A monster's page: its picture (LostHQ's render of the game's model), its numbers, a minimap of
   // where most of them are (drawn from Lost City's map files, a yellow dot each, as the game's minimap has
   // them) and every place they are, the most first. The pictures and minimaps are two sheets, each loaded
-  // once a page shows one (npcdata.js NPC_PICS, NPC_MAPS).
+  // once a page shows one (npcdata.js NPC_PICS, NPC_MAPS). (v3.3.2: the picture bigger and the minimap
+  // smaller, about as tall as each other; its hitpoints no longer in the head as well as with its stats)
   const PLACES_SHOWN = 6;
   function monsterTop(m) {
     const i = info(m.id);
     const pic = i?.pic == null ? '' : `<div class="npc-pic" role="img" aria-label="${esc(m.name)}" title="${esc(`${m.name}: LostHQ's render of the game's model`)}"
-      style="background-image:url('${NPC_PICS.sheet}');background-size:${NPC_PICS.perRow * NPC_PICS.size}px auto;background-position:-${(i.pic % NPC_PICS.perRow) * NPC_PICS.size}px -${Math.floor(i.pic / NPC_PICS.perRow) * NPC_PICS.size}px"></div>`;
+      style="background-image:url('${NPC_PICS.sheet}');--ps:${NPC_PICS.size};--pr:${NPC_PICS.perRow};--px:${i.pic % NPC_PICS.perRow};--py:${Math.floor(i.pic / NPC_PICS.perRow)}"></div>`;
     const where = i?.where || [];
     const place = ([text, n]) => `<li>${esc(text)}${where.length > 1 || n > 1 ? ` <span class="c-faint">(${fmt(n)})</span>` : ''}</li>`;
     const places = !where.length ? (m.note ? '' : '<p class="c-faint small-note">Not on the map: a script puts it in the world.</p>')
       : `<div class="npc-where"><h5>Where ${m.n === 1 ? 'it is' : 'they are'}</h5><ul>${where.slice(0, PLACES_SHOWN).map(place).join('')}</ul>${where.length > PLACES_SHOWN
         ? `<details><summary>${fmt(where.length - PLACES_SHOWN)} more place${where.length - PLACES_SHOWN === 1 ? '' : 's'}</summary><ul>${where.slice(PLACES_SHOWN).map(place).join('')}</ul></details>` : ''}</div>`;
-    const map = i?.map == null ? '' : `<figure class="npc-map"><div class="npc-map-img" role="img" aria-label="${esc(m.n === 1 ? 'A minimap of where it is' : 'A minimap of where the biggest group of them is')}"
-      style="--sheet:url('${NPC_MAPS.sheet}');--mw:${NPC_MAPS.w};--mh:${NPC_MAPS.h};--sw:${NPC_MAPS.perRow * NPC_MAPS.w};--mx:${(i.map % NPC_MAPS.perRow) * NPC_MAPS.w};--my:${Math.floor(i.map / NPC_MAPS.perRow) * NPC_MAPS.h}"></div>
-      <figcaption class="c-faint small-note">${m.n === 1 ? 'Where it is, as on the game\'s minimap' : `${where.length > 1 ? 'The biggest group of them' : 'Where they are'}: a yellow dot each, as on the game's minimap`}</figcaption></figure>`;
+    // (v3.3.2: what the map shows is its tip, no longer a line under it)
+    const mapTip = m.n === 1 ? 'Where it is, as on the game\'s minimap' : `${where.length > 1 ? 'The biggest group of them' : 'Where they are'}: a yellow dot each, as on the game's minimap`;
+    const map = i?.map == null ? '' : `<div class="npc-map"><div class="npc-map-img" role="img" aria-label="${esc(m.n === 1 ? 'A minimap of where it is' : 'A minimap of where the biggest group of them is')}" title="${esc(mapTip)}"
+      style="--sheet:url('${NPC_MAPS.sheet}');--mw:${NPC_MAPS.w};--mh:${NPC_MAPS.h};--sw:${NPC_MAPS.perRow * NPC_MAPS.w};--mx:${(i.map % NPC_MAPS.perRow) * NPC_MAPS.w};--my:${Math.floor(i.map / NPC_MAPS.perRow) * NPC_MAPS.h}"></div></div>`;
     return `<div class="npc-top${pic ? ' has-pic' : ''}">${pic}<div class="npc-facts">${monsterFacts(m)}${places}</div>${map}</div>`;
   }
 
@@ -428,8 +430,7 @@ export function createNpcUi(P) {
         ${plans.length ? `<div class="c-faint small-note">Already planned: ${plans.map(g => `<button type="button" class="linkish" data-act="npc-goto" data-goal-id="${g.id}">${fmt(g.value)} kills</button>`).join(', ')}</div>` : ''}`;
     return `<div class="card npc-page" data-npc-page="${m.id}">
       <div class="npc-head"><button type="button" class="linkish" data-act="npc-back">‹ All monsters</button>
-        <h3>${esc(m.name)} <span class="c-faint">level ${m.level}</span></h3><span class="grow"></span>
-        <span class="c-muted small-note">${fmt(m.hp)} hitpoints</span></div>
+        <h3>${esc(m.name)} <span class="c-faint">level ${m.level}</span></h3></div>
       ${monsterTop(m)}
       <div class="plan-sec"><h4>Plan kills</h4>${planBox}</div>
       <div class="plan-sec"><h4>XP a kill <span class="c-faint small-note">(highlighted: the style your plan is in; click another to plan in it)</span></h4>
@@ -1694,7 +1695,8 @@ export function createNpcUi(P) {
     delete N.kills[npc];
     delete N.planStyle[npc];
     P.showMsg('npcs-msg', '');
-    goTo(goal.id);
+    // (v3.3.2: on Goals with the Slayer goals alone, One at a time, as a goal set there is)
+    P.showNewGoal(goal.id);
     return true;
   }
 

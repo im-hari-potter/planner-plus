@@ -35,9 +35,9 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 |---|---|
 | **Lookup**, **Compare**, **Gains**, **Leaderboard** | The hiscores: any player's levels, XP, rank and Top %; players side by side; XP gained since last time; any skill's rankings. |
 | **Goals** | Your goals, each with its **Plan (Calculator)**: every skill, your total level, your combat level, and Slayer (a plan of kills and their loot). |
-| **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance. |
 | **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
+| **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance. |
 
 The tabs stay at the top of the window as you scroll, each with its own icon. An item's name,
 anywhere, takes you to its price on the Prices tab. Click a column's name to sort a table by it, and
@@ -67,10 +67,11 @@ in that skill.*
 
 - Sort the tiles by level, XP, rank or Top %, or drag them into your own order. **In-game** lays
   them out as the game's own skills tab: three across, Total level along the bottom.
-- **Combat** shows the combat skills, your combat level by the game's own formula, a calculator to
-  try other levels, and what the next level takes.
+- **Combat** shows the combat skills, your combat level by the game's own formula, what the next
+  level takes, and a calculator to try other levels.
 - Once you have goals, a tile's bar is your progress toward its goal, and its goal line takes you
-  to that goal on the Goals tab.
+  to that goal on the Goals tab. A rank or top % goal's line says the XP to go too: what passes
+  whoever holds that rank, as the goal's plan worked it out.
 - Click a tile to pick it out in gold (Overall is, till then).
 - The names you look up are kept under **Recent**; ✕ takes one off. The last player you looked up
   is there again whenever the tab opens.
@@ -104,10 +105,12 @@ sits under **Your goals** with its progress since you set it, and its **Plan (Ca
 - **Slayer** isn't in this version of the game yet; here it's the home of monster plans. See
   [Combat, monsters and loot](#combat-monsters-and-loot).
 - Move a goal up or down, to the very top or bottom (the arrows with a bar), or drag it by its
-  name. Filter your goals: in progress or reached, and by skill. Each skill's button shows its goals
-  or leaves them out, as many as you like (with none on, every goal shows); Total level, Combat
-  level and Slayer have buttons of their own. **Every skill** shows them all again. Tick **One at a
-  time** for one skill's goals at a time.
+  name (the dots at its start). Filter your goals: in progress or reached, and by skill. Each
+  skill's button shows its goals or leaves them out, as many as you like (with none on, every goal
+  shows); Total level, Combat level and Slayer have buttons of their own. **Every skill** shows
+  them all again. Tick **One at a time** for one skill's goals at a time.
+- A goal you set is added at the bottom, and you're taken to it: **One at a time** is ticked with
+  its skill's button on, so its skill's goals are the ones shown.
 
 **Plan (Calculator)** opens a goal's plan, in three parts:
 

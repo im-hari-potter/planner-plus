@@ -463,5 +463,5 @@ export const NPC_INFO = {
   "king_black_dragon_276": {"drops":"king_black_dragon_276","under":1,"hits":["melee","magic"],"stats":[240,240,240,240,1,240],"bonus":{"stabdefence":70,"slashdefence":90,"crushdefence":90,"rangedefence":70,"magicdefence":80},"style":"stab","speed":4,"respawn":150,"size":5,"examine":"The biggest meanest dragon around.","pic":312,"map":308,"where":[["Under Sorcerers' Tower",1]]},
   "kalphite_queen_333": {"drops":"kalphite_queen_333","under":1,"hits":["melee","ranged","magic"],"stats":[300,300,300,255,1,150],"bonus":{"stabdefence":100,"slashdefence":100,"crushdefence":100,"rangedefence":10,"magicdefence":10},"style":"crush","speed":4,"size":5,"examine":"I don't think insect repellent will work...","pic":313,"map":309,"where":[["Underground, off the world map",1]]},
 };
-export const NPC_PICS = {"sheet":"npcpics.webp?v=a0f7130a1a","size":112,"perRow":16};
+export const NPC_PICS = {"sheet":"npcpics.webp?v=4fe432ce14","size":176,"perRow":16};
 export const NPC_MAPS = {"sheet":"npcmaps.webp?v=4f190f9ebd","w":192,"h":144,"perRow":8};

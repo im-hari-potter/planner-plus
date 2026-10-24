@@ -424,7 +424,7 @@ export function createPlanner(ctx) {
     pickFiles: () => pickFiles('loot-file'),
     hideOffBox: (...a) => hideOffBox(...a),
     priceLink: slug => priceLink(slug), pricedLine: slug => pricedLine(slug), moveButtons: (...a) => moveButtons(...a),
-    goToGoal: id => goToGoal(id),
+    goToGoal: id => goToGoal(id), showNewGoal: id => showNewGoal(id),
   }));
 
   // ── Storage per account ─────────────────────────────────────────────────
@@ -1275,6 +1275,8 @@ export function createPlanner(ctx) {
     saveGoals(list.map(g => (set.has(g.id) ? byId.get(ids[k++]) : g)));
   }
   const arm = btn => { btn.dataset.armed = '1'; btn.textContent = 'Remove?'; btn.classList.add('armed'); };
+  // (v3.3.2) six dots at the start of a goal's head: what can be dragged
+  const GRIP = '<span class="grip" title="Drag to move this goal" aria-hidden="true"></span>';
   function renderGoals() {
     if (stepDrag?.hold() || goalDrag?.hold()) return;          // don't pull a plan's lines, or a goal, out from under a drag
     planCache = new Map(); combatCache = null;      // (worked out afresh, once for this redraw)
@@ -1284,9 +1286,9 @@ export function createPlanner(ctx) {
     const box = $('goals-list');
     if (!S.account) { box.innerHTML = ''; return; }
     // (the goals you've set, under a title of their own: the buttons above are for setting one)
-    const title = `<h4 class="row-title goals-title">Your goals</h4>`;
+    const title = (hint = '') => `<h4 class="row-title goals-title">Your goals${hint}</h4>`;
     if (!list.length) {
-      box.innerHTML = `${title}<div class="empty">No goals yet. Pick a skill above and set a level, XP, rank or top % to reach. The first two buttons are your total level and your combat level.</div>`;
+      box.innerHTML = `${title()}<div class="empty">No goals yet. Pick a skill above and set a level, XP, rank or top % to reach. The first two buttons are your total level and your combat level.</div>`;
       return;
     }
     // A goal set before your XP had loaded starts counting from the first XP seen
@@ -1346,18 +1348,20 @@ export function createPlanner(ctx) {
             : on ? (S.only.size === 1 ? 'Show every goal' : `Leave out ${name}`) : S.only.size ? `${name} too` : `Only ${name}`;
           return `<button type="button" class="skill-btn${on ? ' on' : ''}" data-gonly="${k}" title="${title}" aria-pressed="${on}">${iconImg(sk)}</button>`;
         }).join('')}</div>
-        <label class="check small-note gonly-one" title="Ticked, a skill's button shows its goals alone, and another click shows every goal again. Unticked, each button turns its goals on or off, as many as you like."><input type="checkbox" data-gonly-one="1"${S.onlyOne ? ' checked' : ''}> One at a time</label>
-        ${S.only.size ? '<button type="button" class="linkish small-note" data-act="gonly-clear">Every skill</button>' : ''}` : ''}
+        <span class="gonly-end"><label class="check small-note gonly-one" title="Ticked, a skill's button shows its goals alone, and another click shows every goal again. Unticked, each button turns its goals on or off, as many as you like."><input type="checkbox" data-gonly-one="1"${S.onlyOne ? ' checked' : ''}> One at a time</label>${S.only.size ? '<button type="button" class="linkish small-note" data-act="gonly-clear">Every skill</button>' : ''}</span>` : ''}
       </div>${links ? `<div class="goal-links">${links}</div>` : ''}` : '';
     // (a "Remove?" waiting for its second click stays that way through a redraw)
     const armed = box.querySelector('[data-act="remove-goal"][data-armed]')?.closest('[data-goal]')?.dataset.goal;
     // (v3.1) Above the goals: new combat XP to count as Slayer goals' kills (npc-ui.js)
     // (v3.3.1: each plan's tables kept where they were scrolled to)
     const scrolls = tableScrolls(box);
-    box.innerHTML = title + bar + npc().sessionHtml() + (shown.length
+    // (v3.3.2) That goals can be dragged: a word by the title, and a grip at the start of each one's head
+    const drag = shown.length > 1;
+    box.innerHTML = title(drag ? ' <span class="small-note c-faint drag-hint">Drag a goal by its name to move it.</span>' : '') + bar + npc().sessionHtml() + (shown.length
       ? shown.map((g, i) => (isCombatGoal(g) ? combatGoalCard : isTotalGoal(g) ? totalGoalCard : isSlayerGoal(g) ? npc().goalCard : goalCard)(g, i === 0, i === shown.length - 1)).join('')
       : `<div class="empty">No goals match. <button type="button" class="linkish" data-act="show-all-goals">Show all goals</button></div>`);
     restoreTableScrolls(box, scrolls);
+    if (drag) for (const head of box.querySelectorAll(':scope > .goal > .goal-head')) head.insertAdjacentHTML('afterbegin', GRIP);
     const again = armed && [...box.querySelectorAll('[data-goal]')].find(c => c.dataset.goal === armed)?.querySelector('[data-act="remove-goal"]');
     if (again) arm(again);
     for (const card of box.querySelectorAll('[data-goal]')) applySearch(card);
@@ -1564,9 +1568,8 @@ export function createPlanner(ctx) {
     list.push(goal);
     saveGoals(list);
     if (hasPlan(goal)) S.open.add(goal.id);
-    saveUi();
     showMsg('goals-msg', '');
-    renderGoals();
+    showNewGoal(goal.id);
     return true;
   }
 
@@ -3197,7 +3200,7 @@ export function createPlanner(ctx) {
       if (S.newGoal.skill === SLAYER.key) {
         const r = npc().addFromForm(form);
         if (r.problem) showMsg('goals-msg', r.problem, 'error');
-        else { showMsg('goals-msg', ''); renderGoals(); }
+        else { showMsg('goals-msg', ''); showNewGoal(r.goal.id); }
       } else addGoal(form.value.value);
     }
     if (form.dataset.form === 'edit-goal') {
@@ -3625,8 +3628,13 @@ export function createPlanner(ctx) {
         const st = profile.stats[0];
         const left = Math.max(0, Math.ceil((t.value * 10 - (st.xp10 ?? st.xp * 10)) / 10));
         text = `Goal ${gpShort(t.value)} XP${left ? ` · ${gpShort(left)} XP to go` : ' ✓'}`;
-      } else if (t.type === 'rank' || t.type === 'top') text = t.type === 'rank' ? `Goal rank ${fmt(t.value)}` : `Goal top ${formatPercent(t.value)}%`;
-      else {
+      } else if (t.type === 'rank' || t.type === 'top') {
+        // (v3.3.2) the levels to pass whoever holds that rank (Overall ranks by total level first), as its plan on the
+        // Goals tab worked them out and keeps them with the goal: never looked up from here; ✓ once the rank is yours
+        const c = t.target, rank = profile.stats[0]?.rank;
+        const left = !c?.rank ? null : rank && rank <= c.rank ? 0 : c.level != null ? Math.max(0, Math.min(MAX_TOTAL, c.level + 1) - now) : null;
+        text = `${t.type === 'rank' ? `Goal rank ${fmt(t.value)}` : `Goal top ${formatPercent(t.value)}%`}${left == null ? '' : left ? ` · ${fmt(left)} level${left === 1 ? '' : 's'} to go` : ' ✓'}`;
+      } else {
         const left = Math.max(0, t.value - now);
         text = `Goal ${fmt(t.value)}${left ? ` · ${fmt(left)} level${left === 1 ? '' : 's'} to go` : ' ✓'}`;
       }
@@ -3642,9 +3650,22 @@ export function createPlanner(ctx) {
       const left = cur == null ? null : Math.max(0, target - cur);
       text = `${g.type === 'level' ? `Goal ${g.value}` : `Goal ${gpShort(g.value)} XP`}${left != null ? (left ? ` · ${gpShort(Math.ceil(left / 10))} XP to go` : ' ✓') : ''}`;
     } else {
-      text = g.type === 'rank' ? `Goal rank ${fmt(g.value)}` : `Goal top ${formatPercent(g.value)}%`;
+      // (v3.3.2) a rank or top % goal: the XP to pass whoever holds that rank, as its plan worked it out; ✓ once the
+      // rank is yours
+      const aim = st ? keptAim(g, st) : null;
+      const left = !aim ? null : aim.reached ? 0 : Math.max(0, aim.xp10 - cur);
+      text = `${g.type === 'rank' ? `Goal rank ${fmt(g.value)}` : `Goal top ${formatPercent(g.value)}%`}${left == null ? '' : left ? ` · ${gpShort(Math.ceil(left / 10))} XP to go` : ' ✓'}`;
     }
     return goalLine(g, text);
+  }
+  // (v3.3.2) A rank or top % goal's aim for a tile: what its plan on the Goals tab worked out and keeps with the
+  // goal (whoever held the rank it takes, and the XP that passes them), never looked up from here: reached once
+  // the tile's rank is that or better; null before its plan has worked it out.
+  function keptAim(g, st) {
+    const c = g.target;
+    if (!c?.rank) return null;
+    if (st.rank && st.rank <= c.rank) return { reached: true };
+    return c.xp10 != null ? { xp10: c.xp10 } : null;
   }
   // (v3.3) The line opens the goal on the Goals tab (app.js: data-goal-go).
   const goalLine = (g, text) => `<a class="goal-line" href="#goals" data-goal-go="${esc(g.id)}" draggable="false" title="Go to this goal on the Goals tab">${esc(text)}</a>`;
@@ -3656,12 +3677,27 @@ export function createPlanner(ctx) {
     const g = goals().find(x => x.id === id);
     if (!g) return false;
     S.open.add(id);
-    if (S.only.size && !S.only.has(g.skill)) S.only.add(g.skill);
+    // (v3.3.2: one at a time, that skill's goals in place of the one shown)
+    if (S.only.size && !S.only.has(g.skill)) { if (S.onlyOne) S.only = new Set([g.skill]); else S.only.add(g.skill); }
     if (S.show !== 'all') S.show = 'all';
     saveUi();
     S.lit = { id, at: Date.now() };
     S.scrollGoal = { id, at: Date.now() };
     // (from another tab, Lookup's too: the Goals tab, drawn as it opens; renderGoals scrolls to it)
+    if (S.tab !== 'goals' || $('view-goals')?.hidden) ctx.goTab('goals'); else renderGoals();
+    return true;
+  }
+  // (v3.3.2) A goal just set, at the bottom of your goals: shown with its skill's alone (One at a time, that
+  // skill's button on), scrolled to and lit. From the new goal's form, or a monster's page on NPCs.
+  function showNewGoal(id) {
+    const g = goals().find(x => x.id === id);
+    if (!g) return false;
+    S.onlyOne = true;
+    S.only = new Set([g.skill]);
+    if (S.show === 'done') S.show = 'all';
+    saveUi();
+    S.lit = { id, at: Date.now() };
+    S.scrollGoal = { id, at: Date.now() };
     if (S.tab !== 'goals' || $('view-goals')?.hidden) ctx.goTab('goals'); else renderGoals();
     return true;
   }
@@ -3674,10 +3710,12 @@ export function createPlanner(ctx) {
     const st = profile.stats[skill.id];
     if (!g || !st) return '';
     const cur = st.xp10 ?? st.xp * 10;
-    // (a rank or top % goal: the XP of whoever holds that rank, once it's been looked up)
-    const target = g.type === 'level' || g.type === 'xp' ? goalTargetXp10(g) : g.target?.xp10;
-    if (target == null) return '';
-    const reached = cur >= target;
+    // (a rank or top % goal: the XP to pass whoever holds that rank, as its plan worked it out; v3.3.2: reached
+    // once the rank is yours, as the goal line has it)
+    const aim = g.type === 'level' || g.type === 'xp' ? { xp10: goalTargetXp10(g) } : keptAim(g, st);
+    if (!aim) return '';
+    const target = aim.reached ? cur : aim.xp10;
+    const reached = !!aim.reached || cur >= target;
     const start = g.startXp10 ?? cur;
     const p = reached ? 100 : pct(cur - start, target - start);
     const left = Math.max(0, Math.ceil((target - cur) / 10));
