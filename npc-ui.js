@@ -143,6 +143,10 @@ export function createNpcUi(P) {
   // (v3.1) On a goal: what you leave on the ground is worth nothing to you, and
   // what you alch is its high alch, in coins. null: no price yet.
   const taken = (goal, slug) => !(goal?.leave || []).includes(slug);
+  // (v3.4) The two halves of a key, made into a crystal key on the way: one read in your loot counts as a half
+  // of each, and once one has, pairs of halves go into your bank as crystal keys (goal.combineKeys).
+  const KEY_HALVES = ['keyhalf1', 'keyhalf2'], CRYSTAL_KEY = 'crystal_key';
+  const dropsHalves = drops => KEY_HALVES.every(h => drops.has(h));
   const alched = (goal, slug) => taken(goal, slug) && (goal?.alch || []).includes(slug) && canAlch(slug);
   const priceIn = (goal, slug) => (!goal ? worthOf(slug) : !taken(goal, slug) ? 0 : alched(goal, slug) ? highAlch(slug) : worthOf(slug));
   // The average loot of a kill: { total, missing (no price), rough (high alch stood in) }
@@ -518,7 +522,7 @@ export function createNpcUi(P) {
       return `<tr title="${esc(itemTitle(slug, d, goal))}" data-loot="${slug}"${take ? '' : ' class="off"'}>
         <td class="c"><input type="checkbox" data-take="${slug}"${take ? ' checked' : ''} title="Take it: untick what you leave on the ground" aria-label="${esc(`Take ${ITEMS[slug]?.name || slug}`)}"></td>
         <td class="c">${alchBox}</td>
-        <td class="l">${itemLink(slug, d)}${alch ? ' <span class="alch-tag" title="High alched: counted in coins">alched</span>' : ''}</td><td>${esc(rateText(d.p))}</td><td>${esc(amountText(d))}</td><td>${amt(d.q * n)}</td><td>${d.p >= 1 ? '–' : chanceText(at1)}</td><td>${value}</td>${doneCells}<td>${actual}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`;
+        <td class="l">${itemLink(slug, d)}${alch ? ' <span class="alch-tag" title="High alched: counted in coins">alched</span>' : ''}${goal.combineKeys && KEY_HALVES.includes(slug) ? ' <span class="alch-tag" title="You make pairs of halves into crystal keys: they go into your bank as keys">into crystal keys</span>' : ''}</td><td>${esc(rateText(d.p))}</td><td>${esc(amountText(d))}</td><td>${amt(d.q * n)}</td><td>${d.p >= 1 ? '–' : chanceText(at1)}</td><td>${value}</td>${doneCells}<td>${actual}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`;
     };
     const extraRows = extra.map(slug => `<tr data-loot="${slug}" title="${esc(`${ITEMS[slug]?.name || slug}: not something this monster drops`)}"><td></td><td></td><td class="l"><span class="sk-cell">${itemIcon(slug, true)} ${itemName(slug)} <span class="c-faint small-note">(not its drop)</span></span></td><td colspan="5"></td>${done ? `<td class="sep-l"></td><td class="got">${gotBox(slug, got[slug], null)}</td><td></td>` : `<td class="got sep-l">${gotBox(slug, got[slug], null)}</td>`}<td>${worthOf(slug) != null ? gpShort(worthOf(slug) * got[slug]) : '<span class="c-faint">?</span>'}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`).join('');
     // (v3.2) Hide unticked loot: what you leave on the ground, out of the table (the one switch every table has)
@@ -884,6 +888,7 @@ export function createNpcUi(P) {
       <div class="shots-title">Deposit to my bank</div>
       <p class="note">Your loot that isn't in your bank yet: change an amount, or untick what stays out for now. What you alched goes in as the coins it made (its high alch)${goal.runesKept ? '' : ', and a nature rune for each cast comes out of your bank'}. Nothing else in your bank changes.</p>
       <div class="shot-list">${rows}</div>
+      ${KEY_HALVES.every(h => (st.amounts[h] ?? diff.out[h] ?? 0) > 0) ? `<label class="check dep-keys" title="You make a tooth half and a loop half into a crystal key: those pairs go into your bank as keys, the halves left over as halves"><input type="checkbox" data-dep-keys="1"${goal.combineKeys ? ' checked' : ''}> Pairs of halves go in as crystal keys</label>` : ''}
       <div class="bar wrap"><button type="button" class="btn small" data-act="loot-deposit">Deposit</button><button type="button" class="btn small" data-act="loot-deposit-cancel">Cancel</button></div>
     </div>`;
   }
@@ -895,14 +900,21 @@ export function createNpcUi(P) {
     const banked = { ...(goal.banked || {}) };
     const did = [];
     let coins = 0, casts = 0;
+    // (v3.4) when you make your halves into crystal keys, a pair of them goes in as a key
+    const keys = goal.combineKeys && KEY_HALVES.every(h => amounts[h] > 0 && !alched(goal, h)) ? Math.min(...KEY_HALVES.map(h => amounts[h])) : 0;
+    if (keys) {
+      b.items[CRYSTAL_KEY] = (b.items[CRYSTAL_KEY] || 0) + keys;
+      did.push(`${fmt(keys)} ${ITEMS[CRYSTAL_KEY].name}${keys === 1 ? '' : 's'} (${keys === 1 ? 'a pair' : 'pairs'} of key halves)`);
+    }
     for (const [slug, n] of Object.entries(amounts)) {
       if (!n || !ITEMS[slug] || ITEMS[slug].clue) continue;
+      const loose = KEY_HALVES.includes(slug) ? n - keys : n;      // (what isn't in a key)
       if (alched(goal, slug)) { coins += n * highAlch(slug); casts += n; }
-      else b.items[slug] = Math.max(0, (b.items[slug] || 0) + n);
+      else if (loose) b.items[slug] = Math.max(0, (b.items[slug] || 0) + loose);
       if (!b.items[slug]) delete b.items[slug];
       banked[slug] = Math.max(0, (banked[slug] || 0) + n);
       if (!banked[slug]) delete banked[slug];
-      did.push(`${n < 0 ? '−' : ''}${fmt(Math.abs(n))} ${ITEMS[slug].name}${alched(goal, slug) ? ' (alched)' : ''}`);
+      if (loose) did.push(`${loose < 0 ? '−' : ''}${fmt(Math.abs(loose))} ${ITEMS[slug].name}${alched(goal, slug) ? ' (alched)' : ''}`);
     }
     if (coins) { b.items.coins = Math.max(0, (b.items.coins || 0) + coins); if (!b.items.coins) delete b.items.coins; }
     let runes = 0;
@@ -1220,7 +1232,7 @@ export function createNpcUi(P) {
       const its = r.choices.filter(c => drops.has(c));
       if (its.length === 1) r.slug = its[0];
     }
-    const keep = rows.filter(r => drops.has(r.slug) || r.choices?.some(c => drops.has(c)));
+    const keep = rows.filter(r => drops.has(r.slug) || r.choices?.some(c => drops.has(c)) || (r.slug === CRYSTAL_KEY && dropsHalves(drops)));
     const skipped = rows.filter(r => !keep.includes(r));
     const trips = use.length;
     const amounts = {}, brought = {};
@@ -1229,8 +1241,8 @@ export function createNpcUi(P) {
       brought[r.key] = less;
       amounts[r.key] = r.count - less;
     }
-    // (what you leave on the ground isn't ticked: you won't have picked it up)
-    const off = new Set(keep.filter(r => !taken(goal, r.slug)).map(r => r.key));
+    // (what you leave on the ground isn't ticked: you won't have picked it up; a crystal key, when you leave both halves)
+    const off = new Set(keep.filter(r => (r.slug === CRYSTAL_KEY ? KEY_HALVES.every(h => !taken(goal, h)) : !taken(goal, r.slug))).map(r => r.key));
     // (the coins: some may be what alching on the way made, v3.2)
     const coinsKey = keep.find(r => r.slug === 'coins')?.key || null;
     const coinsRead = coinsKey ? amounts[coinsKey] : 0;
@@ -1251,11 +1263,12 @@ export function createNpcUi(P) {
         ? `<select class="input small shot-as" data-loot-as="${it.key}" aria-label="Which item this is" title="These look exactly the same in the game: pick the one this is">${it.choices.map(c => `<option value="${c}"${c === it.slug ? ' selected' : ''}>${itemName(c)}</option>`).join('')}</select>`
         : itemName(it.slug);
       const unsure = it.unsure ? ' <span class="shot-check" title="A close call between items that look alike: check this one">check</span>' : '';
+      const key = it.slug === CRYSTAL_KEY ? ' <span class="c-faint small-note">(its two halves, combined: each counts as a tooth half and a loop half)</span>' : '';
       const brought = sh.brought[it.key] ? ` · ${fmt(sh.brought[it.key])} you bring taken off` : '';
       const left = !taken(goal, it.slug) ? ' · you leave it on the ground' : '';
       const alching = it.key === sh.coinsKey && alchOn(sh) && alchCoinsOf(sh) ? ` · ${fmt(alchCoinsOf(sh))} from alching` : '';
       return `<label class="shot-row"><input type="checkbox" data-loot-shot="${it.key}"${sh.off.has(it.key) ? '' : ' checked'}>
-        ${itemIcon(it.slug, true)} <span class="shot-name">${name}${unsure}</span>
+        ${itemIcon(it.slug, true)} <span class="shot-name">${name}${key}${unsure}</span>
         <input class="input small num" data-loot-n="${it.key}" inputmode="numeric" value="${fmt(sh.amounts[it.key] ?? it.count)}" aria-label="${esc(ITEMS[it.slug]?.name || it.slug)} to add" title="How many to add to your loot">
         <span class="shot-was c-faint">read ${read}${brought}${alching}${left}${got[it.slug] ? ` · you have ${fmt(got[it.slug])}` : ''}</span></label>`;
     }).join('');
@@ -1283,7 +1296,9 @@ export function createNpcUi(P) {
     for (const r of sh.rows) {
       if (sh.off.has(r.key)) continue;
       const n = sh.amounts[r.key] ?? r.count;
-      if (n > 0) out[r.slug] = (out[r.slug] || 0) + n;
+      if (!(n > 0)) continue;
+      // (v3.4: a crystal key is the two halves it was made of)
+      for (const slug of r.slug === CRYSTAL_KEY ? KEY_HALVES : [r.slug]) out[slug] = (out[slug] || 0) + n;
     }
     return out;
   }
@@ -1301,6 +1316,8 @@ export function createNpcUi(P) {
       for (const [slug, n] of Object.entries(add)) got[slug] = (got[slug] || 0) + n;
       g.got = got;
       if (alchedNow.length) g.alch = [...new Set([...(g.alch || []), ...alchedNow.map(([slug]) => slug)])];
+      // (v3.4: crystal keys in it: your halves are made into keys, and go into your bank as keys)
+      if (sh.rows.some(r => r.slug === CRYSTAL_KEY && !sh.off.has(r.key) && (sh.amounts[r.key] ?? r.count) > 0)) g.combineKeys = true;
       // (the screenshots it's from: not counted again; and the kills it's for, so the next trips' are told apart)
       g.shots = [...new Set([...(g.shots || []), ...(sh.used || [])])].slice(-400);
       g.lootDone = g.done || 0;
@@ -1617,6 +1634,8 @@ export function createNpcUi(P) {
       return true;
     }
     if (dep && t.dataset.depOn) { if (t.checked) dep.off.delete(t.dataset.depOn); else dep.off.add(t.dataset.depOn); return true; }
+    // (v3.4) pairs of key halves into the bank as crystal keys, or not
+    if (dep && t.dataset.depKeys) { P.updateGoal(goal.id, g => { if (t.checked) g.combineKeys = true; else delete g.combineKeys; }); P.renderGoals(); return true; }
     const br = brings.get(goal.id);
     if (br && t.dataset.bring) {
       const n = P.parseAmount(t.value);

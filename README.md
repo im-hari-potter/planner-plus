@@ -34,7 +34,7 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | Tab | What it's for |
 |---|---|
 | **Lookup**, **Compare**, **Gains**, **Leaderboard** | The hiscores: any player's levels, XP, rank and Top %; players side by side; XP gained since last time; any skill's rankings. |
-| **Goals** | Your goals, each with its **Plan (Calculator)**: every skill, your total level, your combat level, and Slayer (a plan of kills and their loot). |
+| **Goals** | Your goals, each with its **Plan (Calculator)**: every skill (Ranged with the ammo it takes), your total level, your combat level, and Slayer (a plan of kills and their loot). |
 | **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
 | **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance. |
@@ -280,6 +280,29 @@ more than half your combat level. Each plan says what its kills give besides, a 
 with its icon (Hitpoints XP, and Prayer XP if you bury the bones), and what its goal adds to your
 combat level.
 
+### Ranged: the ammo a plan takes
+
+![A Ranged goal's ammo: what you shoot with, each monster's shots, and what's fired, lost and costs](readme-16-ammo.png)
+
+*A Ranged goal's ammo: each monster's shots as your Ranged rises, then what's fired, lost and what
+it costs.*
+
+A Ranged goal's plan counts the ammo its kills take, by the server's own sums. Pick **arrows** (and
+the bow you fire them from), **knives** or **darts**; it starts with the best your Ranged level can
+use. Then Rapid or Accurate, whether you **pick up what drops**, and your armour's Ranged attack.
+
+- **Shots**: each shot is a roll, your attack against the monster's defence, and a hit does 0 to
+  your max hit, so a kill takes as many shots as its hitpoints need on average. They're counted a
+  level at a time as your Ranged rises, and the plan's table has a **Shots** column: a kill at your
+  level now.
+- **Fired, lost and what it costs**: every shot uses one, hit or miss. 1 in 5 breaks and the rest
+  drop where the monster stands, so picking them up loses a fifth; leaving them loses them all.
+- **Which kind?** It matters: arrows hit hardest, their strength the arrow's and their attack the
+  bow's (rune arrows 49, a magic shortbow +69). Knives and darts have both themselves (rune knives
+  +25 attack and 24 strength, rune darts +15 and 14), so a kill takes more of them. A bow fires
+  arrows up to its level: rune arrows need a yew or magic bow. Knives and darts are thrown faster,
+  which changes the time a kill takes, not its shots.
+
 ### NPCs: the monster database
 
 ![NPCs: every monster with the XP and loot of a kill](readme-9-npcs.png)
@@ -365,6 +388,10 @@ others leave.*
   those trips counts either, nor the nature runes it took.
 - **What you bring each trip** (runes, coins, arrows the monster drops too) is taken off each
   screenshot, so what you carry, and loot from before this goal, is never counted as loot.
+- **Crystal keys**: for a monster that drops both key halves, a crystal key in a screenshot is the
+  two halves you made it from on the trip, and counts as one of each. Then a deposit puts pairs of
+  halves into your bank as crystal keys, and the rest as halves (untick **Pairs of halves go in as
+  crystal keys** to bank them all as halves).
 - **Add to my loot** counts it as these kills' loot. Your bank doesn't change till you deposit.
 - **Deposit to my bank…** works from your loot: what isn't in your bank yet, after every trip, a
   few, or at the end. Change any amount first. What you alched goes in as the coins it made, and a
@@ -463,9 +490,13 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
     them the way the client draws its own: the ground's colours blended, walls and doors, trees
     and rocks, and the map's icons. How it attacks (melee, ranged, magic, dragonfire) is read from
     its attack scripts.
+  - Ranged ammo: a shot's rolls and max hit are the server's combat scripts' (`player_ranged.rs2`
+    and the scripts it calls), and the bows', arrows', knives' and darts' bonuses, levels and the
+    1 in 5 that break are read from its item configs and constants.
 - Planner files: `planner.js` (the maths, in tenths of XP), `planner-ui.js` (Goals, Bank and
   Prices), `npc-ui.js` (the NPCs tab and Slayer goals), `loot.js` (drop chances, expected loot,
-  luck and dryness, kills from XP), `prices.js` (the market and high alch), `bankread.js`
+  luck and dryness, kills from XP), `ranged.js` (a shot's chance to hit, the shots a kill takes and
+  the ammo a plan fires), `prices.js` (the market and high alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
   tests), `sortable.js` (dragging), `tablesort.js` (sorting a table by a column's name).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own

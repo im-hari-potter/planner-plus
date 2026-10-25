@@ -9,6 +9,8 @@ import { encodePng } from './testpng.mjs';
 import { ICON_SHEET } from './gamedata.js';
 import { BANK_ICON_SHEET } from './bankread-data.js';
 import { xpForLevel, levelForXp } from './skills.js';
+// (v3.4: a Ranged plan's ammo, worked out here as the page should)
+import { gearOf, shotsFor } from './ranged.js';
 
 const BASE = process.env.BASE || 'http://localhost:8787';
 const SHOTS = process.env.SHOTS || '/tmp';
@@ -2995,7 +2997,8 @@ await check('combat: Strength, Defence, Hitpoints and Ranged, each with its own 
     card = goalCard('Ranged');
     await card.locator('.plan').waitFor();
     assert.deepEqual((await card.locator('select[data-opt="style"] option').allInnerTexts()).map(flat), ['Accurate or Rapid', 'Longrange']);
-    assert.match(flat(await card.locator('.plan-opts').innerText()), /Ammunition, food, gear and drops aren't counted/);
+    // (v3.4: the ammo is counted, under Ammo; until then, "Ammunition, food, gear and drops aren't counted")
+    assert.match(flat(await card.locator('.plan-opts').innerText()), /Food, gear and drops aren't counted, and this plan doesn't use your bank\. The ammo its kills take is under Ammo, at your prices\./);
     assert.equal(flat(await card.locator('select[data-gopt="fill"] option:checked').innerText()), 'Rock Crab (level 13, 50 HP, 200 XP)');
     await removeGoal(card);
     await noGoalFor('Ranged');
@@ -4526,6 +4529,78 @@ await check('slayer: loot read from screenshots of the inventory (with the bank 
   }
 });
 
+await check('slayer: a crystal key in a loot screenshot is the two key halves it was made of on the trip: one of each added to your loot; then pairs of halves go into your bank as crystal keys and the rest as halves, or untick that to bank them as halves (v3.4)', async () => {
+  await planAs('old badger', 'Old Badger');
+  await page.evaluate(() => localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: { crystal_key: 1 }, updated: Date.now() })));
+  await addSlayer('Fire giant (level 86)', 1000);
+  const card = slayerCard();
+  await card.locator('.plan').waitFor();
+  const bankNow = () => page.evaluate(() => JSON.parse(localStorage.getItem('lchs.bank.old_badger')).items);
+  const note = () => card.locator('.slayer-msg');
+  const review = card.locator('.loot-shots');
+  const dep = card.locator('.deposit-edit');
+  const amounts = async () => Object.fromEntries(await review.locator('[data-loot-n]').evaluateAll(els => els.map(e => [e.dataset.lootN.replace(/@\d+$/, ''), e.value])));
+  const deposits = () => dep.locator('[data-dep]').evaluateAll(els => Object.fromEntries(els.map(e => [e.dataset.dep, e.value])));
+  try {
+    // a trip: a crystal key made on the way, and a loop half still waiting for its tooth half
+    const trip = encodePng(fakeInventory({ items: [{ slot: 0, icon: 'crystal_key', count: 1 }, { slot: 1, icon: 'keyhalf2', count: 1 }, { slot: 2, icon: 'firerune', count: 37 }] }));
+    await page.evaluate(() => { window.showOpenFilePicker = undefined; });
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), card.locator('[data-act="loot-pick"]').click()]);
+    await chooser.setFiles([{ name: 'keys.png', mimeType: 'image/png', buffer: trip }]);
+    await review.waitFor({ timeout: 45000 });
+    // (a fire giant doesn't drop the key itself: its halves, so the key is kept)
+    assert.deepEqual(await amounts(), { crystal_key: '1', keyhalf2: '1', firerune: '37' });
+    assert.match(flat(await review.locator('.shot-row', { has: page.locator('[data-loot-n="crystal_key"]') }).innerText()),
+      /^Crystal key \(its two halves, combined: each counts as a tooth half and a loop half\) read 1$/);
+    await review.locator('[data-act="loot-apply"]').click();
+    await review.waitFor({ state: 'detached' });
+    assert.equal(flat(await note().innerText()), 'Added to your loot: 1 Half of a key (tooth), 2 Half of a key (loop) and 37 Fire rune. Undo ✕');
+    const goal = await goalOf('old_badger', 'slayer');
+    assert.deepEqual(goal.got, { keyhalf1: 1, keyhalf2: 2, firerune: 37 });
+    assert.equal(goal.combineKeys, true, 'you make your halves into keys');
+    // the loot table says so, on both halves
+    for (const h of ['keyhalf1', 'keyhalf2']) assert.equal(flat(await card.locator(`tr[data-loot="${h}"] .alch-tag`).innerText()), 'into crystal keys');
+    // Deposit: the pair goes in as a crystal key, the loop half left over as itself
+    await card.locator('[data-act="loot-deposit-open"]').click();
+    await dep.waitFor();
+    assert.deepEqual(await deposits(), { keyhalf1: '1', keyhalf2: '2', firerune: '37' });
+    assert.equal(await dep.locator('[data-dep-keys]').isChecked(), true);
+    assert.equal(flat(await dep.locator('.dep-keys').innerText()), 'Pairs of halves go in as crystal keys');
+    await dep.locator('[data-act="loot-deposit"]').click();
+    await dep.waitFor({ state: 'detached' });
+    assert.equal(flat(await note().innerText()), 'Put in your bank: 1 Crystal key (a pair of key halves), 1 Half of a key (loop) and 37 Fire rune. See your bank Undo ✕');
+    assert.deepEqual(await bankNow(), { crystal_key: 2, keyhalf2: 1, firerune: 37 });
+    assert.deepEqual((await goalOf('old_badger', 'slayer')).banked, { keyhalf1: 1, keyhalf2: 2, firerune: 37 }, 'all the halves are in your bank, one pair of them as a key');
+    assert.match(flat(await card.locator('.loot-sec').innerText()), /All your loot is in your bank\./);
+    // Undo, and untick it: the halves go in as halves
+    await note().locator('[data-act="note-undo"]').click();
+    await card.locator('.slayer-msg', { hasText: 'Undone.' }).waitFor();
+    assert.deepEqual(await bankNow(), { crystal_key: 1 });
+    await card.locator('[data-act="loot-deposit-open"]').click();
+    await dep.locator('[data-dep-keys]').uncheck();
+    await card.locator('tr[data-loot="keyhalf1"] .alch-tag').waitFor({ state: 'detached' });
+    assert.equal((await goalOf('old_badger', 'slayer')).combineKeys, undefined);
+    assert.equal(await dep.locator('[data-dep-keys]').isChecked(), false, 'still unticked after the redraw');
+    await dep.locator('[data-act="loot-deposit"]').click();
+    await dep.waitFor({ state: 'detached' });
+    assert.equal(flat(await note().innerText()), 'Put in your bank: 1 Half of a key (tooth), 2 Half of a key (loop) and 37 Fire rune. See your bank Undo ✕');
+    assert.deepEqual(await bankNow(), { crystal_key: 1, keyhalf1: 1, keyhalf2: 2, firerune: 37 });
+    // a monster that drops neither half: a crystal key in your inventory isn't its loot
+    await removeSlayers();
+    await addSlayer('Chicken (level 1)', 10);
+    const hen = slayerCard();
+    await hen.locator('.plan').waitFor();
+    const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), hen.locator('[data-act="loot-pick"]').click()]);
+    await chooser2.setFiles([{ name: 'hen.png', mimeType: 'image/png', buffer: encodePng(fakeInventory({ items: [{ slot: 0, icon: 'crystal_key', count: 1 }, { slot: 1, icon: 'feather', count: 40, stack: true }] })) }]);
+    await hen.locator('.loot-shots').waitFor({ timeout: 45000 });
+    assert.deepEqual(Object.fromEntries(await hen.locator('.loot-shots [data-loot-n]').evaluateAll(els => els.map(e => [e.dataset.lootN, e.value]))), { feather: '40' });
+    assert.match(flat(await hen.locator('.loot-shots .note').innerText()), /Crystal key, which Chicken doesn't drop/);
+  } finally {
+    await page.evaluate(() => { delete window.showOpenFilePicker; localStorage.removeItem('lchs.bank.old_badger'); });
+    await removeSlayers();
+  }
+});
+
 // ── v3.1 ──────────────────────────────────────────────────────────────────
 await check("slayer: new combat XP is counted as kills: a box above your goals says how much; choose what you killed (every Slayer goal's monster, your topmost goal taking the rest of the XP till you pick another); XP from something else can come off a goal; Undo; Not now; counted from your last count, or from a Gains snapshot you pick (v3.1, v3.2)", async () => {
   await planAs('old badger', 'Old Badger');
@@ -4773,6 +4848,112 @@ await check("goals: every skill's table has a tick box, Chop, Mine, Catch, Steal
     await removeSlayers();
     await removeGoal(goalCard('Attack'));
     await removeGoal(goalCard('Cooking'));
+  }
+});
+
+await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (the best your level can use to start), each monster's shots and what's fired, lost and costs, by the server's sums; arrows a bow can't fire and gear above your level said; a Shots column (v3.4)", async () => {
+  await planAs('old badger', 'Old Badger');
+  // Old Badger: Ranged 55 (166,736 XP); a goal of 60 on moss giants (60 hitpoints, Defence 30, no ranged defence: 240 XP a kill)
+  await addGoal('ranged', 60);
+  const card = goalCard('Ranged');
+  try {
+    await card.locator('.plan').waitFor();
+    assert.match(flat(await card.locator('.plan-opts').innerText()), /The ammo its kills take is under Ammo, at your prices\./);
+    await card.locator('select[data-gopt="fill"]').selectOption('rg_moss_giant_42');
+    const ammo = card.locator('.plan-sec.ammo');
+    await ammo.locator('.step', { hasText: 'Moss giant' }).waitFor();
+    const step = flat(await card.locator('.plan-sec', { hasText: 'To reach your goal' }).locator('.step').first().innerText());
+    const kills = Number(step.match(/^([\d,]+) × Moss giant/)[1].replace(/,/g, ''));
+    assert.equal(kills, Math.ceil((xpForLevel(60) - (xpForLevel(55) + 100)) / 240));
+    // to start: the best Ranged 55 can use, a magic shortbow with rune arrows, on Rapid, picked up
+    const picked = () => card.locator('[data-ammo]').evaluateAll(els => els.map(e => [e.dataset.ammo, e.type === 'checkbox' ? e.checked : e.value]));
+    assert.deepEqual(await picked(), [['kind', 'arrows'], ['ammo', 'rune_arrow'], ['bow', 'magic_shortbow'], ['fight', 'rapid'], ['pickUp', true], ['bonus', '']]);
+    const mon = { id: 'moss_giant_42', hp: 60, defence: 30, rangeDefence: 0 };
+    const want = (gear, style = 'rapid', bonus = 0) => shotsFor([{ mon, kills, xp10: 2400 }], { startXp10: (xpForLevel(55) + 100) * 10, style, gear, bonus });
+    const each = v => (v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1));
+    // (to the last level the kills take you to: what a kill takes there, or the levels when it takes as many)
+    const line = r => `${kills.toLocaleString('en-US')} × Moss giant: ${Math.ceil(r.shots).toLocaleString('en-US')} shots (${each(r.steps[0].first)} a kill at Ranged 55${each(r.steps[0].last) !== each(r.steps[0].first) ? `, ${each(r.steps[0].last)} by ${r.steps[0].to}` : ` to ${r.steps[0].to}`})`;
+    let r = want(gearOf({ kind: 'arrows', ammo: 'rune_arrow', bow: 'magic_shortbow' }));
+    assert.equal(r.steps[0].to, 60);
+    assert.equal(flat(await ammo.locator('.step').innerText()), line(r));
+    // what's fired and lost (1 in 5 breaks), and what that costs at the mock market's price
+    await ammo.locator('.money', { hasText: '4,800 each' }).waitFor({ timeout: 20000 });
+    const money = flat(await ammo.locator('.money').innerText());
+    const fired = Math.ceil(r.shots), lost = Math.ceil(r.shots / 5);
+    assert.match(money, new RegExp(`^Fired: ${fired.toLocaleString('en-US')} Rune arrows Lost: about ${lost.toLocaleString('en-US')} \\(1 in 5 breaks; you pick up the rest\\) They cost: [\\d.]+[KMB]? gp \\(4,800 each\\)$`));
+    // the server's numbers, at Ranged 55: (55 + 8) × (69 + 64) = 8,379 against (30 + 9) × 64 = 2,496: 1 − 2,498 / 16,760; (63 × 113 + 320) / 640 = 11.6
+    assert.equal(flat(await ammo.locator('.tip').innerText()), 'Moss giant (Defence 30), at Ranged 55 on Rapid with rune arrows from a magic shortbow: 85.1% of shots hit (your roll of 0 to 8,379 has to beat its 0 to 2,496), and a hit does 0 to 11. Every shot uses its ammo, hit or miss.');
+    // darts: the best Ranged 55 can wield, rune; Accurate, unpicked, and +31 from armour (a green dragonhide body, chaps and vambraces)
+    await ammo.locator('[data-ammo="kind"]').selectOption('darts');
+    await card.locator('.plan-sec.ammo [data-ammo="ammo"] option[value="rune_dart"]:checked').waitFor({ state: 'attached' });
+    await card.locator('.plan-sec.ammo [data-ammo="fight"]').selectOption('accurate');
+    await card.locator('.plan-sec.ammo [data-ammo="pickUp"]').uncheck();
+    await card.locator('.plan-sec.ammo [data-ammo="bonus"]').fill('31');
+    await card.locator('.plan-sec.ammo [data-ammo="bonus"]').press('Enter');
+    await card.locator('.plan-sec.ammo .tip', { hasText: '+31 from your armour' }).waitFor();
+    r = want(gearOf({ kind: 'darts', ammo: 'rune_dart' }), 'accurate', 31);
+    assert.equal(flat(await card.locator('.plan-sec.ammo .step').innerText()), line(r));
+    assert.match(flat(await card.locator('.plan-sec.ammo .money').innerText()), new RegExp(`^Fired: ${Math.ceil(r.shots).toLocaleString('en-US')} Rune darts Lost: all ${Math.ceil(r.shots).toLocaleString('en-US')} \\(not picked up\\)`));
+    // (66 × (15 + 31 + 64) = 7,260; (66 × 78 + 320) / 640 = 8.5)
+    assert.match(flat(await card.locator('.plan-sec.ammo .tip').innerText()), /^Moss giant \(Defence 30\), at Ranged 55 on Accurate with rune darts and \+31 from your armour: [\d.]+% of shots hit \(your roll of 0 to 7,260 has to beat its 0 to 2,496\), and a hit does 0 to 8\./);
+    assert.deepEqual((await goalOf('old_badger', 'ranged')).ammo, { kind: 'darts', fight: 'accurate', pickUp: false, bonus: 31 });
+    // arrows from a bow that can't fire them, and a bow above your level
+    await card.locator('.plan-sec.ammo [data-ammo="kind"]').selectOption('arrows');
+    await card.locator('.plan-sec.ammo [data-ammo="bow"]').waitFor();
+    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('maple_shortbow');
+    await card.locator('.plan-sec.ammo [data-ammo="ammo"] option[value="adamant_arrow"]:checked').waitFor({ state: 'attached' });
+    await card.locator('.plan-sec.ammo [data-ammo="ammo"]').selectOption('rune_arrow');
+    await card.locator('.plan-sec.ammo .ammo-warn').waitFor();
+    assert.equal(flat(await card.locator('.plan-sec.ammo .ammo-warn').innerText()), "Rune arrows are only fired from a bow for Ranged 40 or more (yew or magic bows): a maple shortbow can't fire them.");
+    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('magic_longbow');
+    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('magic_shortbow');
+    await card.locator('.plan-sec.ammo [data-ammo="ammo"]').selectOption('rune_arrow');
+    await card.locator('.plan-sec.ammo .ammo-warn').waitFor({ state: 'detached' });
+    // the table: Shots, a kill at Ranged 55 with that ammo; sorted by it, the fewest first
+    const heads = (await card.locator('table.plan-t thead th').allInnerTexts()).map(flat);
+    assert.deepEqual(heads.slice(0, 6), ['Fight', 'Lvl', 'Monster', 'HP', 'XP', 'Shots']);
+    await card.locator('[data-tsort-plan="shots"]').click();
+    // (each band of levels sorted, as every column of the table is)
+    const bands = await card.locator('table.plan-t').first().evaluate(t => {
+      const out = [];
+      for (const tr of [...t.tBodies].flatMap(b => [...b.rows])) {
+        if (!tr.dataset.method) { out.push([]); continue; }
+        if (!out.length) out.push([]);
+        const v = Number(tr.cells[5].innerText.replace(/,/g, ''));
+        if (!Number.isNaN(v)) out[out.length - 1].push(v);
+      }
+      return out.filter(b => b.length);
+    });
+    assert.ok(bands.length >= 2 && bands.flat().length > 5, `${bands.length} bands`);
+    for (const b of bands) assert.ok(b.every((v, i) => i === 0 || v >= b[i - 1]), `sorted: ${b.slice(0, 12)}`);
+  } finally {
+    await removeGoal(card);
+  }
+  // what you shoot with above your Ranged level is said, and counted as if you could wield it (Lowbie: Ranged 1)
+  await planAs('lowbie', 'Lowbie');
+  const saved = await page.evaluate(() => localStorage.getItem('lchs.goals.lowbie'));
+  try {
+    await page.evaluate(() => {
+      localStorage.setItem('lchs.goals.lowbie', JSON.stringify([{ id: 'glr', skill: 'ranged', type: 'level', value: 20, created: Date.now(), ammo: { kind: 'knives', ammo: 'rune_knife' } }]));
+      const ui = JSON.parse(localStorage.getItem('lchs.planUi') || '{}');
+      localStorage.setItem('lchs.planUi', JSON.stringify({ ...ui, open: [...new Set([...(ui.open || []), 'glr'])], only: [], onlyOne: false }));
+    });
+    await page.reload();
+    await page.click('.tab[data-tab="goals"]');
+    await page.locator('.goal[data-goal="glr"] .plan-sec.ammo .ammo-warn').waitFor({ timeout: 15000 });
+    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-warn').innerText()), "Rune knives need Ranged 40 to wield: your Ranged is 1. It's counted as if you could.");
+    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('arrows');
+    await page.locator('.goal[data-goal="glr"] [data-ammo="bow"]').selectOption('magic_shortbow');
+    await page.locator('.goal[data-goal="glr"] .ammo-warn', { hasText: 'magic shortbow' }).waitFor();
+    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-warn').innerText()), "A magic shortbow needs Ranged 50 to wield: your Ranged is 1. It's counted as if you could.");
+    // (with no bow picked, the best Ranged 1 can use: a shortbow with iron arrows)
+    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('darts');
+    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('arrows');
+    assert.deepEqual(await page.locator('.goal[data-goal="glr"] [data-ammo]').evaluateAll(els => els.slice(0, 3).map(e => e.value)), ['arrows', 'iron_arrow', 'shortbow']);
+    assert.equal(await page.locator('.goal[data-goal="glr"] .ammo-warn').count(), 0);
+  } finally {
+    await page.evaluate(v => (v == null ? localStorage.removeItem('lchs.goals.lowbie') : localStorage.setItem('lchs.goals.lowbie', v)), saved);
+    await page.reload();
   }
 });
 
@@ -5438,7 +5619,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.3\.2 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.4\.0 · /);
   await page.click('#settings-close');
 });
 

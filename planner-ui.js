@@ -6,7 +6,9 @@
 // The NPCs tab and Slayer goals are npc-ui.js's.
 
 import { SKILLS, SKILL_BY_KEY, SKILL_IDS, SLAYER, COMBAT_KEYS, MIN_RANKED_LEVEL, MAX_LEVEL, boundUnrankedLevels, combatFromProfile, combatLevel, combatBreakdown, cheapestLevels } from './skills.js';
-import { ITEMS, METHODS, BANK_GROUPS, SALE_GROUPS, PLACES, CHOICES, ICONS_PER_ROW, ICON_SIZE, ICON_SHEET, ICON_SHEET_MORE, UNID_HERBS, ITEM_KINDS } from './gamedata.js';
+import { ITEMS, METHODS, BANK_GROUPS, SALE_GROUPS, PLACES, CHOICES, ICONS_PER_ROW, ICON_SIZE, ICON_SHEET, ICON_SHEET_MORE, UNID_HERBS, ITEM_KINDS, RANGED_GEAR } from './gamedata.js';
+import { NPC_INFO } from './npcdata.js';
+import { AMMO_KINDS, gearOf, bestGear, bestArrowsFor, killAt, shotsFor, ammoLost, BREAKS } from './ranged.js';
 import { indexMethods, planGoal, goalTargetXp10, rankForTop, xp10ForLevel, levelForXp10, bankValue, minorLast, castsIn, xpEach, chanceUnits, sureLevel, averaged, WHOLE, MAX_XP10 } from './planner.js';
 import { store, players } from './store.js';
 import { toSafeName, toDisplayName, checkName } from './api.js';
@@ -107,7 +109,7 @@ const viewName = k => (k === GEAR ? 'Gear' : k === RARES ? 'Rares' : k === OTHER
 const viewHas = (k, slug) => (k === 'all' ? true : k === GEAR ? isGear(slug) : k === RARES ? IS_RARE.has(slug) : k === OTHER ? inOther(slug)
   : (BANK_GROUPS[k] || []).some(g => g.items.includes(slug)));
 // (v3.3) The columns a plan's table sorts by (tableHtml), and the ones that sort the biggest first the first time.
-const PLAN_SORTS = ['level', 'name', 'hp', 'xp', 'netitem', 'cheap', 'togoal', 'still', 'have', 'xpbank', 'gross', 'xpeven', 'neteven', 'xptotal', 'netcollect', 'net'];
+const PLAN_SORTS = ['level', 'name', 'hp', 'xp', 'shots', 'netitem', 'cheap', 'togoal', 'still', 'have', 'xpbank', 'gross', 'xpeven', 'neteven', 'xptotal', 'netcollect', 'net'];
 const PLAN_SORTS_DESC = ['hp', 'xp', 'netitem', 'have', 'xpbank', 'gross', 'xpeven', 'neteven', 'xptotal', 'netcollect', 'net'];
 // (and the Prices tab's lists: till one's clicked, each list's own order)
 const PRICE_SORTS = ['name', 'market', 'alch', 'mine', 'qty', 'cost'];
@@ -143,7 +145,9 @@ const SKILL_TEXT = {
   strength: killsText('Food, gear and drops'),
   defence: killsText('Food, gear, ammunition and drops'),
   hitpoints: killsText('Food, gear, ammunition, runes and drops'),
-  ranged: killsText('Ammunition, food, gear and drops'),
+  // (v3.4: and the ammo the kills take, under Ammo)
+  ranged: { ...killsText('Food, gear and drops'),
+    noBank: "A kill counts as the monster's hitpoints in damage, however many hits that takes. Food, gear and drops aren't counted, and this plan doesn't use your bank. The ammo its kills take is under Ammo, at your prices." },
 };
 function killsText(left) {
   return { what: 'Monster', each: 'kill', kills: true,
@@ -1379,6 +1383,9 @@ export function createPlanner(ctx) {
     }
     const keys = [...new Set(list.map(g => g.skill).filter(hasCalculator))];
     if (keys.length && S.profile) wantPrices(keys);
+    // (v3.4) and a Ranged goal's ammo
+    const ammo = shown.filter(g => g.skill === 'ranged' && S.open.has(g.id)).map(g => ammoOf(g).gear.ammo);
+    if (ammo.length && S.profile) prices.want(ammo);
   }
 
   function renderAccount(id, where) {
@@ -1664,7 +1671,7 @@ export function createPlanner(ctx) {
   function planHtml(goal, plan, ix, cur, pool = null) {
     if (!usesBank(goal.skill)) {
       return `<div class="plan"><div class="plan-opts"><span class="c-faint">${esc(textFor(goal.skill).noBank || '')}</span>${choicesHtml(goal)}</div>
-        ${mixHtml(goal, plan, ix, pool)}${thenHtml(goal, plan, ix, pool)}${combatTip(goal)}${tableHtml(goal, plan, ix, cur)}</div>`;
+        ${mixHtml(goal, plan, ix, pool)}${thenHtml(goal, plan, ix, pool)}${goal.skill === 'ranged' ? ammoHtml(goal, plan, ix, cur) : ''}${combatTip(goal)}${tableHtml(goal, plan, ix, cur)}</div>`;
     }
     const b = bank();
     const useBank = goal.useBank !== false;
@@ -2049,6 +2056,120 @@ export function createPlanner(ctx) {
       ${toolLine}${noteLine}${money}${magicTip(ix, Object.entries(f.steps))}${craftTip(ix, Object.entries(f.steps))}${killsTip(ix, f.segments.map(sg => [sg.id, sg.runs]))}${TICKETS.has(f.id) ? ticketTip(goal, plan, pool) : ''}${balance}</div>`;
   }
 
+  // ── Ranged ammo (v3.4) ──────────────────────────────────────────────────
+  // A Ranged goal's ammo (ranged.js has the server's sums): what you shoot with (goal.ammo: kind, ammo, bow;
+  // what isn't kept is the best your Ranged level can use now), Accurate or Rapid (fight; Longrange when the
+  // goal's style is), whether you pick up what drops (pickUp), and your armour's Ranged attack bonus (bonus).
+  function ammoOf(goal) {
+    const a = goal.ammo || {};
+    const level = currentOf('ranged')?.level || 1;
+    const kind = AMMO_KINDS.includes(a.kind) ? a.kind : 'arrows';
+    let gear;
+    if (kind === 'arrows') {
+      const bow = RANGED_GEAR.bows.some(b => b.id === a.bow) ? a.bow : bestGear('arrows', level).bow;
+      gear = gearOf({ kind, bow, ammo: RANGED_GEAR.arrows.some(x => x.id === a.ammo) ? a.ammo : bestArrowsFor(bow) });
+    } else {
+      gear = gearOf({ kind, ammo: RANGED_GEAR[kind].some(x => x.id === a.ammo) ? a.ammo : bestGear(kind, level).ammo });
+    }
+    const style = goal.opts?.style === 'longrange' ? 'longrange' : a.fight === 'accurate' ? 'accurate' : 'rapid';
+    return { gear, level, style, pickUp: a.pickUp !== false, bonus: Number.isFinite(a.bonus) ? a.bonus : 0 };
+  }
+  // A Ranged row's monster, with what its defence roll is made of (npcdata.js: its stats and bonuses).
+  function rangedMon(m) {
+    const id = m.id.replace(/^rg_/, ''), info = NPC_INFO[id];
+    return info ? { id, hp: m.hp, defence: info.stats[2], rangeDefence: info.bonus?.rangedefence ?? 0, name: m.short } : null;
+  }
+  // "Rune arrows", "Rune knives"
+  const ammoName = (slug, n = 2) => { const name = ITEMS[slug]?.name || slug; return n === 1 ? name : `${name.replace(/knife$/i, 'knive')}s`; };
+  const shotsText = v => (v >= 100 ? fmt(Math.round(v)) : v.toFixed(1));
+  const STYLE_NAME = { rapid: 'Rapid', accurate: 'Accurate', longrange: 'Longrange' };
+
+  function ammoHtml(goal, plan, ix, cur) {
+    const A = ammoOf(goal), { gear, style, pickUp, bonus, level } = A;
+    // The plan's kills in the order they're done: your mix, then the rest; a monster's in a row as one line.
+    const steps = [];
+    for (const st of [...(plan.fromMix?.steps || []), ...(plan.fill?.segments || [])]) {
+      const m = ix.byId.get(st.id), mon = m && st.runs > 0 ? rangedMon(m) : null;
+      if (mon) steps.push({ m, mon, kills: st.runs, xp10: xpEach(ix, m) });
+    }
+    const r = steps.length ? shotsFor(steps, { startXp10: cur?.xp10 ?? 0, style, gear, bonus }) : { shots: 0, steps: [] };
+    const lines = [];
+    steps.forEach((s, i) => {
+      const got = r.steps[i], prev = lines[lines.length - 1];
+      if (prev && prev.m === s.m) Object.assign(prev, { kills: prev.kills + s.kills, shots: prev.shots + got.shots, last: got.last, to: got.to });
+      else lines.push({ m: s.m, mon: s.mon, kills: s.kills, ...got });
+    });
+    const opt = (v, label, on) => `<option value="${esc(v)}"${on ? ' selected' : ''}>${esc(label)}</option>`;
+    const kinds = [['arrows', 'Arrows'], ['knives', 'Knives'], ['darts', 'Darts']];
+    const list = gear.kind === 'arrows' ? RANGED_GEAR.arrows : RANGED_GEAR[gear.kind];
+    const ammoLabel = x => (gear.kind === 'arrows'
+      ? `${ammoName(x.id)} (${x.strength} strength${x.bow > 1 ? `, a bow for Ranged ${x.bow}` : ''})`
+      : `${ammoName(x.id)} (+${x.attack} attack, ${x.strength} strength${x.level > 1 ? `, Ranged ${x.level}` : ''})`);
+    const picks = `<div class="bar wrap ammo-pick">
+        <select class="input small" data-ammo="kind" aria-label="What you shoot">${kinds.map(([v, l]) => opt(v, l, v === gear.kind)).join('')}</select>
+        <select class="input small" data-ammo="ammo" aria-label="Which">${list.map(x => opt(x.id, ammoLabel(x), x.id === gear.ammo)).join('')}</select>
+        ${gear.kind === 'arrows' ? `<span class="c-muted">from a</span> <select class="input small" data-ammo="bow" aria-label="Your bow">${RANGED_GEAR.bows.map(b => opt(b.id, `${ITEMS[b.id]?.name || b.id} (+${b.attack} attack${b.level > 1 ? `, Ranged ${b.level}` : ''})`, b.id === gear.bow)).join('')}</select>` : ''}
+        ${style === 'longrange' ? '<span class="c-faint small-note">on Longrange, the goal\'s style</span>'
+          : `<select class="input small" data-ammo="fight" aria-label="Accurate or Rapid" title="Accurate adds 3 to your effective Ranged: you hit a little more often and a little harder. Rapid shoots a tick sooner. Both give the same XP.">${opt('rapid', 'Rapid', style === 'rapid')}${opt('accurate', 'Accurate', style === 'accurate')}</select>`}
+        <label class="check" title="${esc(`A shot that doesn't break drops where the monster stands. Ticked, you pick those up and only the 1 in ${BREAKS} that break are used up; unticked, every shot's ammo is.`)}"><input type="checkbox" data-ammo="pickUp"${pickUp ? ' checked' : ''}> Pick up what drops</label>
+        <label class="check" title="What the rest of what you wear adds to your Ranged attack: a green dragonhide body, chaps and vambraces +31, a coif +2. It makes you hit more often; nothing but your ammo adds to how hard."><span>Armour's Ranged attack</span>
+          <input class="input small num ammo-bonus" data-ammo="bonus" inputmode="numeric" value="${bonus ? esc(String(bonus)) : ''}" placeholder="0" aria-label="Your armour's Ranged attack bonus"></label>
+      </div>`;
+    const warn = [];
+    const wields = gear.kind === 'arrows' ? `${aWord(ITEMS[gear.bow]?.name || '')} ${(ITEMS[gear.bow]?.name || '').toLowerCase()}` : ammoName(gear.ammo).toLowerCase();
+    if (gear.level > level) warn.push(`${cap(wields)} ${gear.kind === 'arrows' ? 'needs' : 'need'} Ranged ${gear.level} to wield: your Ranged is ${level}. It's counted as if you could.`);
+    if (!gear.fits) warn.push(`${ammoName(gear.ammo)} are only fired from a bow for Ranged ${gear.needBow} or more (${orList(RANGED_GEAR.bows.filter(b => b.level >= gear.needBow && !b.long).map(b => (ITEMS[b.id]?.name || b.id).replace(/ shortbow$/i, '').toLowerCase()))} bows): ${aWord(ITEMS[gear.bow]?.name || '')} ${(ITEMS[gear.bow]?.name || '').toLowerCase()} can't fire them.`);
+    const never = lines.filter(l => l.shots === Infinity);
+    for (const l of never) warn.push(`Ranged does a ${esc(l.mon.name)} no damage${RANGED_GEAR.capped?.[l.mon.id] === 0 ? ' (the server caps what a hit does to it at 0)' : ''}: its kills can't be shot.`);
+    if (!steps.length) {
+      return `<div class="plan-sec ammo"><h4>Ammo</h4>${picks}<div class="c-faint small-note">No kills to shoot yet.</div></div>`;
+    }
+    const icon = itemIcon(gear.ammo, true);
+    const rows = lines.map(l => {
+      // (levels gained on the way: what a kill takes at the last of them, or the levels, when it takes as many)
+      const per = l.shots === Infinity ? '' : `${shotsText(l.first)} a kill at Ranged ${l.from}${l.to > l.from ? (shotsText(l.last) !== shotsText(l.first) ? `, ${shotsText(l.last)} by ${l.to}` : ` to ${l.to}`) : ''}`;
+      return `<div class="step">${icon}<div class="step-main"><div>${fmt(Math.ceil(l.kills))} × ${esc(l.m.short)}: ${l.shots === Infinity ? '<span class="c-lose">can\'t be shot</span>' : `<b>${fmt(Math.ceil(l.shots))}</b> shots <span class="c-faint">(${per})</span>`}</div></div></div>`;
+    }).join('');
+    const total = r.shots === Infinity ? null : Math.ceil(r.shots);
+    const lost = total == null ? null : Math.ceil(ammoLost(r.shots, pickUp));
+    const p = prices.gp(gear.ammo);
+    const money = total == null ? '' : `<div class="money">
+        <span>Fired: <a class="it-chip mk" ${priceLink(gear.ammo)} title="See its price on the Prices tab">${icon} <b>${fmt(total)}</b> ${ammoName(gear.ammo, total)}</a></span>
+        <span>${pickUp ? `Lost: about <b>${fmt(lost)}</b> <span class="c-faint">(1 in ${BREAKS} breaks; you pick up the rest)</span>` : `Lost: all <b>${fmt(lost)}</b> <span class="c-faint">(not picked up)</span>`}</span>
+        <span>They cost: <b>${p == null ? '?' : gpShort(lost * p)}</b> gp${p == null ? '' : ` <span class="c-faint">(${gpShort(p)} each)</span>`}</span>
+      </div>`;
+    // The server's numbers for the monster most of the shots go to, at your Ranged level now
+    const main = lines.filter(l => l.shots !== Infinity).sort((x, y) => y.shots - x.shots)[0];
+    let tip = '';
+    if (main) {
+      const k = killAt(main.mon, Math.min(main.from, 99), { style, gear, bonus });
+      const with_ = gear.kind === 'arrows' ? `${ammoName(gear.ammo).toLowerCase()} from ${aWord(ITEMS[gear.bow]?.name || '')} ${(ITEMS[gear.bow]?.name || '').toLowerCase()}` : ammoName(gear.ammo).toLowerCase();
+      tip = `<div class="tip"><span>${esc(main.m.short)} (Defence ${main.mon.defence}${main.mon.rangeDefence ? `, ranged defence ${main.mon.rangeDefence > 0 ? '+' : ''}${main.mon.rangeDefence}` : ''}), at Ranged ${main.from} on ${STYLE_NAME[style]} with ${with_}${bonus ? ` and ${bonus > 0 ? '+' : ''}${bonus} from your armour` : ''}: <b>${Math.round(k.hit * 1000) / 10}%</b> of shots hit (your roll of 0 to ${fmt(k.attack)} has to beat its 0 to ${fmt(k.defence)}), and a hit does 0 to <b>${k.max}</b>. Every shot uses its ammo, hit or miss.</span></div>`;
+    }
+    return `<div class="plan-sec ammo"><h4>Ammo <span class="c-faint small-note">(one a shot, hit or miss, as the server counts them)</span></h4>
+      ${picks}${warn.map(w => `<div class="c-lose small-note ammo-warn">${w}</div>`).join('')}
+      <div class="steps">${rows}</div>${money}${tip}</div>`;
+  }
+  const aWord = name => (/^[aeiou]/i.test(name) ? 'an' : 'a');
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const orList = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}` : list[0] || '');
+
+  // (v3.4) The Shots column of a Ranged goal's table: [header, cell, sort]. A monster Ranged does no damage
+  // to is a dash.
+  function shotsColumn(goal) {
+    const A = ammoOf(goal), seen = new Map();
+    const shotsOf = m => {
+      if (!seen.has(m.id)) { const mon = rangedMon(m); seen.set(m.id, mon ? killAt(mon, A.level, A).shots : null); }
+      return seen.get(m.id);
+    };
+    const head = `<th title="${esc(`Shots a kill on average at your Ranged level now (${A.level}), with ${ammoName(A.gear.ammo).toLowerCase()} on ${STYLE_NAME[A.style]}, as the server rolls each shot. Each uses one piece of ammo, hit or miss.`)}">Shots</th>`;
+    const cell = (r, m) => {
+      const v = shotsOf(m);
+      return `<td>${v == null ? '–' : v === Infinity ? '<span class="c-faint" title="Ranged does it no damage">–</span>' : shotsText(v)}</td>`;
+    };
+    return [head, cell, { key: 'shots', value: (r, m) => { const v = shotsOf(m); return v === Infinity ? null : v; } }];
+  }
+
   // What a plan's Agility Arena tickets are exchanged for, under the part of the
   // plan that has them. In the biggest batches (pool): how they're exchanged and
   // what that comes to a ticket. Pinned to a batch: its rate, and what the plan
@@ -2183,6 +2304,8 @@ export function createPlanner(ctx) {
       ...(kills ? [['<th title="Hitpoints: a kill is this much damage">HP</th>', (r, m) => `<td>${fmt(m.hp)}</td>`, { key: 'hp', desc: true, value: (r, m) => m.hp }]] : []),
       // (with your own bars made on the way, their XP is in it)
       [kills ? `<th title="${esc(skillName)} XP a kill, in the style you picked">XP</th>` : '<th>XP</th>', (r, m) => `<td>${xpText(r.xpAll ?? m.xp)}</td>`, { key: 'xp', desc: true, value: (r, m) => r.xpAll ?? m.xp }],
+      // (v3.4) a Ranged goal's: the shots a kill takes at your Ranged level now, with the ammo picked under Ammo
+      ...(goal.skill === 'ranged' ? [shotsColumn(goal)] : []),
       // (not where nothing has a price. Agility: nothing to sell and nothing to buy)
       ...(!priced ? [] : [['<th title="What one sells for, less what it takes, bought from scratch">Net/item</th>', r => {
         const e = r.econ;
@@ -3473,6 +3596,23 @@ export function createPlanner(ctx) {
         const skip = new Set(g.skip || []);
         if (t.checked) skip.delete(t.dataset.totalSkip); else skip.add(t.dataset.totalSkip);
         if (skip.size) g.skip = [...skip]; else delete g.skip;
+      });
+      renderGoals();
+      return;
+    }
+    // (v3.4) a Ranged goal's ammo
+    if (card && t.dataset.ammo) {
+      const f = t.dataset.ammo;
+      updateGoal(card.dataset.goal, g => {
+        const a = { ...(g.ammo || {}) };
+        if (f === 'kind') { a.kind = t.value; delete a.ammo; delete a.bow; }
+        if (f === 'ammo') a.ammo = t.value;
+        // (arrows that bow can't fire make way for the best it can)
+        if (f === 'bow') { a.bow = t.value; if (a.ammo && !gearOf({ kind: 'arrows', ammo: a.ammo, bow: a.bow })?.fits) delete a.ammo; }
+        if (f === 'fight') { if (t.value === 'accurate') a.fight = 'accurate'; else delete a.fight; }
+        if (f === 'pickUp') { if (t.checked) delete a.pickUp; else a.pickUp = false; }
+        if (f === 'bonus') { const n = Math.round(Number(String(t.value).replace(/[^\d.+-]/g, '')) || 0); if (n) a.bonus = Math.max(-500, Math.min(500, n)); else delete a.bonus; }
+        if (Object.keys(a).length) g.ammo = a; else delete g.ammo;
       });
       renderGoals();
       return;

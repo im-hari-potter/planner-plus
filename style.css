@@ -604,6 +604,12 @@ table.grid th.wrap .th-sort { white-space: normal; }
 td .it-chip { margin-right: 4px; font-size: 13px; }
 .money { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 16px; font-family: var(--small); font-size: 13px; color: var(--muted); }
 .money b { color: #fff; font-weight: normal; font-family: 'RS-Bold', sans-serif; font-size: 14px; }
+/* (v3.4) a Ranged goal's Ammo: what you shoot with, then the shots of each monster, what's fired and lost */
+.ammo-pick { margin-bottom: 6px; }
+.ammo-pick .check { white-space: nowrap; }
+.ammo-bonus { width: 56px; }
+.ammo-warn { margin: 0 0 4px; }
+.plan-sec.ammo .money .it-chip { display: inline-flex; align-items: center; gap: 4px; }
 .tip .it-chip { margin-right: 2px; }
 .tip { margin-top: 6px; padding: 5px 8px; border-left: 3px solid var(--gold); background: rgba(240, 196, 25, 0.07); font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 

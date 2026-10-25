@@ -3427,6 +3427,96 @@ async function combat() {
 
 await combat();
 
+// ── Ranged ammo (v3.4) ─────────────────────────────────────────────────────
+// What a Ranged goal's plan can shoot with, and the server's sums it's counted by. A shot:
+// player_ranged.rs2 (player_ranged_attack) rolls the hit (player_combat.rs2, player_npc_hit_roll:
+// randominc(your attack roll) > randominc(the monster's defence roll)) and a hit does randominc(max hit)
+// (npc_max_dealt: no monster here caps it), then uses one piece of ammo whatever came of it
+// (player_ranged_use_weapon → ranged_dropammo_npc: 1 in ^dropammo_chance breaks, the rest drop where the
+// monster stands, unless that square is blocked). player_combat_stat.rs2: your effective Ranged is your
+// level (no prayer for it) + 8 + the style's bonus (combat.rs2, combat_get_damagestyle_bonuses: Accurate 3),
+// your attack roll that × (Ranged attack bonus + 64) and your max hit (that × (Ranged strength + 64) + 320)
+// / 640, rounded down (combat_stat, combat_maxhit). npc_combat.rs2: a monster's defence roll is (its
+// Defence + 9) × (its ranged defence + 64). Arrows bring Ranged strength (rangebonus) and no attack bonus
+// (the bow's rangeattack is it); a knife or a dart is both. Arrows are only fired from a bow whose
+// levelrequire is theirs or more (player_ranged_check_ammo); what you wield takes the Ranged level its
+// levelrequire script says (levelrequire/scripts: @levelrequire_ranged). attackrate: ticks between shots
+// (combat.param's default for a bow without one), a tick less on Rapid.
+let rangedGear;
+{
+  const { readdir } = await import('node:fs/promises');
+  const text = async p => readFile(scripts(p), 'utf8');
+  const need = (src, re, what) => { if (!re.test(src)) throw new Error(`ranged ammo: ${what} reads differently now`); };
+  const attack = scriptBlocks(await text('skill_combat/scripts/player/player_ranged.rs2'));
+  const shot = attack.get('label,player_ranged_attack') || '', use = attack.get('proc,player_ranged_use_weapon') || '', drop = attack.get('proc,ranged_dropammo_npc') || '', check = attack.get('proc,player_ranged_check_ammo') || '';
+  need(shot, /if \(~player_npc_hit_roll\(%damagetype\) = true\)/, 'a shot\'s hit roll');
+  need(shot, /\$damage = randominc\(~npc_max_dealt\(\$maxhit, 0\)\);/, 'a hit\'s damage');
+  need(shot, /~player_ranged_use_weapon\(\$rhand, \$ammo\)/, 'the ammo a shot uses');
+  need(shot, /if \(%damagestyle = \^style_ranged_rapid\) \{\s*%action_delay = sub\(%action_delay, 1\);/, 'Rapid\'s tick');
+  need(use, /case weapon_bow, weapon_crossbow :[^]*?~ranged_dropammo_npc\(\$ammo,[^]*?case weapon_thrown, weapon_javelin :[^]*?~ranged_dropammo_npc\(\$ammo,/, 'the ammo a bow or a thrown weapon uses');
+  need(drop, /if \(random\(\^dropammo_chance\) ! 0\) \{\s*if \(map_blocked\(npc_coord\) = false\) \{\s*inv_dropitem_delayed\(worn, npc_coord, \$ammo, 1,/, 'where ammo drops');
+  need(drop, /inv_del\(worn, \$ammo, 1\);/, 'ammo that breaks');
+  need(check, /if \(oc_param\(\$ammo, levelrequire\) > oc_param\(\$rhand, levelrequire\)\)/, 'arrows held to their bow');
+  const roll = scriptBlocks(await text('skill_combat/scripts/player/player_combat.rs2')).get('proc,player_npc_hit_roll') || '';
+  need(roll, /if \(randominc\(\$attack_roll\) > randominc\(\$defence_roll\)\) \{\s*return\(true\);/, 'the hit roll');
+  const stat = await text('skill_combat/scripts/player/player_combat_stat.rs2');
+  need(stat, /def_int \$effective_ranged = ~combat_effective_stat\(\$ranged_level, 100\); \/\/ no ranged prayers/, 'effective Ranged');
+  need(stat, /\$effective_ranged = add\(add\(\$effective_ranged, 8\), \$ranged_stylebonus\);/, 'effective Ranged\'s 8 and style bonus');
+  need(stat, /%com_rangeattack = ~combat_stat\(\$effective_ranged, \$rangeattack\);/, 'the Ranged attack roll');
+  need(stat, /def_int \$ranged_strength = ~combat_stat\(\$effective_ranged, \$rangebonus\);/, 'Ranged strength');
+  need(stat, /case \^ranged_style : %com_maxhit = ~combat_maxhit\(\$ranged_strength\);/, 'the Ranged max hit');
+  const combatRs = await text('skill_combat/scripts/combat.rs2');
+  need(combatRs, /\[proc,combat_effective_stat\]\(int \$stat_level, int \$prayerbonus\)\(int\)\s*return\(scale\(max\(100, \$prayerbonus\), 100, \$stat_level\)\);/, 'combat_effective_stat');
+  need(combatRs, /\[proc,combat_maxhit\]\(int \$combat_stat\)\(int\)\s*return\(calc\(\(\$combat_stat \+ 320\) \/ 640\)\);/, 'combat_maxhit');
+  need(combatRs, /\[proc,combat_stat\]\(int \$effective_stat, int \$bonus\)\(int\)\s*return\(calc\(\$effective_stat \* \(\$bonus \+ 64\)\)\);/, 'combat_stat');
+  const styleBonus = {};
+  for (const [, st, b] of combatRs.matchAll(/case \^style_ranged_(\w+) : return\(\d+, \d+, \d+, (\d+)\);/g)) styleBonus[st] = Number(b);
+  styleBonus.rapid ??= 0;                       // (no case of its own: the default, none)
+  if (styleBonus.accurate !== 3 || styleBonus.longrange !== 0 || !/case default : return\(0, 0, 0, 0\);/.test(combatRs)) throw new Error(`ranged ammo: the Ranged styles' bonuses are ${JSON.stringify(styleBonus)} now`);
+  const npcCombat = scriptBlocks(await text('skill_combat/scripts/npc/npc_combat.rs2'));
+  need(npcCombat.get('proc,npc_defence_roll_specific') || '', /def_int \$effective_defence = ~combat_effective_stat\(npc_stat\(\$stat\), 100\);[^]*?\$effective_defence = add\(\$effective_defence, 9\);[^]*?~combat_stat\(\$effective_defence, \$defencebonus\)/, 'a monster\'s defence roll');
+  need(npcCombat.get('proc,npc_combat_defencebonus') || '', /case \^ranged_style : return\(npc_param\(rangedefence\)\);/, 'a monster\'s ranged defence');
+  need(npcCombat.get('proc,npc_max_dealt') || '', /return \(min\(\$maxhit, npc_param\(max_dealt\)\)\);/, 'npc_max_dealt');
+  // (a monster whose NPC caps what a hit does to it: max_dealt. Salarin the twisted's is 0: Ranged does it no damage)
+  const capped = {};
+  for (const m of monsters) {
+    const caps = npcWorld.rowsOf.get(m.id).map(r => npcWorld.npcs.get(r.key)?.params.max_dealt).filter(v => v != null).map(Number);
+    if (caps.length) capped[m.id] = Math.min(...caps);
+  }
+  const breaks = Number((await text('skill_combat/configs/combat.constant')).match(/^\^dropammo_chance = (\d+)$/m)?.[1]);
+  if (!(breaks > 1)) throw new Error('ranged ammo: no ^dropammo_chance');
+  const rateDefault = Number((await readConfig(scripts('skill_combat/configs/combat.param'))).get('attackrate')?.props.default);
+  if (rateDefault !== 4) throw new Error(`ranged ammo: a weapon's attack rate is ${rateDefault} ticks by default now`);
+  // The Ranged level each is wielded at
+  const wield = new Map();
+  for (const f of (await readdir(scripts('levelrequire/scripts'))).filter(f => f.endsWith('.rs2'))) {
+    for (const [, obj, lv] of (await text(`levelrequire/scripts/${f}`)).matchAll(/^\[opheld2,(\w+)\] @levelrequire_ranged\((\d+), last_slot\);/gm)) wield.set(obj, Number(lv));
+  }
+  const objs = async f => [...(await readConfig(scripts(`skill_combat/configs/ranged/${f}`))).values()];
+  // (poisoned ones are counted as the plain: their poison isn't; fire arrows, lit or not, as the plain arrows)
+  const plain = b => !/_p$/.test(b.name) && !/lit/.test(b.name) && ITEM.has(b.name);
+  const num = (b, p) => Number(b.params[p] ?? 0);
+  const wielded = b => {
+    const lv = wield.get(b.name);
+    if (lv == null) throw new Error(`ranged ammo: no Ranged level to wield ${b.name}`);
+    if (lv !== num(b, 'levelrequire')) throw new Error(`ranged ammo: ${b.name} is wielded at Ranged ${lv} but its levelrequire is ${num(b, 'levelrequire')}`);
+    return lv;
+  };
+  const byLevel = (x, y) => x.level - y.level || x.strength - y.strength || x.attack - y.attack;
+  const bows = (await objs('bows.obj')).filter(b => b.props.category === 'weapon_bow' && b.name !== 'ogre_bow' && plain(b))   // (the ogre bow fires ogre arrows alone)
+    .map(b => ({ id: b.name, attack: num(b, 'rangeattack'), level: wielded(b), rate: Number(b.params.attackrate ?? rateDefault), ...(/longbow$/.test(b.name) ? { long: 1 } : {}) }))
+    .sort((x, y) => x.level - y.level || (x.long ?? 0) - (y.long ?? 0));
+  const arrows = (await objs('arrows.obj')).filter(b => b.props.category === 'arrows' && b.params.rangebonus != null && plain(b))
+    .map(b => ({ id: b.name, strength: num(b, 'rangebonus'), bow: num(b, 'levelrequire'), ...(num(b, 'rangeattack') ? { attack: num(b, 'rangeattack') } : {}) }))
+    .sort((x, y) => x.bow - y.bow || x.strength - y.strength);
+  if (arrows.some(a => a.attack)) throw new Error('ranged ammo: an arrow has a Ranged attack bonus of its own now');
+  const thrown = async f => (await objs(f)).filter(b => b.props.category === 'weapon_thrown' && plain(b))
+    .map(b => ({ id: b.name, attack: num(b, 'rangeattack'), strength: num(b, 'rangebonus'), level: wielded(b), rate: Number(b.params.attackrate ?? rateDefault) })).sort(byLevel);
+  rangedGear = { styleBonus, breaks, bows, arrows, knives: await thrown('knives.obj'), darts: await thrown('darts.obj'), capped };
+  for (const [k, list] of Object.entries(rangedGear)) if (Array.isArray(list) && list.length < 6) throw new Error(`ranged ammo: only ${list.length} ${k}`);
+  combatNotes.push(`ranged ammo: ${bows.length} bows, ${arrows.length} arrows, ${rangedGear.knives.length} knives, ${rangedGear.darts.length} darts; 1 in ${breaks} shots breaks; Accurate +${styleBonus.accurate} effective Ranged; a hit capped (max_dealt): ${Object.entries(capped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`);
+}
+
 // ── NPC drops (Planner+ v3) ────────────────────────────────────────────────
 // What each monster drops, read from the server's own drop scripts by a small
 // RuneScript evaluator (build-drops.mjs) that follows every value a random()
@@ -4060,6 +4150,14 @@ ${monsters.map(m => '  ' + JSON.stringify(m)).join(',\n')},
 // server's own sums (give_combat_experience). A skill's first style is how a goal
 // starts; CHOICES has them to pick from.
 export const COMBAT_STYLES = ${JSON.stringify(combatStyles)};
+
+// (v3.4) What a Ranged goal's plan can shoot with, from the server's configs, and its sums' numbers.
+// bows: attack (Ranged attack bonus), level (the Ranged level to wield it), rate (ticks a shot; a tick less
+// on Rapid), long (a longbow). arrows: strength (Ranged strength), bow (the levelrequire a bow needs to fire
+// them). knives, darts: attack, strength, level, rate. styleBonus: what each Ranged style adds to your
+// effective Ranged. breaks: 1 shot in this many breaks its ammo; the rest drop where the monster stands.
+// capped: monsters whose hits are capped at that much damage (max_dealt).
+export const RANGED_GEAR = ${JSON.stringify(rangedGear)};
 
 // Those five skills' rows, made here from the two: a row a monster, counted in
 // kills. A kill is the monster's hitpoints in damage (a hit can't do more than
