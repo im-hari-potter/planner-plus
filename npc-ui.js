@@ -1144,9 +1144,10 @@ export function createNpcUi(P) {
     const rare = [...drops].filter(([s, d]) => d.p < 1 && d.p > 0 && taken(goal, s));
     if (!rare.length) return '';
     const pick = dryPick.get(goal.id) || {};
-    // (the rarest drop worth the most, to start with)
+    // (the drop you picked last, kept with the goal (v3.4.1); till you pick one, the rarest drop worth the most)
     const start = rare.map(([s, d]) => [s, d, (worthOf(s) || 0) * d.q]).sort((a, b) => b[2] - a[2] || a[1].p - b[1].p)[0][0];
-    const slug = drops.has(pick.item) && drops.get(pick.item).p < 1 ? pick.item : start;
+    const item = pick.item ?? goal.dryItem;
+    const slug = rare.some(([s]) => s === item) ? item : start;
     const d = drops.get(slug);
     const k = pick.kills ?? (goal.done && !(goal.got?.[slug] > 0) ? goal.done : Math.round(1 / d.p) * 2);
     const sentence = k > 0 ? drySentence(ITEMS[slug]?.name || slug, d.p, k) : '';
@@ -1615,7 +1616,13 @@ export function createNpcUi(P) {
       P.entered(P.renderGoals);
       return true;
     }
-    if (t.dataset.dryItem) { dryPick.set(goal.id, { item: t.value }); P.renderGoals(); return true; }
+    if (t.dataset.dryItem) {
+      // (v3.4.1: kept with the goal, so it's still the one picked after a reload; the kills go back to their own)
+      dryPick.set(goal.id, { item: t.value });
+      P.updateGoal(goal.id, g => { g.dryItem = t.value; });
+      P.renderGoals();
+      return true;
+    }
     if (t.dataset.dryKills) {
       const n = P.parseAmount(t.value);
       if (n == null) { t.classList.add('bad'); return true; }

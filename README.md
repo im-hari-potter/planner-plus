@@ -294,7 +294,7 @@ use. Then Rapid or Accurate, whether you **pick up what drops**, and your armour
 - **Shots**: each shot is a roll, your attack against the monster's defence, and a hit does 0 to
   your max hit, so a kill takes as many shots as its hitpoints need on average. They're counted a
   level at a time as your Ranged rises, and the plan's table has a **Shots** column: a kill at your
-  level now.
+  level now. The last line says how often you hit and how hard (hover it for the server's numbers).
 - **Fired, lost and what it costs**: every shot uses one, hit or miss. 1 in 5 breaks and the rest
   drop where the monster stands, so picking them up loses a fifth; leaving them loses them all.
 - **Which kind?** It matters: arrows hit hardest, their strength the arrow's and their attack the
@@ -409,7 +409,7 @@ rates; the Coins line keeps only what was dropped.*
 
 A drop of 1/128 and 200 kills without it is 1.56 × the drop rate, and more to the point: **going
 that dry happens to 21% of players**, about 1 in 5. Half of players have one by 89 kills, and 9 in
-10 by 294.
+10 by 294. Each goal keeps the drop you picked last.
 
 ## Useful tips
 

@@ -2082,6 +2082,8 @@ export function createPlanner(ctx) {
   // "Rune arrows", "Rune knives"
   const ammoName = (slug, n = 2) => { const name = ITEMS[slug]?.name || slug; return n === 1 ? name : `${name.replace(/knife$/i, 'knive')}s`; };
   const shotsText = v => (v >= 100 ? fmt(Math.round(v)) : v.toFixed(1));
+  // (v3.4.1) a chance in whole percents: 99% rather than 100% for one that isn't sure, and none rounded to 0%
+  const hitPct = p => { const r = Math.round(p * 100); return r >= 100 && p < 1 ? '99%' : r <= 0 && p > 0 ? 'under 1%' : `${r}%`; };
   const STYLE_NAME = { rapid: 'Rapid', accurate: 'Accurate', longrange: 'Longrange' };
 
   function ammoHtml(goal, plan, ix, cur) {
@@ -2138,13 +2140,15 @@ export function createPlanner(ctx) {
         <span>${pickUp ? `Lost: about <b>${fmt(lost)}</b> <span class="c-faint">(1 in ${BREAKS} breaks; you pick up the rest)</span>` : `Lost: all <b>${fmt(lost)}</b> <span class="c-faint">(not picked up)</span>`}</span>
         <span>They cost: <b>${p == null ? '?' : gpShort(lost * p)}</b> gp${p == null ? '' : ` <span class="c-faint">(${gpShort(p)} each)</span>`}</span>
       </div>`;
-    // The server's numbers for the monster most of the shots go to, at your Ranged level now
+    // (v3.4.1: one short line) How often you hit the monster most of the shots go to, at the Ranged level its
+    // kills start at, and how hard. The server's numbers behind it, the two rolls, are its tooltip.
     const main = lines.filter(l => l.shots !== Infinity).sort((x, y) => y.shots - x.shots)[0];
     let tip = '';
     if (main) {
       const k = killAt(main.mon, Math.min(main.from, 99), { style, gear, bonus });
       const with_ = gear.kind === 'arrows' ? `${ammoName(gear.ammo).toLowerCase()} from ${aWord(ITEMS[gear.bow]?.name || '')} ${(ITEMS[gear.bow]?.name || '').toLowerCase()}` : ammoName(gear.ammo).toLowerCase();
-      tip = `<div class="tip"><span>${esc(main.m.short)} (Defence ${main.mon.defence}${main.mon.rangeDefence ? `, ranged defence ${main.mon.rangeDefence > 0 ? '+' : ''}${main.mon.rangeDefence}` : ''}), at Ranged ${main.from} on ${STYLE_NAME[style]} with ${with_}${bonus ? ` and ${bonus > 0 ? '+' : ''}${bonus} from your armour` : ''}: <b>${Math.round(k.hit * 1000) / 10}%</b> of shots hit (your roll of 0 to ${fmt(k.attack)} has to beat its 0 to ${fmt(k.defence)}), and a hit does 0 to <b>${k.max}</b>. Every shot uses its ammo, hit or miss.</span></div>`;
+      const how = `${main.m.short} (Defence ${main.mon.defence}${main.mon.rangeDefence ? `, ranged defence ${main.mon.rangeDefence > 0 ? '+' : ''}${main.mon.rangeDefence}` : ''}), at Ranged ${main.from} on ${STYLE_NAME[style]} with ${with_}${bonus ? ` and ${bonus > 0 ? '+' : ''}${bonus} from your armour` : ''}: your roll of 0 to ${fmt(k.attack)} has to beat its 0 to ${fmt(k.defence)}, ${Math.round(k.hit * 1000) / 10}% of the time, and a hit does 0 to ${k.max} damage, each as likely.`;
+      tip = `<div class="tip" title="${esc(how)}"><span>${esc(main.m.short)} at Ranged ${main.from}: <b>${hitPct(k.hit)}</b> of your shots hit, and a hit does 0 to <b>${k.max}</b> damage.</span></div>`;
     }
     return `<div class="plan-sec ammo"><h4>Ammo <span class="c-faint small-note">(one a shot, hit or miss, as the server counts them)</span></h4>
       ${picks}${warn.map(w => `<div class="c-lose small-note ammo-warn">${w}</div>`).join('')}

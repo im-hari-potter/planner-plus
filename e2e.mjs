@@ -4231,7 +4231,7 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
   assert.equal(await page.evaluate(() => location.hash), '#npcs');
 });
 
-await check('slayer: a goal of kills, picked between Thieving and Runecraft: the XP and the levels it takes you to, the loot to expect and the chance of at least one of each drop; kills done and your loot, a drop at a time; how lucky, and how dry (v3)', async () => {
+await check('slayer: a goal of kills, picked between Thieving and Runecraft: the XP and the levels it takes you to, the loot to expect and the chance of at least one of each drop; kills done and your loot, a drop at a time; how lucky, and how dry (v3; v3.4.1: the drop picked for how dry is kept with the goal)', async () => {
   await planAs('old badger', 'Old Badger');
   await page.click('[data-nskill="slayer"]');
   const keys = await page.locator('#goal-new [data-nskill]').evaluateAll(els => els.map(e => e.dataset.nskill));
@@ -4299,6 +4299,17 @@ await check('slayer: a goal of kills, picked between Thieving and Runecraft: the
     await dry.locator('[data-dry-kills]').press('Enter');
     await dry.locator('.dry-out', { hasText: '200 kills without one' }).waitFor();
     assert.equal(flat(await dry.locator('.dry-out').innerText()), 'Rune scimitar: 200 kills without one is 1.56 × the drop rate (1/128). Going this dry happens to 21% of players (about 1 in 4.8). Half of players have one by 89 kills; 9 in 10 by 294, and 99 in 100 by 588.');
+    // (v3.4.1) the drop picked is kept with the goal: still the one after a reload, its kills back to their own
+    // (twice its rate: you have one)
+    assert.equal((await goalOf('old_badger', 'slayer')).dryItem, 'rune_scimitar');
+    await page.reload();
+    await card.locator('.dry [data-dry-item]').waitFor({ timeout: 20000 });
+    assert.equal(await card.locator('.dry [data-dry-item]').inputValue(), 'rune_scimitar');
+    assert.match(flat(await card.locator('.dry .dry-out').innerText()), /^Rune scimitar: 256 kills without one is 2 × the drop rate \(1\/128\)\./);
+    // another pick replaces it
+    await card.locator('.dry [data-dry-item]').selectOption('uncut_sapphire');
+    await card.locator('.dry .dry-out', { hasText: 'Uncut sapphire' }).waitFor();
+    assert.equal((await goalOf('old_badger', 'slayer')).dryItem, 'uncut_sapphire');
     // every kill done: reached
     await card.locator('[data-done]').fill('1500');
     await card.locator('[data-done]').press('Enter');
@@ -4851,7 +4862,7 @@ await check("goals: every skill's table has a tick box, Chop, Mine, Catch, Steal
   }
 });
 
-await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (the best your level can use to start), each monster's shots and what's fired, lost and costs, by the server's sums; arrows a bow can't fire and gear above your level said; a Shots column (v3.4)", async () => {
+await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (the best your level can use to start), each monster's shots and what's fired, lost and costs, by the server's sums; arrows a bow can't fire and gear above your level said; a Shots column (v3.4; v3.4.1: the tip one short line, the server's rolls in its tooltip)", async () => {
   await planAs('old badger', 'Old Badger');
   // Old Badger: Ranged 55 (166,736 XP); a goal of 60 on moss giants (60 hitpoints, Defence 30, no ranged defence: 240 XP a kill)
   await addGoal('ranged', 60);
@@ -4881,8 +4892,10 @@ await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (
     const money = flat(await ammo.locator('.money').innerText());
     const fired = Math.ceil(r.shots), lost = Math.ceil(r.shots / 5);
     assert.match(money, new RegExp(`^Fired: ${fired.toLocaleString('en-US')} Rune arrows Lost: about ${lost.toLocaleString('en-US')} \\(1 in 5 breaks; you pick up the rest\\) They cost: [\\d.]+[KMB]? gp \\(4,800 each\\)$`));
-    // the server's numbers, at Ranged 55: (55 + 8) × (69 + 64) = 8,379 against (30 + 9) × 64 = 2,496: 1 − 2,498 / 16,760; (63 × 113 + 320) / 640 = 11.6
-    assert.equal(flat(await ammo.locator('.tip').innerText()), 'Moss giant (Defence 30), at Ranged 55 on Rapid with rune arrows from a magic shortbow: 85.1% of shots hit (your roll of 0 to 8,379 has to beat its 0 to 2,496), and a hit does 0 to 11. Every shot uses its ammo, hit or miss.');
+    // the tip: how often you hit, and how hard (v3.4.1: one short line; the server's numbers behind it are its tooltip).
+    // At Ranged 55: (55 + 8) × (69 + 64) = 8,379 against (30 + 9) × 64 = 2,496: 1 − 2,498 / 16,760; (63 × 113 + 320) / 640 = 11.6
+    assert.equal(flat(await ammo.locator('.tip').innerText()), 'Moss giant at Ranged 55: 85% of your shots hit, and a hit does 0 to 11 damage.');
+    assert.equal(await ammo.locator('.tip').getAttribute('title'), 'Moss giant (Defence 30), at Ranged 55 on Rapid with rune arrows from a magic shortbow: your roll of 0 to 8,379 has to beat its 0 to 2,496, 85.1% of the time, and a hit does 0 to 11 damage, each as likely.');
     // darts: the best Ranged 55 can wield, rune; Accurate, unpicked, and +31 from armour (a green dragonhide body, chaps and vambraces)
     await ammo.locator('[data-ammo="kind"]').selectOption('darts');
     await card.locator('.plan-sec.ammo [data-ammo="ammo"] option[value="rune_dart"]:checked').waitFor({ state: 'attached' });
@@ -4890,12 +4903,13 @@ await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (
     await card.locator('.plan-sec.ammo [data-ammo="pickUp"]').uncheck();
     await card.locator('.plan-sec.ammo [data-ammo="bonus"]').fill('31');
     await card.locator('.plan-sec.ammo [data-ammo="bonus"]').press('Enter');
-    await card.locator('.plan-sec.ammo .tip', { hasText: '+31 from your armour' }).waitFor();
+    await card.locator('.plan-sec.ammo .tip[title*="+31 from your armour"]').waitFor();
     r = want(gearOf({ kind: 'darts', ammo: 'rune_dart' }), 'accurate', 31);
     assert.equal(flat(await card.locator('.plan-sec.ammo .step').innerText()), line(r));
     assert.match(flat(await card.locator('.plan-sec.ammo .money').innerText()), new RegExp(`^Fired: ${Math.ceil(r.shots).toLocaleString('en-US')} Rune darts Lost: all ${Math.ceil(r.shots).toLocaleString('en-US')} \\(not picked up\\)`));
-    // (66 × (15 + 31 + 64) = 7,260; (66 × 78 + 320) / 640 = 8.5)
-    assert.match(flat(await card.locator('.plan-sec.ammo .tip').innerText()), /^Moss giant \(Defence 30\), at Ranged 55 on Accurate with rune darts and \+31 from your armour: [\d.]+% of shots hit \(your roll of 0 to 7,260 has to beat its 0 to 2,496\), and a hit does 0 to 8\./);
+    // (66 × (15 + 31 + 64) = 7,260: 1 − 2,498 / 14,522; (66 × 78 + 320) / 640 = 8.5)
+    assert.equal(flat(await card.locator('.plan-sec.ammo .tip').innerText()), 'Moss giant at Ranged 55: 83% of your shots hit, and a hit does 0 to 8 damage.');
+    assert.equal(await card.locator('.plan-sec.ammo .tip').getAttribute('title'), 'Moss giant (Defence 30), at Ranged 55 on Accurate with rune darts and +31 from your armour: your roll of 0 to 7,260 has to beat its 0 to 2,496, 82.8% of the time, and a hit does 0 to 8 damage, each as likely.');
     assert.deepEqual((await goalOf('old_badger', 'ranged')).ammo, { kind: 'darts', fight: 'accurate', pickUp: false, bonus: 31 });
     // arrows from a bow that can't fire them, and a bow above your level
     await card.locator('.plan-sec.ammo [data-ammo="kind"]').selectOption('arrows');
@@ -5619,7 +5633,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.4\.0 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.4\.1 · /);
   await page.click('#settings-close');
 });
 
