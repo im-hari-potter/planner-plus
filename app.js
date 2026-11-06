@@ -1,6 +1,7 @@
 // Planner+ (formerly Skills+, and before that Hiscores+) — the page. Views:
-// Lookup, Compare, Gains, Leaderboard, and the planner: Goals, NPCs, Bank,
-// Prices (planner-ui.js; the NPCs tab and Slayer goals are npc-ui.js's).
+// Lookup, Compare, Gains, Leaderboard, and the planner: Goals, Bank, Prices,
+// Gear and NPCs (planner-ui.js; the NPCs tab and Slayer goals are npc-ui.js's,
+// the Gear tab gear-ui.js's).
 
 import {
   SKILLS, SKILL_BY_ID, SKILL_IDS, COMBAT_IDS, COMBAT_KEYS, MIN_RANKED_LEVEL, MAX_LEVEL, SLAYER, GAME_LAYOUT, GAME_ORDER,
@@ -15,7 +16,7 @@ import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.4.1';
+const VERSION = '3.5.0';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -36,8 +37,8 @@ const prices = new Prices(LOCAL
   ? { origin: new URL('market', location.href).href, routes: ['page', 'api'], gapMs: 50 }
   : { origin: LIVE_MARKET, routes: isElectron() ? ['page', 'api'] : ['api'] });
 if (LOCAL) window.__skills = { prices };                   // for the test scripts
-const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'npcs'];
-const PLAN_TABS = ['goals', 'bank', 'prices', 'npcs'];
+const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs'];
+const PLAN_TABS = ['goals', 'bank', 'prices', 'gear', 'npcs'];
 
 // ── State ────────────────────────────────────────────────────────────────
 const prefs = store.get('prefs', {});
@@ -1350,7 +1351,7 @@ function wire() {
   $('restore-go').addEventListener('click', () => {
     try {
       const res = importBackup($('restore-text').value);
-      showMsg('settings-msg', `Restored: ${res.snaps} snapshots, ${res.playersAdded} saved players, ${res.goals} goals and ${res.banks} bank${res.banks === 1 ? '' : 's'} added.`, 'ok');
+      showMsg('settings-msg', `Restored: ${res.snaps} snapshots, ${res.playersAdded} saved players, ${res.goals} goals, ${res.banks} bank${res.banks === 1 ? '' : 's'} and ${res.gear} account${res.gear === 1 ? '\'s' : 's\''} gear added.`, 'ok');
       renderSettings(); render();
     } catch (err) { showMsg('settings-msg', esc(err.message), 'error'); }
   });

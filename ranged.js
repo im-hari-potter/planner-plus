@@ -85,8 +85,10 @@ export function bestGear(kind, level) {
 
 // One kill of a monster at a Ranged level: { hit (the chance a shot hits), max (max hit), attack, defence
 // (the two rolls), shots (on average) }. mon: { id, hp, defence, rangeDefence }; bonus: what the rest of your
-// gear adds to your Ranged attack bonus.
-export function killAt(mon, level, { style, gear, bonus = 0 }) {
+// gear adds to your Ranged attack bonus. (v3.5) boost: your level with a potion (level => boosted level), and
+// gear's attack and strength the whole of what you wear (the Gear tab's Ranged setup), with bonus 0.
+export function killAt(mon, level, { style, gear, bonus = 0, boost = null }) {
+  if (boost) level = boost(level);
   const attack = attackRoll(level, style, gear.attack + bonus);
   const defence = defenceRoll(mon.defence, mon.rangeDefence);
   const cap = G.capped?.[mon.id];
@@ -99,12 +101,12 @@ export function killAt(mon, level, { style, gear, bonus = 0 }) {
 // Ranged XP a kill gives) }]. Your level rises as they're done, and each level's kills count at that level.
 // → { shots, steps: [{ shots, first, last (a kill's shots at the first and last level it's done at), from,
 // to (those levels) }] }; shots is Infinity if a step can't be done.
-export function shotsFor(steps, { startXp10, style, gear, bonus = 0 }) {
+export function shotsFor(steps, { startXp10, style, gear, bonus = 0, boost = null }) {
   let xp = Math.max(0, startXp10 || 0), total = 0;
   const memo = new Map();
   const at = (mon, level) => {
     const k = `${mon.id}:${level}`;
-    if (!memo.has(k)) memo.set(k, killAt(mon, level, { style, gear, bonus }).shots);
+    if (!memo.has(k)) memo.set(k, killAt(mon, level, { style, gear, bonus, boost }).shots);
     return memo.get(k);
   };
   const out = steps.map(({ mon, kills, xp10 }) => {

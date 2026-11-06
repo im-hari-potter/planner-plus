@@ -85,14 +85,14 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 @media (max-height: 460px) { .top { position: static; } html { scroll-padding-top: 8px; } }
 /* (a window too narrow for one line: Settings stays up on the name's line, the tabs under them,
    so what's pinned is a line shorter. v3.3.2: from 1000 px, where one line no longer holds them, so All and
-   Combat never sit on a line of their own under the tabs; 860 till then) */
-@media (max-width: 1000px) { .brand { order: -2; } .top-right { order: -1; } }
+   Combat never sit on a line of their own under the tabs; 860 till then. v3.5: from 1080 px, with Gear's tab) */
+@media (max-width: 1080px) { .brand { order: -2; } .top-right { order: -1; } }
 /* A tab's icon (v3.2.1): 26 by 24, drawn at that size, so never blurry (tabicons.png): the round ones in the
    frame of the game's own round side icons (v3.3: Goals the bar chart of its Stats icon, Prices coins;
    v3.3.2: Bank the gold "$" of the game's bank icon on the minimap, the tabs' order with NPCs last). Clear
    of the active tab's gold line under it. Its address carries a stamp of the picture, so a browser fetches
    the new one with these sizes, not an old one it kept. */
-.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=433edf9280'); background-size: 208px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
+.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=8f0d5ac536'); background-size: 234px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
 .tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
 .ti.ti-compare { background-position: -26px 0; }
@@ -101,7 +101,8 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 .ti.ti-goals { background-position: -104px 0; }
 .ti.ti-bank { background-position: -130px 0; }
 .ti.ti-prices { background-position: -156px 0; }
-.ti.ti-npcs { background-position: -182px 0; }
+.ti.ti-gear { background-position: -182px 0; }
+.ti.ti-npcs { background-position: -208px 0; }
 @media (max-width: 520px) { .ti { margin: -3px 4px 0 -2px; } }
 .brand { display: flex; align-items: center; gap: 6px; font-size: 16px; color: var(--gold-hi); white-space: nowrap; }
 .brand img { image-rendering: pixelated; }
@@ -135,8 +136,9 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
 .tab { font-size: 14px; padding: 5px 10px; }
 .tab.active { border-style: inset; color: #fff; box-shadow: inset 0 -3px 0 var(--gold-hi), inset 0 0 0 40px rgba(0, 0, 0, 0.25); }
 /* (v3.3.2) a window a little narrower than the header's one line: the tabs a little closer, so the line still holds
-   them, All and Combat and Settings too, down to 1000 px */
-@media (max-width: 1060px) and (min-width: 1001px) { .tabs .tab { padding-left: 8px; padding-right: 8px; } .tabs { gap: 3px; } .top { column-gap: 8px; } }
+   them, All and Combat and Settings too, down to 1000 px. (v3.5: nine tabs, so on one line they're always that close:
+   it holds them from 1081 px) */
+@media (min-width: 1081px) { .tabs .tab { padding-left: 8px; padding-right: 8px; } .tabs { gap: 3px; } .top { column-gap: 8px; } }
 
 .icon-btn {
   display: inline-flex;
@@ -942,3 +944,72 @@ table.prices-t td.pq .input.num { width: 100%; max-width: 90px; margin: 0; }
 /* (v3.3) the cost is a box too: what you'd spend, the quantity worked out from it */
 table.prices-t td.pcost .input.num { width: 100%; max-width: 104px; margin: 0; }
 .pq-sum { margin: 2px 0 0; font-size: 14px; }
+
+/* ── v3.5: Gear ─────────────────────────────────────────────────────────── */
+/* Your setup: which one, Best from my bank, then your levels (a what-if in orange, a potion's boost beside it) */
+.gear-top { gap: 6px 14px; margin-top: 2px; }
+.gear-best { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.gear-note { margin: 4px 0 6px; font-family: var(--small); font-size: 13px; }
+.gear-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; }
+.gear-lv { display: inline-flex; align-items: center; gap: 3px; cursor: text; }
+.gear-lv .input { width: 40px; text-align: center; padding: 3px 2px; }
+.gear-lv .input::placeholder { color: var(--text); opacity: 0.85; }
+.gear-lv.whatif .input { border-color: var(--rank); color: #fff; }
+.gear-up { font-family: var(--small); font-size: 13px; color: var(--win); }
+/* What's worn on the left as the game's Worn Equipment screen has it, the rest on the right */
+.gear-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 18px; align-items: start; margin-top: 8px; }
+@media (max-width: 560px) { .gear-body { grid-template-columns: minmax(0, 1fr); } }
+.gear-left { width: 156px; }
+.gear-worn { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(5, 44px); gap: 4px; padding: 6px; width: max-content;
+  background: #3b3326; border: 2px solid var(--gold-dim); border-radius: 6px; }
+.gear-slot { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: #4a4033; border: 2px solid #5f5038; border-radius: 4px; cursor: pointer; }
+.gear-slot:hover { border-color: var(--gold); background: #534736; }
+.gear-slot:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 1px; }
+.gear-slot.on { border-color: var(--gold-hi); box-shadow: 0 0 0 1px var(--gold-hi); }
+.gear-slot.bad { border-color: var(--lose); }
+.gs-empty { font-family: var(--small); font-size: 11px; color: #94845f; }
+.gear-hint { margin-top: 4px; }
+/* The items for a slot: a search, then a line each (scrolls) */
+.gear-pick { padding: 4px 6px; border: 1px solid var(--gold-dim); border-radius: 4px; background: rgba(0, 0, 0, 0.25); max-width: 640px; }
+.gear-pick-h { font-weight: normal; color: var(--gold-hi); }
+.gear-pick .bar { margin: 2px 0 4px; }
+.gear-find { width: 150px; }
+.gear-opts { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.gear-opt-h { margin: 4px 0 1px; font-family: var(--small); font-size: 13px; color: var(--gold-hi); }
+.gear-opt { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; padding: 2px 4px; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 3px;
+  color: var(--text); font-family: 'RS-Bold', sans-serif; font-size: 14px; text-shadow: var(--shadow); cursor: pointer; }
+.gear-opt:hover, .gear-opt:focus-visible { background: rgba(139, 105, 20, 0.2); border-color: var(--gold-dim); outline: none; }
+.gear-opt.on { border-color: var(--gold); }
+.gear-opt .go-b, .gear-opt .go-need, .gear-opt .go-n { font-family: var(--small); font-size: 12px; }
+.gear-opt .go-b { color: var(--faint); }
+.gear-opt .go-need { color: var(--lose); }
+.gear-opt .go-n { color: var(--level); margin-left: auto; }
+.gear-opt.bad .go-name { color: var(--muted); }
+/* Style, prayers, potions, bonuses */
+.gear-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 7px; font-size: 14px; }
+.gear-row select { max-width: 100%; min-width: 0; }
+.gear-pray { gap: 4px; }
+.gear-pray select { max-width: 180px; }
+.gear-bonus-wrap { margin-top: 4px; max-width: 420px; }
+table.gear-bonus th, table.gear-bonus td { padding: 3px 7px; }
+.gear-other { margin-top: 4px; color: var(--muted); }
+.gear-other b { color: #fff; font-weight: normal; }
+.gear-warn { margin-top: 4px; }
+/* Against a monster or a player: You and it side by side, then the fight */
+.gear-vs .gear-h { margin: 0; font-weight: normal; font-size: 15px; color: var(--gold-hi); }
+.gear-res-wrap { max-width: 600px; margin-top: 6px; }
+table.gear-res td b { color: #fff; font-weight: normal; }
+table.gear-res td.l { color: var(--muted); }
+.gear-verdict { margin: 8px 0 4px; font-size: 15px; width: fit-content; max-width: 100%; }
+.gear-verdict b { font-weight: normal; font-size: 18px; }
+.gear-its { margin: 2px 0; color: var(--muted); line-height: 1.5; }
+.gear-its b, .gear-spec b { color: #fff; font-weight: normal; }
+.gear-sub { margin: 6px 0 2px; }
+.gear-sub > .small-note { display: block; }
+.gear-name { width: 140px; }
+/* A monster's page: each setup against it */
+table.gear-npc-t th, table.gear-npc-t td { padding: 3px 7px; }
+table.gear-npc-t td .small-note { white-space: nowrap; }
+.gear-npc .note { margin: 2px 0; }
+/* (a narrow window: You and it each wrap their numbers, so neither is cut off) */
+@media (max-width: 520px) { table.gear-res th, table.gear-res td { white-space: normal; } table.gear-res td.l { min-width: 72px; } }

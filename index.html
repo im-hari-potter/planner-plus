@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; connect-src 'self' https://2004.lostcity.rs https://markets.lostcity.rs; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'">
   <title>Planner+</title>
-  <meta name="description" content="Lost City (2004scape) planner: goals with skill calculators, an NPC database with drop tables and loot planning, your bank and live market prices, plus hiscores with percentiles, compare, gains and leaderboards. Built to run as a LostKit tool.">
+  <meta name="description" content="Lost City (2004scape) planner: goals with skill calculators, a gear planner with max hits and fights against monsters and players, an NPC database with drop tables and loot planning, your bank and live market prices, plus hiscores with percentiles, compare, gains and leaderboards. Built to run as a LostKit tool.">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
@@ -24,6 +24,7 @@
         <button class="tab plan-tab" data-tab="goals" type="button"><span class="ti ti-goals" aria-hidden="true"></span>Goals</button>
         <button class="tab plan-tab" data-tab="bank" type="button"><span class="ti ti-bank" aria-hidden="true"></span>Bank</button>
         <button class="tab plan-tab" data-tab="prices" type="button"><span class="ti ti-prices" aria-hidden="true"></span>Prices</button>
+        <button class="tab plan-tab" data-tab="gear" type="button" title="Your gear: what you wear, its bonuses, and how it does against a monster or a player"><span class="ti ti-gear" aria-hidden="true"></span>Gear</button>
         <button class="tab plan-tab" data-tab="npcs" type="button" title="The NPC database: every monster's stats, XP and drops, and plans of kills"><span class="ti ti-npcs" aria-hidden="true"></span>NPCs</button>
       </nav>
       <div class="top-right">
@@ -130,6 +131,13 @@
         <div id="prices-head"></div>
         <div class="msg" id="prices-msg" hidden></div>
         <div id="prices-body"></div>
+      </section>
+
+      <!-- Gear (v3.5): what you wear, and how it fights -->
+      <section class="view" id="view-gear" hidden>
+        <div id="gear-account"></div>
+        <div class="msg" id="gear-msg" hidden></div>
+        <div id="gear-body"></div>
       </section>
 
       <!-- NPCs: the monster database -->

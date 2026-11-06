@@ -436,6 +436,7 @@ export function createNpcUi(P) {
       <div class="npc-head"><button type="button" class="linkish" data-act="npc-back">‹ All monsters</button>
         <h3>${esc(m.name)} <span class="c-faint">level ${m.level}</span></h3></div>
       ${monsterTop(m)}
+      ${P.gearVs ? P.gearVs(m.id) : ''}
       <div class="plan-sec"><h4>Plan kills</h4>${planBox}</div>
       <div class="plan-sec"><h4>XP a kill <span class="c-faint small-note">(highlighted: the style your plan is in; click another to plan in it)</span></h4>
         <div class="table-wrap"><table class="grid xp-t"><thead><tr><th class="l">Style</th><th class="l">XP</th></tr></thead><tbody>${xpRows}</tbody></table></div>

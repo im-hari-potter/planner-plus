@@ -13,7 +13,8 @@
 // symbol drawn on it here pixel by pixel (a magnifying glass, scales, an arrow, a trophy, a bar chart,
 // coins, a sword). Bank's (v3.3.2) is the game's own: the gold "$" of the bank's minimap icon
 // (sprites/mapfunction.png #5), drawn bigger by drawing some of its rows and columns twice (18 x 11 from
-// 13 x 8), so its pixels stay whole. In the tabs' order (v3.3.2: NPCs last).
+// 13 x 8), so its pixels stay whole. In the tabs' order (v3.3.2: NPCs last). (v3.5) Gear's, after Prices: a kite
+// shield, a rune one's slate blue with its gold cross, beside NPCs' sword.
 // gear.webp, rares.webp (v3.3): the Bank and Prices tabs' Gear and Rares buttons: the game's Worn
 // Equipment side icon (sideicons #4) and a blue partyhat (its item icon), each cut to what's drawn.
 // (v3.3.2) Gear's figure 4 pixels shorter in the legs (4 of the 8 rows they're the same for), so it's
@@ -66,6 +67,8 @@ const PAL = {
   E: [140, 226, 112], G: [64, 178, 56], D: [20, 96, 20],
   s: [232, 232, 238], m: [160, 160, 170], M: [96, 96, 106],
   q: [110, 130, 255], b: [40, 64, 222], n: [18, 30, 128],
+  // (v3.5: a rune kiteshield's slate blue, light to dark, as its item icon has it)
+  v: [104, 136, 150], V: [78, 105, 116], W: [52, 70, 80],
 };
 const SYMBOLS = {
   lookup: [
@@ -183,6 +186,26 @@ const SYMBOLS = {
     '..KK....K........',
     '.................',
   ],
+  // (v3.5) a kite shield, a rune one's slate blue with its gold cross
+  gear: [
+    '.................',
+    '.................',
+    '..KKKKKKKKKKKKK..',
+    '.KvvvvvvgVVVVVWK.',
+    '.KvvvvvvgVVVVVWK.',
+    '.KvvvvvvgVVVVVWK.',
+    '.KggggggggggggdK.',
+    '..KvvvvvgVVVVWK..',
+    '..KvvvvvgVVVVWK..',
+    '...KvvvvgVVVWK...',
+    '...KvvvvgVVVWK...',
+    '....KvvvgVVWK....',
+    '.....KvvgVWK.....',
+    '......KvgWK......',
+    '.......KgK.......',
+    '........K........',
+    '.................',
+  ],
   // (two stacks of coins)
   prices: [
     '.................',
@@ -205,7 +228,7 @@ const SYMBOLS = {
   ],
 };
 // (the sheet's order: the tabs')
-const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'npcs'];
+const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs'];
 // (v3.3.2) The bank's "$": the minimap icon's rows 1 to 13 and columns 4 to 11, each that many pixels here
 // (18 rows, 11 columns), drawn from (9, 6) of the frame: the bar of the "$" down the middle of the disc,
 // from its top to its bottom, as on the minimap.

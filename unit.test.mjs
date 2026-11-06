@@ -286,6 +286,24 @@ test('recent players: one can be removed, or the list cleared, and it stays gone
   delete globalThis.localStorage;
 });
 
+test("a backup restores an account's gear (v3.5): one set up here already stays as it is", async () => {
+  const mem = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => { mem.set(k, String(v)); }, removeItem: k => { mem.delete(k); },
+  } });
+  const { importBackup } = await import('./store.js');
+  mem.set('lchs.gear.old_badger', JSON.stringify({ kind: 'ranged', setups: { ranged: { slots: { weapon: 'maple_shortbow' } } } }));
+  const backup = { app: 'lc-hiscores-plus', version: 1, data: {
+    'gear.demo_main': { kind: 'melee', setups: { melee: { slots: { weapon: 'rune_scimitar' } } } },
+    'gear.old_badger': { kind: 'melee', setups: { melee: { slots: { weapon: 'dragon_dagger' } } } },
+  } };
+  const r = importBackup(JSON.stringify(backup));
+  assert.equal(r.gear, 1);
+  assert.equal(JSON.parse(mem.get('lchs.gear.demo_main')).setups.melee.slots.weapon, 'rune_scimitar');
+  assert.equal(JSON.parse(mem.get('lchs.gear.old_badger')).setups.ranged.slots.weapon, 'maple_shortbow', 'what was here stays');
+  delete globalThis.localStorage;
+});
+
 // ── (v3.3) Tables sorted by their columns' names (tablesort.js) ──────────────
 import { sortTh, sortFrom, savedSort, sortedBy } from './tablesort.js';
 

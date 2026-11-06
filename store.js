@@ -176,7 +176,7 @@ export function importBackup(text) {
   if (!parsed || parsed.app !== 'lc-hiscores-plus' || typeof parsed.data !== 'object') {
     throw new Error('That does not look like a Planner+ backup (or one from Skills+ or Hiscores+).');
   }
-  let snaps = 0, playersAdded = 0, goals = 0, banks = 0;
+  let snaps = 0, playersAdded = 0, goals = 0, banks = 0, gear = 0;
   for (const [key, value] of Object.entries(parsed.data)) {
     if (key.startsWith('snap.') && Array.isArray(value)) {
       const current = store.get(key, []);
@@ -207,7 +207,11 @@ export function importBackup(text) {
       store.set(key, { ...value, ...store.get(key, {}) });     // what's set here already wins
     } else if (key === 'plan.account' && typeof value === 'string' && !store.get(key, null)) {
       store.set(key, value);
+    } else if (key.startsWith('gear.') && value && typeof value === 'object' && !store.get(key, null)) {
+      // (v3.5) An account's gear (its setups on the Gear tab): one set up here already stays as it is.
+      store.set(key, value);
+      gear++;
     }
   }
-  return { snaps, playersAdded, goals, banks };
+  return { snaps, playersAdded, goals, banks, gear };
 }

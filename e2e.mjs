@@ -11,6 +11,9 @@ import { BANK_ICON_SHEET } from './bankread-data.js';
 import { xpForLevel, levelForXp } from './skills.js';
 // (v3.4: a Ranged plan's ammo, worked out here as the page should)
 import { gearOf, shotsFor } from './ranged.js';
+// (v3.5: the Gear tab's fights, worked out here as the page should, and its numbers as it shows them)
+import * as C from './combat.js';
+import { hitPct, winPct, timeText } from './gear-ui.js';
 
 const BASE = process.env.BASE || 'http://localhost:8787';
 const SHOTS = process.env.SHOTS || '/tmp';
@@ -1341,7 +1344,7 @@ async function planAs(name, shown) {
   await page.fill('#plan-account input[name=account]', name);
   await page.click('#plan-account button[type=submit]');
   await page.waitForFunction(n => document.querySelector('#plan-account input[name=account]')?.value === n
-    && document.querySelector('#plan-account').innerText.includes('XP from the hiscores'), shown, { timeout: 15000 });
+    && document.querySelector('#plan-account').innerText.includes('XP from the hiscores'), shown, { timeout: 30000 });
 }
 const flat = t => t.replace(/\s+/g, ' ').trim();
 // Takes a goal off the list (its ✕ asks twice), if it's there.
@@ -4178,7 +4181,8 @@ await check("npcs: the database: every monster with the XP and loot of a kill; s
   // (v3.3.2: the minimap 1.25 times its 192 by 144 pixels, 2 times till then, and the picture 176 square, 112 till then:
   // about as tall as each other; what the minimap shows is its tip, no longer a line under it)
   assert.deepEqual(await pg.locator('.npc-map-img').evaluate(el => [el.clientWidth, el.clientHeight]), [240, 180], '1.25 times its 192 by 144 pixels');
-  assert.deepEqual(await pg.locator('.npc-pic').evaluate(el => [el.clientWidth, el.clientHeight, getComputedStyle(el).backgroundSize]), [176, 176, '2816px']);
+  // (a browser writes the sheet's size "2816px" or "2816px auto": the same)
+  assert.deepEqual(await pg.locator('.npc-pic').evaluate(el => [el.clientWidth, el.clientHeight, getComputedStyle(el).backgroundSize.replace(/ auto$/, '')]), [176, 176, '2816px']);
   const tall = await pg.locator('.npc-top').evaluate(el => ['.npc-pic', '.npc-map-img'].map(s => el.querySelector(s).getBoundingClientRect().height));
   assert.ok(Math.abs(tall[0] - tall[1]) <= 10, `about as tall as each other: ${tall}`);
   assert.equal(await pg.locator('.npc-map figcaption, .npc-map .small-note').count(), 0);
@@ -4862,8 +4866,9 @@ await check("goals: every skill's table has a tick box, Chop, Mine, Catch, Steal
   }
 });
 
-await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (the best your level can use to start), each monster's shots and what's fired, lost and costs, by the server's sums; arrows a bow can't fire and gear above your level said; a Shots column (v3.4; v3.4.1: the tip one short line, the server's rolls in its tooltip)", async () => {
+await check("ranged: a Ranged goal's plan counts its ammo, shot with the Gear tab's Ranged setup (v3.5; with nothing there to shoot, the best your level can use, as it started in v3.4): each monster's shots and what's fired, lost and costs, by the server's sums; what you can't wield, and arrows a bow can't fire, said; a Shots column (v3.4; v3.4.1: the tip one short line, the server's rolls in its tooltip)", async () => {
   await planAs('old badger', 'Old Badger');
+  await page.evaluate(() => localStorage.removeItem('lchs.gear.old_badger'));
   // Old Badger: Ranged 55 (166,736 XP); a goal of 60 on moss giants (60 hitpoints, Defence 30, no ranged defence: 240 XP a kill)
   await addGoal('ranged', 60);
   const card = goalCard('Ranged');
@@ -4876,11 +4881,13 @@ await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (
     const step = flat(await card.locator('.plan-sec', { hasText: 'To reach your goal' }).locator('.step').first().innerText());
     const kills = Number(step.match(/^([\d,]+) × Moss giant/)[1].replace(/,/g, ''));
     assert.equal(kills, Math.ceil((xpForLevel(60) - (xpForLevel(55) + 100)) / 240));
-    // to start: the best Ranged 55 can use, a magic shortbow with rune arrows, on Rapid, picked up
-    const picked = () => card.locator('[data-ammo]').evaluateAll(els => els.map(e => [e.dataset.ammo, e.type === 'checkbox' ? e.checked : e.value]));
-    assert.deepEqual(await picked(), [['kind', 'arrows'], ['ammo', 'rune_arrow'], ['bow', 'magic_shortbow'], ['fight', 'rapid'], ['pickUp', true], ['bonus', '']]);
+    // to start, nothing to shoot on the Gear tab: the best Ranged 55 can use, a magic shortbow with rune arrows, on Rapid.
+    // (v3.5) What's shot, the style and the bonuses are the Gear tab's; picking up what drops is the goal's own, the one choice here.
+    assert.equal(flat(await ammo.locator('.ammo-with').innerText()), 'Your Ranged setup on the Gear tab has no bow, crossbow or thrown weapon yet: counted with the best your Ranged level can use, a magic shortbow and rune arrows (+69 Ranged attack, 49 Ranged strength, Rapid).');
+    assert.deepEqual(await card.locator('[data-ammo]').evaluateAll(els => els.map(e => [e.dataset.ammo, e.checked])), [['pickUp', true]]);
+    assert.equal(await ammo.locator('[data-gear-open="ranged"]').innerText(), 'Set it up on the Gear tab');
     const mon = { id: 'moss_giant_42', hp: 60, defence: 30, rangeDefence: 0 };
-    const want = (gear, style = 'rapid', bonus = 0) => shotsFor([{ mon, kills, xp10: 2400 }], { startXp10: (xpForLevel(55) + 100) * 10, style, gear, bonus });
+    const want = (gear, style = 'rapid') => shotsFor([{ mon, kills, xp10: 2400 }], { startXp10: (xpForLevel(55) + 100) * 10, style, gear });
     const each = v => (v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1));
     // (to the last level the kills take you to: what a kill takes there, or the levels when it takes as many)
     const line = r => `${kills.toLocaleString('en-US')} × Moss giant: ${Math.ceil(r.shots).toLocaleString('en-US')} shots (${each(r.steps[0].first)} a kill at Ranged 55${each(r.steps[0].last) !== each(r.steps[0].first) ? `, ${each(r.steps[0].last)} by ${r.steps[0].to}` : ` to ${r.steps[0].to}`})`;
@@ -4895,34 +4902,49 @@ await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (
     // the tip: how often you hit, and how hard (v3.4.1: one short line; the server's numbers behind it are its tooltip).
     // At Ranged 55: (55 + 8) × (69 + 64) = 8,379 against (30 + 9) × 64 = 2,496: 1 − 2,498 / 16,760; (63 × 113 + 320) / 640 = 11.6
     assert.equal(flat(await ammo.locator('.tip').innerText()), 'Moss giant at Ranged 55: 85% of your shots hit, and a hit does 0 to 11 damage.');
-    assert.equal(await ammo.locator('.tip').getAttribute('title'), 'Moss giant (Defence 30), at Ranged 55 on Rapid with rune arrows from a magic shortbow: your roll of 0 to 8,379 has to beat its 0 to 2,496, 85.1% of the time, and a hit does 0 to 11 damage, each as likely.');
-    // darts: the best Ranged 55 can wield, rune; Accurate, unpicked, and +31 from armour (a green dragonhide body, chaps and vambraces)
-    await ammo.locator('[data-ammo="kind"]').selectOption('darts');
-    await card.locator('.plan-sec.ammo [data-ammo="ammo"] option[value="rune_dart"]:checked').waitFor({ state: 'attached' });
-    await card.locator('.plan-sec.ammo [data-ammo="fight"]').selectOption('accurate');
+    assert.equal(await ammo.locator('.tip').getAttribute('title'), "Moss giant (Defence 30), at Ranged 55 on Rapid with a magic shortbow and rune arrows and your gear's +69 Ranged attack: your roll of 0 to 8,379 has to beat its 0 to 2,496, 85.1% of the time, and a hit does 0 to 11 damage, each as likely.");
+    // On the Gear tab, its Ranged setup: rune darts, a green dragonhide body, chaps and vambraces (+31), on Accurate
+    await ammo.locator('[data-gear-open="ranged"]').click();
+    await page.waitForSelector('#view-gear:not([hidden]) [data-gear-kind="ranged"].on');
+    for (const [slot, find, id] of [['weapon', 'rune dart', 'rune_dart'], ['body', 'dragonhide body', 'dragonhide_body'], ['legs', 'dragonhide chaps', 'dragonhide_chaps'], ['hands', 'dragon vamb', 'dragon_vambraces']]) {
+      await page.click(`#gear-body [data-gear-slot="${slot}"]`);
+      await page.fill('#gear-body [data-gear-find]', find);
+      await page.click(`#gear-body [data-gear-wear="${id}"]`);
+    }
+    await page.selectOption('#gear-body [data-gear-mode="you"]', '0');
+    assert.equal(await page.locator('#gear-body [data-gear-mode="you"] option:checked').innerText(), 'Accurate');
+    await page.click('.tab[data-tab="goals"]');
+    await card.locator('.plan-sec.ammo .ammo-with', { hasText: 'Shooting with your Ranged gear' }).waitFor();
+    assert.equal(flat(await card.locator('.plan-sec.ammo .ammo-with').innerText()), 'Shooting with your Ranged gear: rune darts (+46 Ranged attack, 14 Ranged strength, Accurate)');
+    assert.equal(await card.locator('.plan-sec.ammo [data-gear-open="ranged"]').innerText(), 'Change it on the Gear tab');
     await card.locator('.plan-sec.ammo [data-ammo="pickUp"]').uncheck();
-    await card.locator('.plan-sec.ammo [data-ammo="bonus"]').fill('31');
-    await card.locator('.plan-sec.ammo [data-ammo="bonus"]').press('Enter');
-    await card.locator('.plan-sec.ammo .tip[title*="+31 from your armour"]').waitFor();
-    r = want(gearOf({ kind: 'darts', ammo: 'rune_dart' }), 'accurate', 31);
+    await card.locator('.plan-sec.ammo .money', { hasText: 'not picked up' }).waitFor();
+    r = want({ attack: 46, strength: 14 }, 'accurate');
     assert.equal(flat(await card.locator('.plan-sec.ammo .step').innerText()), line(r));
     assert.match(flat(await card.locator('.plan-sec.ammo .money').innerText()), new RegExp(`^Fired: ${Math.ceil(r.shots).toLocaleString('en-US')} Rune darts Lost: all ${Math.ceil(r.shots).toLocaleString('en-US')} \\(not picked up\\)`));
-    // (66 × (15 + 31 + 64) = 7,260: 1 − 2,498 / 14,522; (66 × 78 + 320) / 640 = 8.5)
+    // (66 × (46 + 64) = 7,260: 1 − 2,498 / 14,522; (66 × 78 + 320) / 640 = 8.5)
     assert.equal(flat(await card.locator('.plan-sec.ammo .tip').innerText()), 'Moss giant at Ranged 55: 83% of your shots hit, and a hit does 0 to 8 damage.');
-    assert.equal(await card.locator('.plan-sec.ammo .tip').getAttribute('title'), 'Moss giant (Defence 30), at Ranged 55 on Accurate with rune darts and +31 from your armour: your roll of 0 to 7,260 has to beat its 0 to 2,496, 82.8% of the time, and a hit does 0 to 8 damage, each as likely.');
-    assert.deepEqual((await goalOf('old_badger', 'ranged')).ammo, { kind: 'darts', fight: 'accurate', pickUp: false, bonus: 31 });
-    // arrows from a bow that can't fire them, and a bow above your level
-    await card.locator('.plan-sec.ammo [data-ammo="kind"]').selectOption('arrows');
-    await card.locator('.plan-sec.ammo [data-ammo="bow"]').waitFor();
-    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('maple_shortbow');
-    await card.locator('.plan-sec.ammo [data-ammo="ammo"] option[value="adamant_arrow"]:checked').waitFor({ state: 'attached' });
-    await card.locator('.plan-sec.ammo [data-ammo="ammo"]').selectOption('rune_arrow');
+    assert.equal(await card.locator('.plan-sec.ammo .tip').getAttribute('title'), "Moss giant (Defence 30), at Ranged 55 on Accurate with rune darts and your gear's +46 Ranged attack: your roll of 0 to 7,260 has to beat its 0 to 2,496, 82.8% of the time, and a hit does 0 to 8 damage, each as likely.");
+    assert.deepEqual((await goalOf('old_badger', 'ranged')).ammo, { pickUp: false });
+    // a ranging potion on the Gear tab raises the level the shots are counted at (Ranged 55: 55 + 4 + 5 = 64)
+    await page.click('.tab[data-tab="gear"]');
+    await page.check('#gear-body [data-gear-potion="range"]');
+    assert.equal(await page.locator('#gear-body .gear-lv:has([data-gear-level="ranged"]) .gear-up').innerText(), '64');
+    await page.click('.tab[data-tab="goals"]');
+    await card.locator('.plan-sec.ammo .ammo-with', { hasText: 'a ranging potion' }).waitFor();
+    assert.equal(await card.locator('.plan-sec.ammo .tip').getAttribute('title'), "Moss giant (Defence 30), at Ranged 55 (64 with your potion) on Accurate with rune darts and your gear's +46 Ranged attack: your roll of 0 to 8,250 has to beat its 0 to 2,496, 84.9% of the time, and a hit does 0 to 9 damage, each as likely.");
+    // arrows a bow can't fire: a maple shortbow with rune arrows is said, and counted as if it could
+    await page.click('.tab[data-tab="gear"]');
+    await page.uncheck('#gear-body [data-gear-potion="range"]');
+    for (const [slot, find, id] of [['weapon', 'maple short', 'maple_shortbow'], ['ammo', 'rune arrow', 'rune_arrow']]) {
+      await page.click(`#gear-body [data-gear-slot="${slot}"]`);
+      await page.fill('#gear-body [data-gear-find]', find);
+      await page.click(`#gear-body [data-gear-wear="${id}"]`);
+    }
+    assert.equal(flat(await page.locator('#gear-body .gear-warn').innerText()), "Rune arrows need a bow for Ranged 40 or more: a maple shortbow can't fire them.");
+    await page.click('.tab[data-tab="goals"]');
     await card.locator('.plan-sec.ammo .ammo-warn').waitFor();
-    assert.equal(flat(await card.locator('.plan-sec.ammo .ammo-warn').innerText()), "Rune arrows are only fired from a bow for Ranged 40 or more (yew or magic bows): a maple shortbow can't fire them.");
-    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('magic_longbow');
-    await card.locator('.plan-sec.ammo [data-ammo="bow"]').selectOption('magic_shortbow');
-    await card.locator('.plan-sec.ammo [data-ammo="ammo"]').selectOption('rune_arrow');
-    await card.locator('.plan-sec.ammo .ammo-warn').waitFor({ state: 'detached' });
+    assert.equal(flat(await card.locator('.plan-sec.ammo .ammo-warn').innerText()), "Rune arrows need a bow for Ranged 40 or more: a maple shortbow can't fire them. It's counted as if it could.");
     // the table: Shots, a kill at Ranged 55 with that ammo; sorted by it, the fewest first
     const heads = (await card.locator('table.plan-t thead th').allInnerTexts()).map(flat);
     assert.deepEqual(heads.slice(0, 6), ['Fight', 'Lvl', 'Monster', 'HP', 'XP', 'Shots']);
@@ -4942,31 +4964,37 @@ await check("ranged: a Ranged goal's plan counts its ammo: what you shoot with (
     for (const b of bands) assert.ok(b.every((v, i) => i === 0 || v >= b[i - 1]), `sorted: ${b.slice(0, 12)}`);
   } finally {
     await removeGoal(card);
+    await page.evaluate(() => localStorage.removeItem('lchs.gear.old_badger'));
   }
-  // what you shoot with above your Ranged level is said, and counted as if you could wield it (Lowbie: Ranged 1)
+  // (v3.5) A v3.4 goal's own picks are the Gear tab's Ranged setup's to begin with, once; what's above your Ranged level is
+  // said, and counted as if you could wield it (Lowbie: Ranged 1, a goal with rune knives picked)
   await planAs('lowbie', 'Lowbie');
-  const saved = await page.evaluate(() => localStorage.getItem('lchs.goals.lowbie'));
+  const saved = await page.evaluate(() => [localStorage.getItem('lchs.goals.lowbie'), localStorage.getItem('lchs.gear.lowbie')]);
   try {
     await page.evaluate(() => {
-      localStorage.setItem('lchs.goals.lowbie', JSON.stringify([{ id: 'glr', skill: 'ranged', type: 'level', value: 20, created: Date.now(), ammo: { kind: 'knives', ammo: 'rune_knife' } }]));
+      localStorage.removeItem('lchs.gear.lowbie');
+      localStorage.setItem('lchs.goals.lowbie', JSON.stringify([{ id: 'glr', skill: 'ranged', type: 'level', value: 20, created: Date.now(), ammo: { kind: 'knives', ammo: 'rune_knife', fight: 'accurate' } }]));
       const ui = JSON.parse(localStorage.getItem('lchs.planUi') || '{}');
       localStorage.setItem('lchs.planUi', JSON.stringify({ ...ui, open: [...new Set([...(ui.open || []), 'glr'])], only: [], onlyOne: false }));
     });
     await page.reload();
     await page.click('.tab[data-tab="goals"]');
     await page.locator('.goal[data-goal="glr"] .plan-sec.ammo .ammo-warn').waitFor({ timeout: 15000 });
-    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-warn').innerText()), "Rune knives need Ranged 40 to wield: your Ranged is 1. It's counted as if you could.");
-    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('arrows');
-    await page.locator('.goal[data-goal="glr"] [data-ammo="bow"]').selectOption('magic_shortbow');
-    await page.locator('.goal[data-goal="glr"] .ammo-warn', { hasText: 'magic shortbow' }).waitFor();
-    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-warn').innerText()), "A magic shortbow needs Ranged 50 to wield: your Ranged is 1. It's counted as if you could.");
-    // (with no bow picked, the best Ranged 1 can use: a shortbow with iron arrows)
-    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('darts');
-    await page.locator('.goal[data-goal="glr"] [data-ammo="kind"]').selectOption('arrows');
-    assert.deepEqual(await page.locator('.goal[data-goal="glr"] [data-ammo]').evaluateAll(els => els.slice(0, 3).map(e => e.value)), ['arrows', 'iron_arrow', 'shortbow']);
-    assert.equal(await page.locator('.goal[data-goal="glr"] .ammo-warn').count(), 0);
+    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-warn').innerText()), "Rune knife needs Ranged 40 to wield: your Ranged is 1. It's counted as if you could.");
+    assert.equal(flat(await page.locator('.goal[data-goal="glr"] .ammo-with').innerText()), 'Shooting with your Ranged gear: rune knives (+25 Ranged attack, 24 Ranged strength, Accurate)');
+    const gear = await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.gear.lowbie')));
+    assert.deepEqual([gear.setups.ranged.slots, gear.migrated], [{ weapon: 'rune_knife' }, true]);
+    // (once: taken off the Gear tab, it stays off)
+    await page.evaluate(() => { const g = JSON.parse(localStorage.getItem('lchs.gear.lowbie')); g.setups.ranged.slots = {}; localStorage.setItem('lchs.gear.lowbie', JSON.stringify(g)); });
+    await page.reload();
+    await page.click('.tab[data-tab="goals"]');
+    await page.locator('.goal[data-goal="glr"] .ammo-with', { hasText: 'best your Ranged level can use' }).waitFor({ timeout: 15000 });
+    assert.match(flat(await page.locator('.goal[data-goal="glr"] .ammo-with').innerText()), /counted with the best your Ranged level can use, a shortbow and iron arrows/);
   } finally {
-    await page.evaluate(v => (v == null ? localStorage.removeItem('lchs.goals.lowbie') : localStorage.setItem('lchs.goals.lowbie', v)), saved);
+    await page.evaluate(([v, w]) => {
+      if (v == null) localStorage.removeItem('lchs.goals.lowbie'); else localStorage.setItem('lchs.goals.lowbie', v);
+      if (w == null) localStorage.removeItem('lchs.gear.lowbie'); else localStorage.setItem('lchs.gear.lowbie', w);
+    }, saved);
     await page.reload();
   }
 });
@@ -5048,7 +5076,7 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   const top = await page.locator('.top').evaluate(el => el.getBoundingClientRect().top);
   assert.ok(Math.abs(top) <= 1, `the tabs at ${top}px`);
   assert.deepEqual(await page.locator('.tabs .tab .ti').evaluateAll(els => els.map(el => getComputedStyle(el).backgroundPosition)),
-    ['0px 0px', '-26px 0px', '-52px 0px', '-78px 0px', '-104px 0px', '-130px 0px', '-156px 0px', '-182px 0px']);
+    ['0px 0px', '-26px 0px', '-52px 0px', '-78px 0px', '-104px 0px', '-130px 0px', '-156px 0px', '-182px 0px', '-208px 0px']);
   // (v3.2.1: 26 by 24, drawn at that size; each clear of the active tab's gold line, the bottom 3 pixels inside its border)
   assert.deepEqual(await page.locator('.tabs .tab .ti').first().evaluate(el => [el.offsetWidth, el.offsetHeight]), [26, 24]);
   assert.match(await page.locator('.tabs .tab .ti').first().evaluate(el => getComputedStyle(el).backgroundImage), /\/tabicons\.png\?v=[0-9a-f]{10}"\)$/, 'a stamped address');
@@ -5057,7 +5085,7 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
     return [i.top >= r.top + parseFloat(cs.borderTopWidth), i.bottom <= r.bottom - parseFloat(cs.borderBottomWidth) - 3];
   }));
   assert.deepEqual(clear, clear.map(() => [true, true]));
-  assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'Bank', 'Prices', 'NPCs']);
+  assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'Bank', 'Prices', 'Gear', 'NPCs']);
   // (v3.3.2) Bank's icon is the game's own: the gold "$" of the bank on the minimap, its colours and no other gold;
   // in the sheet's sixth cell, as Bank is the sixth tab
   const bankIcon = await page.evaluate(async () => {
@@ -5070,7 +5098,7 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
     for (let i = 0; i < d.length; i += 4) if (d[i + 3]) { const k = `${d[i]},${d[i + 1]},${d[i + 2]}`; n[k] = (n[k] || 0) + 1; }
     return { size: [img.naturalWidth, img.naturalHeight], at, gold: [n['232,209,78'] || 0, n['176,159,65'] || 0, n['117,100,3'] || 0], old: (n['248,228,110'] || 0) + (n['214,176,52'] || 0) };
   });
-  assert.deepEqual(bankIcon.size, [208, 24]);
+  assert.deepEqual(bankIcon.size, [234, 24]);
   assert.equal(bankIcon.at, 130, 'the sixth cell');
   assert.ok(bankIcon.gold.every(v => v >= 10) && bankIcon.old === 0, `the game's golds only: ${JSON.stringify(bankIcon)}`);
   const pad = await page.evaluate(() => [parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop), document.querySelector('.top').offsetHeight]);
@@ -5078,10 +5106,10 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   await page.evaluate(() => window.scrollTo(0, 0));
 });
 
-await check("the header: All, Combat and Settings on the tabs' line, or where that's too narrow on the name's line over them, never on a line of their own (v3.3.2)", async () => {
+await check("the header: All, Combat and Settings on the tabs' line, or where that's too narrow on the name's line over them, never on a line of their own (v3.3.2; v3.5: with Gear's tab, one line from 1081 px)", async () => {
   await page.click('.tab[data-tab="lookup"]');
   try {
-    for (const w of [1300, 1100, 1061, 1060, 1040, 1020, 1001, 1000, 960, 900, 870, 800, 600]) {
+    for (const w of [1300, 1120, 1100, 1090, 1082, 1081, 1080, 1060, 1040, 1020, 1001, 1000, 960, 900, 870, 800, 600]) {
       await page.setViewportSize({ width: w, height: 900 });
       const at = await page.evaluate(() => {
         const r = el => el.getBoundingClientRect();
@@ -5091,7 +5119,7 @@ await check("the header: All, Combat and Settings on the tabs' line, or where th
         return { withTabs: line(right, tabs[0]), withName: line(right, brand), tabsOneLine: tabs.every(t => line(t, tabs[0])), under: right.top >= tabs.at(-1).bottom - 1 };
       });
       assert.ok(!at.under && (at.withTabs || at.withName), `${w}: ${JSON.stringify(at)}`);
-      if (w > 1000) assert.ok(at.withTabs && at.tabsOneLine, `${w}: all on one line`);
+      if (w > 1080) assert.ok(at.withTabs && at.tabsOneLine, `${w}: all on one line`);
       else assert.ok(at.withName && !at.withTabs, `${w}: on the name's line, the tabs under them`);
     }
   } finally {
@@ -5626,20 +5654,342 @@ await check("tables sort by a click on a column's name, the other way on a secon
   }
 });
 
-await check('Planner+: the name in the title, the header and Settings, the NPCs tab last (v3.3.2; after Goals from v3), and the version (v3)', async () => {
+// ── v3.5: the Gear tab ─────────────────────────────────────────────────────
+// Old Badger: Attack 51, Strength 53, Defence 52, Hitpoints 54, Ranged 55, Magic 50, Prayer 56; a bank with some gear.
+const OB = { attack: 51, strength: 53, defence: 52, hitpoints: 54, ranged: 55, magic: 50, prayer: 56 };
+const GEAR_BANK = { rune_scimitar: 1, rune_2h_sword: 1, dragon_dagger: 1, rune_platebody: 1, rune_kiteshield: 1, rune_full_helm: 1, amulet_of_strength: 1,
+  magic_shortbow: 1, maple_shortbow: 1, rune_arrow: 300, adamant_arrow: 500, staff_of_fire: 1, bluewizhat: 1, coins: 1000 };
+const gearSaved = account => page.evaluate(a => JSON.parse(localStorage.getItem(`lchs.gear.${a}`) || 'null'), account);
+const sg = n => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+const wearIt = async (slot, find, id) => {
+  await page.click(`#gear-body [data-gear-slot="${slot}"]`);
+  await page.fill('#gear-body [data-gear-find]', find);
+  await page.click(`#gear-body [data-gear-wear="${id}"]`);
+};
+const resRows = () => page.locator('#gear-body table.gear-res tbody tr').evaluateAll(trs => trs.map(tr => [...tr.cells].map(c => c.innerText.replace(/\s+/g, ' ').trim())));
+const attacks = n => `${n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toFixed(1)} attacks`;
+
+await check("gear (v3.5): a tab after Prices with three setups, at your levels from the hiscores (one typed in is a what-if); what you wear as the Worn Equipment screen has it, picked from a list with your bank's first and what you can't wield yet marked; a two-handed weapon and a shield; the bonuses as the server adds them up; prayers and a potion's boost; kept for each account", async () => {
+  await planAs('old badger', 'Old Badger');
+  await page.evaluate(b => { localStorage.removeItem('lchs.gear.old_badger'); localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: b, updated: Date.now() })); }, GEAR_BANK);
+  await page.click('.tab[data-tab="gear"]');
+  await page.waitForSelector('#view-gear:not([hidden]) .gear-worn');
+  assert.deepEqual(await page.locator('#gear-body [data-gear-kind][data-side="you"]').allInnerTexts(), ['Melee', 'Ranged', 'Magic']);
+  assert.equal(await page.locator('#gear-body [data-gear-kind].on').innerText(), 'Melee');
+  assert.deepEqual(await page.locator('#gear-body [data-gear-level]').evaluateAll(els => els.map(e => [e.dataset.gearLevel, e.placeholder, e.value])),
+    Object.entries(OB).map(([k, v]) => [k, String(v), '']));
+  // the Worn Equipment screen: head; cape, neck, ammo; weapon, body, shield; legs; hands, feet, ring
+  const at = await page.locator('#gear-body .gear-slot').evaluateAll(els => Object.fromEntries(els.map(e => { const r = e.getBoundingClientRect(); return [e.dataset.gearSlot, [Math.round(r.left), Math.round(r.top)]]; })));
+  const rows = [['head'], ['cape', 'neck', 'ammo'], ['weapon', 'body', 'shield'], ['legs'], ['hands', 'feet', 'ring']];
+  rows.forEach((row, i) => {
+    for (const s of row) assert.equal(at[s][1], at[row[0]][1], `${s} on ${row[0]}'s row`);
+    for (let j = 1; j < row.length; j++) assert.ok(at[row[j]][0] > at[row[j - 1]][0], `${row[j]} right of ${row[j - 1]}`);
+    if (i) assert.ok(at[row[0]][1] > at[rows[i - 1][0]][1], `${row[0]} under ${rows[i - 1][0]}`);
+  });
+  assert.equal(at.head[0], at.neck[0]); assert.equal(at.neck[0], at.body[0]); assert.equal(at.body[0], at.legs[0]); assert.equal(at.legs[0], at.feet[0]);
+  // a weapon: your bank's first, the most use to a melee setup first, then what you can't wield yet (a dragon dagger, Attack 60);
+  // a bow is a Ranged setup's
+  await page.click('#gear-body [data-gear-slot="weapon"]');
+  assert.deepEqual((await page.locator('#gear-body .gear-opt-h').allInnerTexts()).map(flat), ['In your bank', 'Everything else']);
+  assert.deepEqual(await page.locator('#gear-body .gear-opt:has(.go-n)').evaluateAll(els => els.map(e => e.dataset.gearWear)), ['rune_2h_sword', 'rune_scimitar', 'staff_of_fire', 'dragon_dagger']);
+  assert.equal(flat(await page.locator('#gear-body [data-gear-wear="dragon_dagger"] .go-need').innerText()), 'Attack 60');
+  assert.equal(flat(await page.locator('#gear-body [data-gear-wear="rune_scimitar"] .go-b').innerText()), '+45 slash · +44 strength · 4 ticks');
+  assert.equal(await page.locator('#gear-body [data-gear-wear="magic_shortbow"]').count(), 0);
+  // what's typed finds it, without a redraw
+  await page.fill('#gear-body [data-gear-find]', 'rune sc');
+  assert.deepEqual(await page.locator('#gear-body [data-gear-wear]:visible').evaluateAll(els => els.map(e => e.dataset.gearWear)), ['rune_scimitar']);
+  await page.click('#gear-body [data-gear-wear="rune_scimitar"]');
+  assert.equal(await page.locator('#gear-body [data-gear-slot="weapon"]').getAttribute('aria-label'), 'Weapon: Rune scimitar');
+  assert.equal(await page.locator('#gear-body .gear-pick').count(), 0, 'the list is done with');
+  // its styles, as the combat tab names them
+  assert.deepEqual(await page.locator('#gear-body [data-gear-mode="you"] option').allInnerTexts(), ['Chop: accurate slash', 'Slash: aggressive slash', 'Lunge: controlled stab', 'Block: defensive slash']);
+  // a shield, then a two-handed weapon: the shield comes off; a shield again: the two-handed weapon does
+  await wearIt('shield', 'rune kite', 'rune_kiteshield');
+  await wearIt('weapon', 'rune 2h', 'rune_2h_sword');
+  assert.equal(await page.locator('#gear-body [data-gear-slot="shield"]').getAttribute('aria-label'), 'Shield: nothing');
+  await wearIt('shield', 'rune kite', 'rune_kiteshield');
+  assert.equal(await page.locator('#gear-body [data-gear-slot="weapon"]').getAttribute('aria-label'), 'Weapon: nothing');
+  await wearIt('weapon', 'rune sc', 'rune_scimitar');
+  await wearIt('body', 'rune plateb', 'rune_platebody');
+  // what it adds up to, as equip_get_bonuses has it
+  const b = C.bonusesOf({ weapon: 'rune_scimitar', body: 'rune_platebody', shield: 'rune_kiteshield' });
+  const T = ['stab', 'slash', 'crush', 'magic', 'range'];
+  assert.deepEqual(await page.locator('#gear-body table.gear-bonus tbody tr').evaluateAll(trs => trs.map(tr => [...tr.cells].map(c => c.innerText.trim()))),
+    [['Attack', ...T.map(t => sg(b[`${t}attack`]))], ['Defence', ...T.map(t => sg(b[`${t}defence`]))]]);
+  assert.equal(flat(await page.locator('#gear-body .gear-other').innerText()), `Strength ${sg(b.strengthbonus)} · Ranged strength ${sg(b.rangebonus)} · Prayer ${sg(b.prayerbonus)}`);
+  assert.deepEqual([b.slashattack, b.slashdefence, b.strengthbonus], [45, 1 + 80 + 48, 44]);
+  // a what-if: Attack 60, kept; the dragon dagger it takes no longer marked; and back to the hiscores' levels
+  await page.fill('#gear-body [data-gear-level="attack"]', '60');
+  await page.press('#gear-body [data-gear-level="attack"]', 'Enter');
+  await page.waitForSelector('#gear-body .gear-lv.whatif');
+  assert.deepEqual((await gearSaved('old_badger')).levels, { attack: 60 });
+  await page.click('#gear-body [data-gear-slot="weapon"]');
+  assert.equal(await page.locator('#gear-body [data-gear-wear="dragon_dagger"] .go-need').count(), 0);
+  await page.click('#gear-body [data-gear-close]');
+  await page.click('#gear-body [data-gear-reset="you"]');
+  assert.deepEqual((await gearSaved('old_badger')).levels, {});
+  // prayers (Prayer 56 has them all), and a potion's boost beside the level: a super strength, 53 + 5 + 15%
+  assert.equal(await page.locator('#gear-body [data-gear-prayer="strength"] option[value="ultimate_strength"]').isDisabled(), false);
+  await page.selectOption('#gear-body [data-gear-prayer="strength"]', 'ultimate_strength');
+  await page.check('#gear-body [data-gear-potion="super_strength"]');
+  assert.equal(await page.locator('#gear-body .gear-lv:has([data-gear-level="strength"]) .gear-up').innerText(), String(53 + 5 + Math.trunc((53 * 15) / 100)));
+  const g = await gearSaved('old_badger');
+  assert.deepEqual([g.kind, g.setups.melee.slots, g.setups.melee.prayers, g.setups.melee.potions],
+    ['melee', { weapon: 'rune_scimitar', body: 'rune_platebody', shield: 'rune_kiteshield' }, { strength: 'ultimate_strength' }, ['super_strength']]);
+  // the account's own: another has nothing set up, and this one's is back after a reload
+  await planAs('lowbie', 'Lowbie');
+  await page.click('.tab[data-tab="gear"]');
+  assert.equal(await page.locator('#gear-body [data-gear-slot="weapon"]').getAttribute('aria-label'), 'Weapon: nothing');
+  await planAs('old badger', 'Old Badger');
+  await page.reload();
+  await page.click('.tab[data-tab="gear"]');
+  assert.equal(await page.locator('#gear-body [data-gear-slot="weapon"]').getAttribute('aria-label'), 'Weapon: Rune scimitar');
+  await page.screenshot({ path: `${SHOTS}/gear-1-setup.png`, fullPage: true });
+});
+
+await check("gear (v3.5): against a monster: your max hit, how often you hit, your average hit, your damage a second and a kill's time, both rolls, and the same of its back at you, by the server's sums; the chance you win a fight to the death; a protect prayer; dragonfire, and a dragonfire shield; a special attack; the monster's own page", async () => {
+  await page.click('.tab[data-tab="gear"]');
+  await page.fill('#gear-body [data-gear-npc]', 'fire giant');
+  await page.press('#gear-body [data-gear-npc]', 'Enter');
+  await page.waitForSelector('#gear-body table.gear-res');
+  let g = await gearSaved('old_badger');
+  assert.equal(g.npc, 'fire_giant_86');
+  const mine = () => ({ ...g.setups.melee, kind: 'melee', levels: OB });
+  let r = C.vsNpc(mine(), 'fire_giant_86');
+  // (checked by hand: Strength ⌊(53 + 12) × 1.15⌋ + 8 = 82 on Chop; ⌊(82 × (44 + 64) + 320) / 640⌋ = 14. Attack (51 + 8 + 3) × (45 + 64) = 6,758
+  // against its (65 + 9) × (3 + 64) = 4,958 for slash. Its (65 + 9) × (29 + 64) = 6,882 against your (52 + 8) × (129 + 64), slash.)
+  assert.deepEqual([r.off.max, r.you.attackRoll, r.off.defenceRoll, r.def.parts[0].attack.attackRoll, r.you.defence.slash], [14, 6758, 4958, 6882, 60 * (129 + 64)]);
+  const fmtN = n => n.toLocaleString('en-US');
+  assert.deepEqual(await resRows(), [
+    ['Max hit', String(r.off.max), String(r.def.parts[0].max)],
+    ['Hits that land', hitPct(r.off.p), hitPct(r.def.parts[0].p)],
+    ['Average hit', r.avgHit.toFixed(2), r.theirAvg.toFixed(2)],
+    ['Attacks every', '2.4 s', '3.0 s'],
+    ['Damage a second', r.dps.toFixed(2), r.theirDps.toFixed(2)],
+    ['A kill takes', `${timeText(r.attacks * 2.4)} (${attacks(r.attacks)})`, `${timeText(r.fight.them.seconds)} (${attacks(r.fight.them.mean)})`],
+    ['Attack roll', fmtN(r.you.attackRoll), fmtN(r.def.parts[0].attack.attackRoll)],
+    ['Defence roll', `${fmtN(r.off.defenceRoll)} (its Slash)`, `${fmtN(r.you.defence.slash)} (your Slash)`],
+  ]);
+  assert.equal(flat(await page.locator('#gear-body .gear-verdict').innerText()), `You win ${winPct(r.fight.win)} of fights to the death, with no food, and lose about ${Math.round(r.fight.hpLost)} hitpoints a kill.`);
+  assert.equal(flat(await page.locator('#gear-body .gear-its').innerText()), `How it attacks: Melee (slash): ${hitPct(r.def.parts[0].p)} land on you, 0 to 11 a hit`);
+  // Protect from Melee: its melee does you nothing
+  await page.selectOption('#gear-body [data-gear-prayer="protect"]', 'protect_from_melee');
+  await page.locator('#gear-body .gear-its', { hasText: 'nothing through your Protect from Melee' }).waitFor();
+  g = await gearSaved('old_badger');
+  r = C.vsNpc(mine(), 'fire_giant_86');
+  assert.deepEqual((await resRows()).slice(0, 2).map(x => x[2]), ['0', '0%']);
+  assert.equal(flat(await page.locator('#gear-body .gear-verdict').innerText()), `You win ${winPct(r.fight.win)} of fights to the death: it can't hurt you.`);
+  await page.selectOption('#gear-body [data-gear-prayer="protect"]', '');
+  // dragonfire: a green dragon breathes it a quarter of the time, up to 50 (30, and 20 more when its roll beats yours); a dragonfire
+  // shield takes it to 5
+  await page.fill('#gear-body [data-gear-npc]', 'green dragon');
+  await page.press('#gear-body [data-gear-npc]', 'Enter');
+  await page.locator('#gear-body .gear-its', { hasText: 'Dragonfire' }).waitFor();
+  assert.match(flat(await page.locator('#gear-body .gear-its').innerText()), /Dragonfire \(25% of its attacks\): always lands, for 0 to 50 \(a dragonfire shield takes it to 0 to 5\)$/);
+  assert.equal((await resRows())[0][2], '50');
+  await wearIt('shield', 'dragonfire', 'antidragonbreathshield');
+  await page.locator('#gear-body .gear-its', { hasText: 'through your dragonfire shield' }).waitFor();
+  assert.match(flat(await page.locator('#gear-body .gear-its').innerText()), /Dragonfire \(25% of its attacks\): always lands, for 0 to 5 \(through your dragonfire shield\)$/);
+  g = await gearSaved('old_badger');
+  r = C.vsNpc(mine(), 'green_dragon_79');
+  assert.equal((await resRows())[0][2], String(Math.max(...r.def.parts.map(x => x.max))));
+  assert.equal(flat(await page.locator('#gear-body .gear-verdict').innerText()).startsWith(`You win ${winPct(r.fight.win)} of fights`), true);
+  // a special attack: the dragon dagger's two hits at 115% (Attack 60 to wield it: said, and counted as if you could)
+  await wearIt('weapon', 'dragon dagger', 'dragon_dagger');
+  assert.match(flat(await page.locator('#gear-body .gear-warn').first().innerText()), /^Dragon dagger needs Attack 60 \(you're 51\) to wear: it's counted as if you could\.$/);
+  g = await gearSaved('old_badger');
+  r = C.vsNpc(mine(), 'green_dragon_79');
+  assert.equal(flat(await page.locator('#gear-body .gear-spec').innerText()), `Your dragon dagger's special attack (25% of the bar): 2 hits, ${hitPct(r.special.p)} land each, 0 to ${r.special.max}: ${r.special.avg.toFixed(1)} damage on average.`);
+  await wearIt('weapon', 'rune sc', 'rune_scimitar');
+  await wearIt('shield', 'rune kite', 'rune_kiteshield');
+  // its page, on the NPCs tab
+  await page.click('#gear-body [data-gear-npc-page]');
+  await page.waitForSelector('#view-npcs:not([hidden]) .npc-page[data-npc-page="green_dragon_79"]');
+  await page.click('.tab[data-tab="gear"]');
+  await page.fill('#gear-body [data-gear-npc]', 'fire giant');
+  await page.press('#gear-body [data-gear-npc]', 'Enter');
+  await page.waitForSelector('#gear-body table.gear-res');
+  // a name that's more than one monster asks which (goblins come in three levels)
+  await page.fill('#gear-body [data-gear-npc]', 'goblin');
+  await page.press('#gear-body [data-gear-npc]', 'Enter');
+  await page.locator('#gear-body .gear-vs .msg.error').waitFor();
+  assert.match(flat(await page.locator('#gear-body .gear-vs .msg.error').innerText()), /^Which one\? /);
+  assert.equal((await gearSaved('old_badger')).npc, 'fire_giant_86');
+  await page.screenshot({ path: `${SHOTS}/gear-2-vs-monster.png`, fullPage: true });
+});
+
+await check("gear (v3.5): Best from my bank, for damage or for tanking, against the monster picked: what your levels can wield (quests left out when they're not done), its style with it; an undo; ranged and magic too", async () => {
+  await page.click('.tab[data-tab="gear"]');
+  let g = await gearSaved('old_badger');
+  const st = g.setups.melee;
+  const before = st.slots;
+  const best = (kind, focus, quests = true) => C.bestFromBank({ kind, focus, levels: OB, items: GEAR_BANK, npcId: 'fire_giant_86', quests, prayers: g.setups[kind].prayers, potions: g.setups[kind].potions, spell: g.setups[kind].spell, antifire: g.setups[kind].antifire });
+  await page.click('#gear-body [data-gear-best="damage"]');
+  await page.locator('#gear-body .gear-note').waitFor();
+  let want = best('melee', 'damage');
+  g = await gearSaved('old_badger');
+  assert.deepEqual([g.setups.melee.slots, g.setups.melee.mode], [want.slots, want.mode]);
+  assert.match(flat(await page.locator('#gear-body .gear-note').innerText()), /^From your bank, for the most damage against Fire giant: .*\. Only what's in your bank counts: put in what you wear too\. Undo$/);
+  assert.equal(want.slots.weapon, 'rune_scimitar', 'the dragon dagger takes Attack 60');
+  await page.click('#gear-body [data-gear-undo]');
+  assert.deepEqual((await gearSaved('old_badger')).setups.melee.slots, before);
+  // for tanking: a rune platebody, kiteshield and full helm, on a defensive style
+  await page.click('#gear-body [data-gear-best="tank"]');
+  want = best('melee', 'tank');
+  g = await gearSaved('old_badger');
+  assert.deepEqual(g.setups.melee.slots, want.slots);
+  assert.deepEqual([want.slots.body, want.slots.shield, want.slots.head], ['rune_platebody', 'rune_kiteshield', 'rune_full_helm']);
+  assert.match(await page.locator('#gear-body [data-gear-mode="you"] option:checked').innerText(), /defensive/);
+  // Dragon Slayer not done: no rune platebody
+  await page.uncheck('#gear-body [data-gear-quests]');
+  await page.click('#gear-body [data-gear-best="tank"]');
+  assert.equal((await gearSaved('old_badger')).setups.melee.slots.body, undefined);
+  assert.deepEqual((await gearSaved('old_badger')).setups.melee.slots, best('melee', 'tank', false).slots);
+  await page.check('#gear-body [data-gear-quests]');
+  await page.click('#gear-body [data-gear-best="damage"]');
+  // ranged: a magic shortbow (Ranged 50) and rune arrows; magic: the staff of fire, its spell the strongest Magic 50 casts
+  await page.click('#gear-body [data-gear-kind="ranged"][data-side="you"]');
+  await page.click('#gear-body [data-gear-best="damage"]');
+  g = await gearSaved('old_badger');
+  assert.deepEqual([g.setups.ranged.slots.weapon, g.setups.ranged.slots.ammo], ['magic_shortbow', 'rune_arrow']);
+  await page.click('#gear-body [data-gear-kind="magic"][data-side="you"]');
+  await page.click('#gear-body [data-gear-best="damage"]');
+  g = await gearSaved('old_badger');
+  assert.equal(g.setups.magic.slots.weapon, 'staff_of_fire');
+  assert.equal(await page.locator('#gear-body [data-gear-spell="you"] option:checked').innerText(), 'Water Blast: up to 14');
+  assert.equal(await page.locator('#gear-body [data-gear-spell="you"] option[value="fire_blast"]').isDisabled(), true, 'Magic 59');
+  // an empty bank says so, and changes nothing
+  await page.evaluate(() => localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: { coins: 5 }, updated: Date.now() })));
+  await page.click('#gear-body [data-gear-best="damage"]');
+  assert.match(flat(await page.locator('#gear-body .gear-note').innerText()), /^Your bank has nothing to wear yet/);
+  assert.deepEqual((await gearSaved('old_badger')).setups.magic.slots, g.setups.magic.slots);
+  await page.evaluate(b => localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: b, updated: Date.now() })), GEAR_BANK);
+  await page.click('#gear-body [data-gear-kind="melee"][data-side="you"]');
+});
+
+await check("gear (v3.5): against a player, looked up on the hiscores (their levels what-ifs too): wearing what you do, or their own; each side's max hit, how often it lands and the rolls, a protect prayer taking 40% off the max; the chance you win; specials, the magic shortbow's against its own wearer's Ranged defence", async () => {
+  await page.click('.tab[data-tab="gear"]');
+  await page.click('#gear-body [data-gear-vs="player"]');
+  await page.fill('#gear-body [data-form="gear-pvp"] [name="name"]', 'pure ranger');
+  await page.press('#gear-body [data-form="gear-pvp"] [name="name"]', 'Enter');
+  await page.locator('#gear-body .gear-vs', { hasText: 'from the hiscores' }).waitFor({ timeout: 20000 });
+  const theirs = await page.locator('#gear-body [data-gear-their]').evaluateAll(els => Object.fromEntries(els.map(e => [e.dataset.gearTheir, Number(e.placeholder)])));
+  assert.deepEqual([theirs.attack, theirs.strength, theirs.hitpoints, theirs.ranged, theirs.magic], [40, 55, 60, 80, 45]);
+  assert.ok(theirs.defence >= 1 && theirs.defence < 15 && theirs.prayer < 15, 'not on the hiscores: the least they can be');
+  let g = await gearSaved('old_badger');
+  assert.deepEqual([g.vs, g.pvp.name, g.pvp.gear], ['player', 'Pure Ranger', 'same']);
+  const mine = { ...g.setups.melee, kind: 'melee', levels: OB };
+  let r = C.vsPlayer(mine, { ...mine, levels: theirs });
+  const rows = await resRows();
+  assert.deepEqual(rows[0], ['Max hit', String(r.ab.max), String(r.ba.max)]);
+  assert.deepEqual(rows[1], ['Hits that land', hitPct(r.ab.p), hitPct(r.ba.p)]);
+  assert.deepEqual(rows.at(-1), ['Defence roll', `${r.ab.defenceRoll.toLocaleString('en-US')} (their Slash)`, `${r.ba.defenceRoll.toLocaleString('en-US')} (your Slash)`]);
+  assert.equal(flat(await page.locator('#gear-body .gear-verdict').innerText()), `You win ${winPct(r.fight.win)} of fights to the death (no food or special attacks, both at full hitpoints, you hitting first).`);
+  // their own: a copy of yours to start; a Ranged setup (yours: a magic shortbow and rune arrows), praying against melee
+  await page.click('#gear-body [data-gear-pvp-gear="own"]');
+  await page.click('#gear-body [data-gear-kind="ranged"][data-side="them"]');
+  await page.selectOption('#gear-body [data-gear-prayer="protect"][data-side="them"]', 'protect_from_melee');
+  await page.locator('#gear-body table.gear-res td', { hasText: 'without their prayer' }).waitFor();
+  g = await gearSaved('old_badger');
+  assert.deepEqual([g.pvp.gear, g.pvp.setup.kind, g.pvp.setup.slots.weapon, g.pvp.setup.prayers.protect], ['own', 'ranged', 'magic_shortbow', 'protect_from_melee']);
+  r = C.vsPlayer(mine, { ...g.pvp.setup, levels: theirs });
+  assert.equal(r.ab.max, Math.floor((r.you.maxHit * 6) / 10));
+  assert.deepEqual((await resRows())[0], ['Max hit', `${r.ab.max} (${r.you.maxHit} without their prayer)`, String(r.ba.max)]);
+  assert.equal(flat(await page.locator('#gear-body .gear-verdict').innerText()), `You win ${winPct(r.fight.win)} of fights to the death (no food or special attacks, both at full hitpoints, you hitting first).`);
+  assert.equal(flat(await page.locator('#gear-body .gear-spec').last().innerText()), `Their magic shortbow's special attack (35% of the bar): 2 hits, ${hitPct(r.theirSpecial.p)} land each, 0 to ${r.theirSpecial.max}: ${r.theirSpecial.avg.toFixed(1)} damage on average. (The server rolls it against their own Ranged defence, not yours.)`);
+  assert.equal(r.theirSpecial.defenceRoll, r.them.defence.ranged);
+  // their levels, a what-if: Defence 70
+  await page.fill('#gear-body [data-gear-their="defence"]', '70');
+  await page.press('#gear-body [data-gear-their="defence"]', 'Enter');
+  await page.locator('#gear-body .gear-sub .gear-lv.whatif').waitFor();
+  r = C.vsPlayer(mine, { ...g.pvp.setup, levels: { ...theirs, defence: 70 } });
+  assert.deepEqual((await resRows()).at(-1)[1], `${r.ab.defenceRoll.toLocaleString('en-US')} (their Slash)`);
+  assert.deepEqual((await gearSaved('old_badger')).pvp.levels, { defence: 70 });
+  await page.screenshot({ path: `${SHOTS}/gear-3-pvp.png`, fullPage: true });
+  await page.click('#gear-body [data-gear-vs="npc"]');
+});
+
+await check("npcs (v3.5): a monster's page has You against it: each setup on the Gear tab with its max hit, how often it hits, its damage a second, a kill's time, how often it hits you and how hard, and the chance you win; Gear opens it there", async () => {
+  await page.goto(BASE + '/?api=local#npcs/fire_giant_86');
+  await page.waitForSelector('.npc-page .gear-npc table.gear-npc-t');
+  const g = await gearSaved('old_badger');
+  const rows = await page.locator('.gear-npc table.gear-npc-t tbody tr').evaluateAll(trs => trs.map(tr => [...tr.cells].slice(0, 8).map(c => c.innerText.replace(/\s+/g, ' ').trim())));
+  const kinds = ['melee', 'ranged', 'magic'];
+  const what = { melee: 'Rune scimitar', ranged: 'Magic shortbow', magic: 'Water Blast' };
+  assert.deepEqual(rows, kinds.map(k => {
+    const st = { ...g.setups[k], kind: k, levels: OB };
+    if (k === 'magic' && !st.spell) st.spell = C.bestSpell(OB.magic, st.slots);
+    const r = C.vsNpc(st, 'fire_giant_86');
+    const its = r.def.parts.filter(x => x.attack.kind !== 'none');
+    const p = its.reduce((a, x) => a + x.attack.p * x.p, 0) / its.reduce((a, x) => a + x.attack.p, 0);
+    return [`${k[0].toUpperCase()}${k.slice(1)} ${what[k]}`, String(r.off.max), hitPct(r.off.p), r.dps.toFixed(2), timeText(r.attacks * r.you.speed * 0.6), hitPct(p), String(Math.max(...its.filter(x => x.p > 0).map(x => x.max))), winPct(r.fight.win)];
+  }));
+  await page.click('.gear-npc [data-gear-open="ranged"]');
+  await page.waitForSelector('#view-gear:not([hidden]) [data-gear-kind="ranged"].on');
+  assert.equal(await page.inputValue('#gear-body [data-gear-npc]'), 'Fire giant (level 86)');
+  await page.click('#gear-body [data-gear-kind="melee"][data-side="you"]');
+  // with nothing set up, it says where to
+  await planAs('lowbie', 'Lowbie');
+  await page.goto(BASE + '/?api=local#npcs/fire_giant_86');
+  await page.waitForSelector('.npc-page .gear-npc');
+  assert.match(flat(await page.locator('.gear-npc').innerText()), /^You against it Set up your melee, ranged or magic gear on the Gear tab \(Best from my bank does it from what you have\)/);
+  await planAs('old badger', 'Old Badger');
+});
+
+await check("goals (v3.5): an Attack, Strength or Defence goal says how often your hits land on what it kills, with the Gear tab's melee setup in the goal's style (a Defence goal how often it hits you too); a Magic goal its combat spell's max hit with your Magic gear and how often it lands on the Gear tab's monster", async () => {
+  const levelsAt = o => ({ ...OB, ...o });
+  const saved = await page.evaluate(() => localStorage.getItem('lchs.goals.old_badger'));
+  try {
+    for (const [skill, style, lv] of [['attack', 'accurate', 51], ['strength', 'aggressive', 53], ['defence', 'defensive', 52]]) {
+      await addGoal(skill, lv + 3);
+      const card = goalCard(skill[0].toUpperCase() + skill.slice(1));
+      await card.locator('.plan').waitFor();
+      await card.locator('select[data-gopt="fill"]').selectOption(`${skill.slice(0, 2) === 'de' ? 'df' : skill.slice(0, 2)}_moss_giant_42`);
+      await card.locator('.tip', { hasText: 'Moss giant at' }).waitFor();
+      const g = await gearSaved('old_badger');
+      const st = g.setups.melee;
+      const mode = C.modeFor(st.slots, style, st.mode);
+      const r = C.vsNpc({ ...st, kind: 'melee', mode, levels: levelsAt({ [skill]: lv }) }, 'moss_giant_42');
+      const its = r.def.parts[0];
+      const tip = flat(await card.locator('.tip', { hasText: 'Moss giant at' }).innerText());
+      if (skill === 'defence') assert.equal(tip, `Moss giant at Defence 52: ${hitPct(its.p)} of its attacks hit you, for 0 to ${its.max}; ${hitPct(r.off.p)} of yours hit it, for 0 to ${r.off.max}.`);
+      else assert.equal(tip, `Moss giant at ${skill === 'attack' ? 'Attack' : 'Strength'} ${lv}: ${hitPct(r.off.p)} of your hits land, and a hit does 0 to ${r.off.max} damage.`);
+      assert.match(await card.locator('.tip', { hasText: 'Moss giant at' }).getAttribute('title'), new RegExp(`with your melee setup on the Gear tab: a rune scimitar on ${C.modesOf(st.slots)[mode].name} \\(${style}, `));
+      await removeGoal(card);
+    }
+    // a Magic goal on Fire Strike: its max hit, 8, and how often it lands on the Gear tab's fire giant with the staff of fire
+    await addGoal('magic', 53);
+    const card = goalCard('Magic');
+    await card.locator('.plan').waitFor();
+    if (await card.locator('[data-gopt="useBank"]:checked').count()) await card.locator('[data-gopt="useBank"]').uncheck();
+    await card.locator('select[data-gopt="fill"]').selectOption('mg_fire_strike');
+    await card.locator('.tip', { hasText: 'Fire Strike with your Magic gear' }).waitFor();
+    const g = await gearSaved('old_badger');
+    const you = C.playerStats({ ...g.setups.magic, kind: 'magic', spell: 'fire_strike', levels: OB });
+    const off = C.youVsNpc({ ...you, slots: g.setups.magic.slots }, C.npcOf('fire_giant_86'));
+    assert.equal(flat(await card.locator('.tip', { hasText: 'Fire Strike with your Magic gear' }).innerText()), `Fire Strike with your Magic gear: a hit does 0 to 8 damage, and ${hitPct(off.p)} of your casts land on the Gear tab's monster (Fire giant).`);
+    await removeGoal(card);
+  } finally {
+    await page.evaluate(v => (v == null ? localStorage.removeItem('lchs.goals.old_badger') : localStorage.setItem('lchs.goals.old_badger', v)), saved);
+    await page.evaluate(() => { localStorage.removeItem('lchs.gear.old_badger'); localStorage.removeItem('lchs.bank.old_badger'); });
+    await page.reload();
+  }
+});
+
+await check('Planner+: the name in the title, the header and Settings, the NPCs tab last (v3.3.2; after Goals from v3; v3.5: Gear between Prices and NPCs), and the version (v3)', async () => {
   assert.equal(await page.title(), 'Planner+');
   assert.equal(flat(await text('.brand')), 'Planner+');
-  assert.deepEqual(await page.locator('.tabs .tab').evaluateAll(els => els.map(e => e.dataset.tab)), ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'npcs']);
+  assert.deepEqual(await page.locator('.tabs .tab').evaluateAll(els => els.map(e => e.dataset.tab)), ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs']);
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.4\.1 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.5\.0 · /);
   await page.click('#settings-close');
 });
 
 await check('planner tabs fit a narrow window', async () => {
   await page.setViewportSize({ width: 340, height: 800 });
-  for (const tab of ['goals', 'bank', 'prices', 'npcs']) {
+  for (const tab of ['goals', 'bank', 'prices', 'gear', 'npcs']) {
     await page.click(`.tab[data-tab="${tab}"]`);
     await page.waitForSelector(`#view-${tab}:not([hidden])`);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -5746,7 +6096,7 @@ await check('two open copies of the tool take turns instead of tripping the limi
   await other.close();
 });
 
-await check('inside LostKit an item opens its market page right in the tool\'s tab', async () => {
+await check('inside LostKit an item opens its market page in a new tab (your browser) (v3.5)', async () => {
   const c = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) LostKit/2.9.0 Chrome/144.0.0.0 Electron/40.2.1 Safari/537.36' });
   const p2 = await c.newPage();
   await p2.goto(BASE + '/?api=local#prices');
@@ -5757,8 +6107,12 @@ await check('inside LostKit an item opens its market page right in the tool\'s t
   assert.deepEqual(await p2.evaluate(() => { const st = window.__skills.prices.status(); return [st.busy, st.queued, st.total]; }), [false, 0, 0]);
   const link = p2.locator('#prices-body a.mk[href$="/items/kwuarm"]');
   assert.match(await link.innerText(), /^\s*Kwuarm\s*$/);
-  assert.equal(await link.getAttribute('target'), null, 'same tab: LostKit\'s back button comes back');
-  assert.match(await p2.locator('#prices-head').innerText(), /LostKit's ◀ button brings you back here/);
+  // (v3.5: a new tab, which LostKit hands to your browser; up to v3.4 it opened in the tool's own tab)
+  assert.equal(await link.getAttribute('target'), '_blank');
+  assert.equal(await link.getAttribute('rel'), 'noopener');
+  const note = await p2.locator('#prices-head').innerText();
+  assert.match(note, /open it on the market in a new tab \(LostKit opens it in your browser\)/);
+  assert.doesNotMatch(note, /◀/);
   await c.close();
 });
 

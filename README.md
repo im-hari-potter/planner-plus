@@ -20,6 +20,7 @@ what those are checked against; where the two differ, the server wins.
 - [Round up my supplies](#round-up-my-supplies)
 - [Prices and gp](#prices-and-gp)
 - [Your bank, and reading it from screenshots](#your-bank-and-reading-it-from-screenshots)
+- [Gear: what you wear, and how it fights](#gear-what-you-wear-and-how-it-fights)
 - [Combat, monsters and loot](#combat-monsters-and-loot)
 - [Useful tips](#useful-tips)
 - [Skill by skill](#skill-by-skill)
@@ -37,7 +38,8 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | **Goals** | Your goals, each with its **Plan (Calculator)**: every skill (Ranged with the ammo it takes), your total level, your combat level, and Slayer (a plan of kills and their loot). |
 | **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
-| **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance. |
+| **Gear** | What you wear and how it fights, like the game's Worn Equipment screen and a DPS calculator: a melee, a Ranged and a Magic setup at your levels, the bonuses they add up to, and how each does against any monster or another player. Best from my bank picks it from what you have. |
+| **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance, and how your gear does against it. |
 
 The tabs stay at the top of the window as you scroll, each with its own icon. An item's name,
 anywhere, takes you to its price on the Prices tab. Click a column's name to sort a table by it, and
@@ -232,8 +234,8 @@ than the coal and ore you put in.
 - **gp/XP**: what each XP costs you (negative: you make money doing it).
 
 Market prices are checked one at a time and kept for 12 hours. Click an item's name anywhere to
-see its price here; here, a name opens it on the market (inside LostKit it opens in the tool's tab;
-◀ comes back).
+see its price here; here, a name opens it on the market in a new tab (inside LostKit, in your
+browser).
 
 ## Your bank, and reading it from screenshots
 
@@ -269,6 +271,56 @@ like another item gets a drop-down.*
 
 *Eight to a row, as in the game: what one is worth (ea), and what yours come to.*
 
+## Gear: what you wear, and how it fights
+
+![The Gear tab: what you wear, your levels, prayers and potions, and the bonuses they add up to](readme-17-gear.png)
+
+*What you wear, as the game's Worn Equipment screen has it, at your levels, with what it all adds
+up to.*
+
+The Gear tab plans your gear the way the DPS calculators players use do, with the server's own
+sums. There are three setups, **Melee**, **Ranged** and **Magic**, each kept for your account:
+
+- **What you wear**: click a slot, then pick from the list: what's in your bank first, the most use
+  to that setup first, and what you can't wield yet marked with the level (or quest) it takes. Type
+  to find any item. A two-handed weapon takes the shield off.
+- **Your levels** come from the hiscores. Type another level in for a what-if (it turns orange);
+  empty the box to go back.
+- **Style, prayers and potions**: your weapon's styles as its combat tab names them, your Attack,
+  Strength and Defence prayers and a protect prayer, and potions (a potion's boost shows beside the
+  level). A Magic setup picks its spell (Charged for the god spells).
+- **Bonuses**: attack and defence for stab, slash, crush, Magic and Ranged, then strength, Ranged
+  strength and prayer, added up the way the server does (arrows only count with a bow).
+- **Best from my bank** puts on the best your bank has, for damage or for tanking, against the
+  monster you've picked. Only what's in your bank counts, so put in what you wear too. **Quests
+  done** says whether items that wait for a quest (a rune platebody: Dragon Slayer) count.
+
+### Against a monster
+
+![Against a monster: your numbers and its, side by side, and the chance you win](readme-18-gear-vs.png)
+
+*Against a fire giant: you and it side by side, then the fight.*
+
+Pick any monster to see, for you and for it: the **max hit**, the **hits that land** (every attack
+is two rolls, an attack roll against a defence roll, both shown), the **average hit**, how often
+each attacks, the **damage a second**, and how long a kill takes. Then your **chance to win** a
+fight to the death with no food, and the hitpoints a kill costs you on average. Its attacks are its
+own, read from its scripts: melee, Ranged, spells, and a dragon's fire (a dragonfire shield, Protect
+from Magic and an antifire potion count). A protect prayer stops a monster's melee, Ranged or
+spells. A weapon's special attack is there too (the dragon dagger's two hits, the magic shortbow's):
+its hits, how often they land, and what they do on average.
+
+### Against a player
+
+![Against a player: their levels, their gear, both sides' numbers and your chance to win](readme-19-pvp.png)
+
+*Against another player: their levels from the hiscores, in their own gear.*
+
+Look a player up (their levels come from the hiscores; type any in for a what-if) and say what they
+wear: the same as you, or their own setup. In PvP a protect prayer takes 40% off the max hit of the
+style it protects against instead of stopping it. Both sides' specials are there, the server's way
+(its magic shortbow special rolls against its own wearer's Ranged defence).
+
 ## Combat, monsters and loot
 
 **Attack, Strength, Defence, Hitpoints and Ranged** are trained on monsters: a row is a monster, and
@@ -280,6 +332,11 @@ more than half your combat level. Each plan says what its kills give besides, a 
 with its icon (Hitpoints XP, and Prayer XP if you bury the bones), and what its goal adds to your
 combat level.
 
+An Attack, Strength or Defence goal also says how often your hits land on the monster most of its
+kills go to, and how hard, with your melee setup on the Gear tab in the goal's style (a Defence
+goal, how often it hits you too). A Magic goal training a combat spell says the spell's max hit with
+your Magic gear, and how often it lands on the monster picked on the Gear tab.
+
 ### Ranged: the ammo a plan takes
 
 ![A Ranged goal's ammo: what you shoot with, each monster's shots, and what's fired, lost and costs](readme-16-ammo.png)
@@ -287,9 +344,11 @@ combat level.
 *A Ranged goal's ammo: each monster's shots as your Ranged rises, then what's fired, lost and what
 it costs.*
 
-A Ranged goal's plan counts the ammo its kills take, by the server's own sums. Pick **arrows** (and
-the bow you fire them from), **knives** or **darts**; it starts with the best your Ranged level can
-use. Then Rapid or Accurate, whether you **pick up what drops**, and your armour's Ranged attack.
+A Ranged goal's plan counts the ammo its kills take, by the server's own sums. What you shoot with
+is your **Ranged setup on the Gear tab**: its bow or crossbow and what's in its quiver, or what it
+throws, with every bonus you wear, its style (Rapid or Accurate; Longrange when the goal is) and a
+ranging potion. With nothing set up there, it counts the best your Ranged level can use. Here you
+say whether you **pick up what drops**.
 
 - **Shots**: each shot is a roll, your attack against the monster's defence, and a hit does 0 to
   your max hit, so a kill takes as many shots as its hitpoints need on average. They're counted a
@@ -325,6 +384,14 @@ and 9 in 10. Drops are worked out for a members world, from the server's own dro
 
 *A monster's page: its picture, its numbers, where it is, and a minimap drawn from the game's map
 files.*
+
+![You against it: each of your setups on the Gear tab, and the chance you win](readme-20-npc-vs.png)
+
+*You against it: each of your setups on the Gear tab.*
+
+**You against it**, on every monster's page: each setup you have on the Gear tab, with your max hit,
+how often you hit, your damage a second, how long a kill takes, how often it hits you and how hard,
+and the chance you win. **Gear** opens it there.
 
 ### Slayer goals: a plan of kills
 
@@ -415,6 +482,8 @@ that dry happens to 21% of players**, about 1 in 5. Half of players have one by 
 
 - **Untick what you won't make** (see above). It's the one thing that changes a plan the most.
 - **Refresh XP** after a session: new combat XP is counted as your Slayer goals' kills.
+- **Best from my bank** on the Gear tab is the quickest way to set up your gear: every monster's
+  page then shows how you'd do against it.
 - **Check the prices** of what a plan uses before trusting its gp.
 - **Hide table** tucks one plan's table away, and **Hide all tables** every open plan's.
 - A number you're typing is left alone until you enter it (Enter, Tab or a click elsewhere), so
@@ -470,7 +539,7 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   API and a fake market at <http://localhost:8787/?api=local>, and `node e2e.mjs` runs the browser
   tests against it (needs Playwright).
 - The game data is generated: `node build-data.mjs <Content checkout> <LostHQ 2004 checkout>`
-  (needs `sharp`) writes `gamedata.js`, `npcdata.js`, `items.png`, `items-more.png`,
+  (needs `sharp`) writes `gamedata.js`, `npcdata.js`, `geardata.js`, `items.png`, `items-more.png`,
   `bankread-data.js`, `bankicons.png`, `npcpics.webp`, `npcmaps.webp`, and the app's icons
   (`build-icons.mjs`: `slayer.webp`, `tabicons.png`, `gear.webp`, `rares.webp`). Upload them
   together: the data names its pictures with a stamp of each.
@@ -493,10 +562,17 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   - Ranged ammo: a shot's rolls and max hit are the server's combat scripts' (`player_ranged.rs2`
     and the scripts it calls), and the bows', arrows', knives' and darts' bonuses, levels and the
     1 in 5 that break are read from its item configs and constants.
+  - Gear (`build-gear.mjs`): every item you can wear, its bonuses and what it takes to wield, each
+    weapon's styles and speed, the specials, prayers, potions and combat spells, and how each
+    monster attacks, read from the server's item configs and combat scripts (`equip_get_bonuses`,
+    the combat style tables, the player, monster and PvP combat scripts, each monster's attack
+    scripts). The build checks that each still reads the way it knows.
 - Planner files: `planner.js` (the maths, in tenths of XP), `planner-ui.js` (Goals, Bank and
   Prices), `npc-ui.js` (the NPCs tab and Slayer goals), `loot.js` (drop chances, expected loot,
   luck and dryness, kills from XP), `ranged.js` (a shot's chance to hit, the shots a kill takes and
-  the ammo a plan fires), `prices.js` (the market and high alch), `bankread.js`
+  the ammo a plan fires), `combat.js` (a fight: the rolls, max hits, a kill's time and the chance
+  to win, and the best from a bank), `gear-ui.js` (the Gear tab), `prices.js` (the market and high
+  alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
   tests), `sortable.js` (dragging), `tablesort.js` (sorting a table by a column's name).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own
@@ -511,7 +587,7 @@ LostHQ's calculators, from [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices fr
 [markets.lostcity.rs](https://markets.lostcity.rs). Skill icons and RuneScape fonts from
 [LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0). The Slayer icon is the client's own
 (from 2005, when the skill came); the tabs' icons are drawn in the frame of the client's round side
-icons, and Gear's is its Worn Equipment icon.
+icons (Gear's tab a rune kiteshield), and the Bank tab's Gear button's is its Worn Equipment icon.
 RuneScape is © Jagex Ltd.
 
 This is a fan project, not affiliated with Jagex, Lost City or LostHQ. Licensed under GPL-3.0.

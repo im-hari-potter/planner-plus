@@ -9,7 +9,7 @@
 function tokenize(text) {
   const src = text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
   const out = [];
-  const re = /\s+|("(?:[^"\\]|\\.)*")|(<=|>=|[(){},;:=!<>&|+\-*/])|([~@%$^.]?[A-Za-z0-9_]+(?::[A-Za-z0-9_]+)?)/y;
+  const re = /\s+|("(?:[^"\\]|\\.)*")|(<=|>=|[(){},;:=!<>&|+\-*/])|((?:~\.|@\.|\.%|[~@%$^.])?[A-Za-z0-9_]+(?::[A-Za-z0-9_]+)?)/y;
   let i = 0;
   while (i < src.length) {
     re.lastIndex = i;
@@ -112,8 +112,8 @@ export function parse(text) {
     if (t.t === 'p' && t.v === '(') { const e = expr(); take(')'); return e; }
     if (t.t === 'p' && t.v === '-') { const e = prim(); return { k: 'arith', op: '-', a: { k: 'num', v: 0 }, b: e }; }
     if (t.t !== 'id') throw new Error(`rs2: unexpected "${t.v}"`);
-    // (queue*(name, delay)(args): a call with two lists)
-    if (is('*') && is('(', 1)) {
+    // (queue*(name, delay)(args): a call with two lists; a $variable * (…) is a sum, v3.5)
+    if (is('*') && is('(', 1) && !/^[$%]/.test(t.v)) {
       take('*'); take('(');
       const args = [];
       if (!is(')')) { args.push(expr()); while (is(',')) { take(','); args.push(expr()); } }
@@ -315,6 +315,11 @@ function argValues(args, s, env, ctx, depth) {
 function call(e, s, env, ctx, depth, asStatement) {
   const name = e.name;
   if (depth > 20) { ctx.log.push(`too deep at ${name}`); return one(null, s); }
+  // (v3.5) A call the caller answers itself: hooks { name: (argument values, state) -> [{ p, v, s }] }.
+  // How a monster attacks is read with them: its attack procs are the leaves, recorded in the state.
+  if (ctx.hooks && Object.hasOwn(ctx.hooks, name)) {
+    return argValues(e.args, s, env, ctx, depth).flatMap(({ p, vals, s: s2 }) => ctx.hooks[name](vals, s2).map(r => ({ ...r, p: r.p * p })));
+  }
   if ((name === 'random' || name === 'randominc') && ctx.counting) {
     return argValues(e.args, s, env, ctx, depth).map(({ p, vals, s: s2 }) => ({ p, v: { range: [0, vals[0] - (name === 'random' ? 1 : 0)] }, s: s2 }));
   }
@@ -416,6 +421,11 @@ function call(e, s, env, ctx, depth, asStatement) {
   if (name.startsWith('~')) {
     const body = ctx.blocks.get(`proc,${name.slice(1)}`);
     if (!body) { ctx.log.push(`unknown proc ${name}`); return one(null, s); }
+    // (v3.5: with ctx.paramsOf, a proc's arguments are its parameters' values; drop scripts don't need them)
+    if (ctx.paramsOf && e.args.length) {
+      const names = ctx.paramsOf(name.slice(1));
+      return argValues(e.args, s, env, ctx, depth).flatMap(({ p, vals, s: s2 }) => runProc(body, s2, env, ctx, depth, new Map(names.map((n, i) => [n, vals[i] ?? null]))).map(r => ({ ...r, p: r.p * p })));
+    }
     return runProc(body, s, env, ctx, depth);
   }
   ctx.log.push(`unknown call ${name}${env.npc ? ` (${env.npc})` : ''}`);
@@ -423,8 +433,8 @@ function call(e, s, env, ctx, depth, asStatement) {
 }
 
 // A proc run inside the script: its drops join the state's; what it returns is the value.
-function runProc(body, s, env, ctx, depth) {
-  const inner = run(body, [{ p: 1, vars: new Map(), drops: s.drops, done: false, ret: null }], env, ctx, depth + 1);
+function runProc(body, s, env, ctx, depth, vars = new Map()) {
+  const inner = run(body, [{ p: 1, vars, drops: s.drops, done: false, ret: null }], env, ctx, depth + 1);
   return inner.map(x => ({ p: x.p, v: x.ret == null ? null : x.ret.length === 1 ? x.ret[0] : x.ret, s: { ...s, drops: x.drops } }));
 }
 
