@@ -11,10 +11,12 @@
 // blurry), in the frame of the game's own round side icon: the quest list's (sprites/sideicons.png #2),
 // a light grey disc in a black ring that's heavier at the bottom right, its star painted out, and a
 // symbol drawn on it here pixel by pixel (a magnifying glass, scales, an arrow, a trophy, a bar chart,
-// coins, a sword). Bank's (v3.3.2) is the game's own: the gold "$" of the bank's minimap icon
-// (sprites/mapfunction.png #5), drawn bigger by drawing some of its rows and columns twice (18 x 11 from
-// 13 x 8), so its pixels stay whole. In the tabs' order (v3.3.2: NPCs last). (v3.5) Gear's, after Prices: a kite
-// shield, a rune one's slate blue with its gold cross, beside NPCs' sword.
+// a "$", coins, a sword, a skull). In the tabs' order (v3.3.2: NPCs last). (v3.5.1) Bank's "$" is drawn
+// here too now, in the three golds of the bank's minimap icon (sprites/mapfunction.png #5) and outlined
+// in black like the others: v3.3.2's was the minimap's own "$" drawn bigger by drawing some of its rows
+// and columns twice, which made it look soft. DPS's (Gear's, v3.5, after Prices) is the sword NPCs had;
+// NPCs' is the Slayer master's skull from the minimap (mapfunction #51 from rev 377 on, the
+// [slayer_master_icon] loc's; not in rev 274, so its yellows are written here), light on the left.
 // gear.webp, rares.webp (v3.3): the Bank and Prices tabs' Gear and Rares buttons: the game's Worn
 // Equipment side icon (sideicons #4) and a blue partyhat (its item icon), each cut to what's drawn.
 // (v3.3.2) Gear's figure 4 pixels shorter in the legs (4 of the 8 rows they're the same for), so it's
@@ -67,8 +69,10 @@ const PAL = {
   E: [140, 226, 112], G: [64, 178, 56], D: [20, 96, 20],
   s: [232, 232, 238], m: [160, 160, 170], M: [96, 96, 106],
   q: [110, 130, 255], b: [40, 64, 222], n: [18, 30, 128],
-  // (v3.5: a rune kiteshield's slate blue, light to dark, as its item icon has it)
-  v: [104, 136, 150], V: [78, 105, 116], W: [52, 70, 80],
+  // (v3.5.1) the bank's minimap golds, light to dark (bankGolds checks them against the icon), and the
+  // Slayer master's minimap yellows (rev 377's mapfunction #51): its light side, the rest, its nose
+  a: [232, 209, 78], c: [176, 159, 65], e: [117, 100, 3],
+  u: [248, 255, 157], U: [244, 252, 114], z: [241, 254, 38],
 };
 const SYMBOLS = {
   lookup: [
@@ -167,7 +171,8 @@ const SYMBOLS = {
     '.................',
     '.................',
   ],
-  npcs: [
+  // (a sword: NPCs' until v3.5.1, DPS's since)
+  gear: [
     '.................',
     '.............K...',
     '...........KKsK..',
@@ -186,25 +191,45 @@ const SYMBOLS = {
     '..KK....K........',
     '.................',
   ],
-  // (v3.5) a kite shield, a rune one's slate blue with its gold cross
-  gear: [
+  // (v3.5.1) the Slayer master's skull, as the minimap has it: its eyes, its nose, its teeth
+  npcs: [
     '.................',
     '.................',
-    '..KKKKKKKKKKKKK..',
-    '.KvvvvvvgVVVVVWK.',
-    '.KvvvvvvgVVVVVWK.',
-    '.KvvvvvvgVVVVVWK.',
-    '.KggggggggggggdK.',
-    '..KvvvvvgVVVVWK..',
-    '..KvvvvvgVVVVWK..',
-    '...KvvvvgVVVWK...',
-    '...KvvvvgVVVWK...',
-    '....KvvvgVVWK....',
-    '.....KvvgVWK.....',
-    '......KvgWK......',
-    '.......KgK.......',
+    '.....KKKKKKK.....',
+    '...KKuuuuuUUKK...',
+    '..KuuuuuuuUUUUK..',
+    '.KuuuuuuuUUUUUUK.',
+    '.KuuuuuuUUUUUUUK.',
+    '.KuuuuuuUUUUUUUK.',
+    '.KuKKKKuUUKKKKUK.',
+    '.KuKKKKuzUKKKKUK.',
+    '.KuuKKuzzzUKKUUK.',
+    '.KKuuuUzzzUUUUKK.',
+    '..KKuuUUUUUUUKK..',
+    '...KuKUKUKUKUK...',
+    '...KuKUKUKUKUK...',
+    '....KKKKKKKKK....',
+    '.................',
+  ],
+  // (v3.5.1) the bank's "$", light at its top and left, dark along its bottoms
+  bank: [
     '........K........',
-    '.................',
+    '.....KKKcKKK.....',
+    '....KaaaaaacK....',
+    '...KaaaaaaaacK...',
+    '...KaaaeaeaacK...',
+    '...KaacKcKeeeK...',
+    '...KaacKcKKKK....',
+    '...KaaaaaaaacK...',
+    '...KaaaaaaaacK...',
+    '...KeeeeaeaacK...',
+    '....KKKKcKaacK...',
+    '...KaacKcKaacK...',
+    '...KaaaaaaaacK...',
+    '...KeaaaaaaaeK...',
+    '....KeeeaeeeK....',
+    '.....KKKeKKK.....',
+    '........K........',
   ],
   // (two stacks of coins)
   prices: [
@@ -229,12 +254,6 @@ const SYMBOLS = {
 };
 // (the sheet's order: the tabs')
 const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs'];
-// (v3.3.2) The bank's "$": the minimap icon's rows 1 to 13 and columns 4 to 11, each that many pixels here
-// (18 rows, 11 columns), drawn from (9, 6) of the frame: the bar of the "$" down the middle of the disc,
-// from its top to its bottom, as on the minimap.
-const BANK_ROWS = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1];
-const BANK_COLS = [1, 2, 1, 2, 1, 2, 1, 1];
-const BANK_AT = [9, 6];
 
 // partyhat: the blue partyhat's 32 x 32 item icon, RGBA.
 export async function appIcons(content, { partyhat }) {
@@ -263,42 +282,20 @@ export async function appIcons(content, { partyhat }) {
     }));
     return px;
   };
-  // (v3.3.2) Bank: the minimap's bank icon, its "$" on this frame. The icon's grey disc and black ring are
-  // left out (the frame has its own), and so is a pixel of its grey shadow that would fall on the ring.
-  const map = await cellOf(content, 'mapfunction', 15, 5);
-  const mapAt = (x, y) => (y * 15 + x) * 4;
-  const same = (i, r, g, b) => map[i] === r && map[i + 1] === g && map[i + 2] === b;
-  let gold = 0;
-  for (let i = 0; i < map.length; i += 4) if (map[i + 3] && same(i, 232, 209, 78)) gold++;
-  if (gold < 10) throw new Error('sprites/mapfunction.png: icon 5 is no longer the bank\'s');
-  const bank = () => {
-    const px = Buffer.from(frame);
-    let Y = BANK_AT[1];
-    BANK_ROWS.forEach((rows, r) => {
-      for (let k = 0; k < rows; k++, Y++) {
-        let X = BANK_AT[0];
-        BANK_COLS.forEach((cols, c) => {
-          for (let j = 0; j < cols; j++, X++) {
-            const s = mapAt(4 + c, 1 + r);
-            if (!map[s + 3] || same(s, 191, 191, 191) || (map[s] <= 1 && map[s + 1] <= 1 && map[s + 2] <= 1)) continue;
-            const i = at(X, Y);
-            if (!frame[i + 3]) throw new Error(`tab icons: bank has a pixel outside the frame at ${X},${Y}`);
-            if (ring(i)) {
-              if (same(s, 159, 159, 159)) continue;       // (its shadow)
-              throw new Error(`tab icons: bank has a pixel on the ring at ${X},${Y}`);
-            }
-            px.set([map[s], map[s + 1], map[s + 2], 255], i);
-          }
-        });
-      }
-    });
-    return px;
-  };
+  // (v3.5.1) bankGolds: the "$" of the bank's minimap icon is in just the three golds Bank's is drawn in
+  // (the rest of that icon is greys: its disc, its ring, its shadow)
+  const map = await cellOf(content, 'mapfunction', 15, 5), golds = new Set();
+  for (let i = 0; i < map.length; i += 4) {
+    const [r, g, b] = map.subarray(i, i + 3);
+    if (map[i + 3] && !(r === g && g === b)) golds.add(`${r},${g},${b}`);
+  }
+  const bankGolds = ['a', 'c', 'e'].map(ch => PAL[ch].join());
+  if (golds.size !== 3 || bankGolds.some(k => !golds.has(k))) throw new Error(`sprites/mapfunction.png: icon 5 (the bank's) is in the golds ${[...golds].join(' / ')} now, not ${bankGolds.join(' / ')}`);
   // (the sheet's cells: x 2..27, y 3..26 of the 30 x 30)
   const CW = 26, CH = 24, OX = 2, OY = 3;
   const sheet = Buffer.alloc(TAB_ORDER.length * CW * CH * 4);
   TAB_ORDER.forEach((name, k) => {
-    const px = name === 'bank' ? bank() : draw(name, SYMBOLS[name]);
+    const px = draw(name, SYMBOLS[name]);
     for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
       if (!px[at(x, y) + 3]) continue;
       const X = x - OX, Y = y - OY;

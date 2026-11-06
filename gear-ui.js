@@ -1,11 +1,12 @@
-// Planner+ Gear tab (v3.5): what you wear and how it fights, by the server's own sums (combat.js, with
-// geardata.js that build-gear.mjs reads from the server's scripts). Like the game's Worn Equipment screen and
-// the DPS calculators players use: three setups (Melee, Ranged, Magic) at your levels from the hiscores (a level
-// typed in is a what-if), with your prayers and potions, the bonuses they add up to, and how they do against a
-// monster or another player: your max hit, how often you hit, your damage a second, how long a kill takes, how
-// it hits you back, and your chance to win a fight to the death. Best from my bank picks what you'd wear from
-// what you have, for damage or for tanking. A monster's page on the NPCs tab shows the same for each setup, and
-// goals ask it for their tips (a Ranged goal's ammo; how often your hits land on what a combat goal kills).
+// Planner+ DPS tab (v3.5 as the Gear tab, v3.5.1 DPS): what you wear and how it fights, by the server's own
+// sums (combat.js, with geardata.js that build-gear.mjs reads from the server's scripts). Like the game's Worn
+// Equipment screen and the DPS calculators players use: three setups (Melee, Ranged, Magic) at your levels from
+// the hiscores (a level typed in is a what-if), with your prayers and potions, the bonuses they add up to, and
+// how they do against a monster or another player: your max hit, how often you hit, your damage a second, how
+// long a kill takes, how it hits you back, and your chance to win a fight to the death. Best from my bank picks
+// what you'd wear from what you have, for dps or for tanking; (v3.5.1) layouts of your own are kept by name, to
+// wear again whatever it picks. A monster's page on the NPCs tab shows the same for each setup, and goals ask it
+// for their tips (a Ranged goal's ammo; how often your hits land on what a combat goal kills).
 // Created by planner-ui.js with what it shares (P), as npc-ui.js is.
 //
 // Per account, gear.<account>: { kind (the setup shown: melee, ranged or magic), setups: { melee, ranged, magic:
@@ -13,7 +14,8 @@
 // strength, defence, protect }, potions: [ids], antifire, charge } }, levels: { skill: level } (what-ifs over
 // the hiscores'), quests (whether the quests some items wait for count as done), vs: 'npc' | 'player', npc (the
 // monster), pvp: { name, levels (what-ifs over theirs), gear: 'same' (yours) | 'own', setup (theirs, with its
-// kind) }, migrated (a v3.4 Ranged goal's bow and ammo have been taken over) }
+// kind) }, migrated (a v3.4 Ranged goal's bow and ammo have been taken over), saved (v3.5.1): { melee, ranged,
+// magic: [{ name, setup }] } (layouts saved, a setup's all: what's worn, its style, spell, prayers and potions) }
 
 import { EQUIPMENT, PRAYERS, POTIONS, COMBAT_SPELLS, RULES, BONUSES } from './geardata.js';
 import { ITEMS, MONSTERS } from './gamedata.js';
@@ -51,6 +53,19 @@ const monsterName = m => `${m.name} (level ${m.level})`;
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 const aWord = name => (/^[aeiou]/i.test(name) ? 'an' : 'a');
 const listText = (list, and = 'and') => (list.length > 1 ? `${list.slice(0, -1).join(', ')} ${and} ${list[list.length - 1]}` : list[0] || '');
+// (v3.5.1) The quests items wait for (the server's levelrequire_…_quest checks, as build-gear.mjs reads them),
+// A to Z, each with what: what the Quests done tick counts as done. [[quest, [item names]]]
+export const QUEST_ITEMS = (() => {
+  const by = new Map();
+  for (const [id, e] of Object.entries(EQUIPMENT)) {
+    if (!e.quest || !ITEMS[id]) continue;
+    if (!by.has(e.quest)) by.set(e.quest, new Set());
+    by.get(e.quest).add(ITEMS[id].name.replace(/\s*\([pgt]\)$/, ''));     // (its poisoned and trimmed ones once)
+  }
+  return [...by].sort(([a], [b]) => a.replace(/^The /, '').localeCompare(b.replace(/^The /, ''))).map(([q, names]) => [q, [...names].sort()]);
+})();
+// Layouts saved: so many a setup, names this long
+const MAX_SAVED = 12, MAX_NAME = 24;
 
 // ── Numbers as they're shown ──────────────────────────────────────────────
 // A chance in whole percents: 99% rather than 100% for one that isn't sure, and none rounded to 0%
@@ -104,6 +119,29 @@ export function createGearUi(P) {
     return s;
   }
   const okLevel = (k, v) => Number.isInteger(v) && v >= (k === 'hitpoints' ? 10 : 1) && v <= 99;
+  // (v3.5.1) A setup's saved layouts: each with a name (one name once), so many at most
+  function cleanSaved(list) {
+    const out = [], names = new Set();
+    for (const x of Array.isArray(list) ? list : []) {
+      const name = typeof x?.name === 'string' ? x.name.trim().slice(0, MAX_NAME) : '';
+      if (!name || names.has(name.toLowerCase()) || out.length >= MAX_SAVED) continue;
+      names.add(name.toLowerCase());
+      out.push({ name, setup: cleanSetup(x.setup) });
+    }
+    return out;
+  }
+  // Two layouts the same: what's worn, its style, spell, prayers, potions and the rest
+  const layoutKey = s => JSON.stringify([C.SLOTS.map(sl => s.slots[sl] || ''), s.mode, s.spell, ['attack', 'strength', 'defence', 'protect'].map(k => s.prayers[k] || ''), [...s.potions].sort(), s.antifire, s.charge]);
+  const sameLayout = (a, b) => layoutKey(a) === layoutKey(b);
+  const isBlank = s => !Object.keys(s.slots).length && !s.spell;
+  // A layout's name till one's typed: its weapon's (a Magic one's spell's), a number after it if that's taken
+  function layoutName(kind, st, saved) {
+    const base = (kind === 'magic' && C.SPELL.get(st.spell)?.name) || (st.slots.weapon ? nameOf(st.slots.weapon) : kind === 'magic' ? 'Magic' : 'Unarmed');
+    const taken = new Set(saved.map(x => x.name.toLowerCase()));
+    let name = base.slice(0, MAX_NAME), n = 2;
+    while (taken.has(name.toLowerCase())) name = `${base.slice(0, MAX_NAME - 3)} ${n++}`;
+    return name;
+  }
   const storeKey = () => 'gear.' + P.safe();
   function gearState() {
     if (!P.safe()) return null;
@@ -122,6 +160,7 @@ export function createGearUi(P) {
         setup: raw.pvp?.setup ? { ...cleanSetup(raw.pvp.setup), kind: KINDS.includes(raw.pvp.setup.kind) ? raw.pvp.setup.kind : 'melee' } : null,
       },
       migrated: !!raw.migrated,
+      saved: Object.fromEntries(KINDS.map(k => [k, cleanSaved(raw.saved?.[k])])),
     };
     for (const k of LEVELS) { if (okLevel(k, raw.levels?.[k])) g.levels[k] = raw.levels[k]; if (okLevel(k, raw.pvp?.levels?.[k])) g.pvp.levels[k] = raw.pvp.levels[k]; }
     if (!g.migrated) migrate(g);
@@ -281,16 +320,35 @@ export function createGearUi(P) {
   function setupCard(g) {
     const kindSeg = `<div class="seg gear-kinds" role="group" aria-label="Which setup">${KINDS.map(k => `<button type="button" data-gear-kind="${k}" data-side="you" class="${k === g.kind ? 'on' : ''}" aria-pressed="${k === g.kind}" title="${esc(`Your ${k} setup${used(g, k) ? '' : ': nothing set up yet'}`)}">${KIND_NAME[k]}</button>`).join('')}</div>`;
     const best = `<span class="gear-best"><span class="c-muted small-note">Best from my bank:</span>
-        <button type="button" class="btn small" data-gear-best="damage" title="${esc(`Wear what in your bank does the most damage a second${g.vs === 'npc' && g.npc ? ` to ${MONSTER_BY_ID.get(g.npc).name}` : ''}, that your levels can wield`)}">For damage</button>
+        <button type="button" class="btn small" data-gear-best="damage" title="${esc(`Wear what in your bank does the most damage a second${g.vs === 'npc' && g.npc ? ` to ${MONSTER_BY_ID.get(g.npc).name}` : ''}, that your levels can wield`)}">For dps</button>
         <button type="button" class="btn small" data-gear-best="tank" title="${esc(`Wear what in your bank takes the least damage${g.vs === 'npc' && g.npc ? ` from ${MONSTER_BY_ID.get(g.npc).name}` : ''} (then does the most), that your levels can wield`)}">For tanking</button></span>`;
-    const quests = `<label class="check" title="Some items wait for a quest: a rune platebody for Dragon Slayer, a dragon scimitar for Monkey Madness's, dragon weapons for Lost City and Heroes' Quest. Ticked, they count as yours to wear; unticked, Best from my bank leaves them out and the lists mark them."><input type="checkbox" data-gear-quests="1"${g.quests ? ' checked' : ''}> Quests done</label>`;
-    const note = U.note && U.note.kind === g.kind ? `<div class="msg ${U.note.ok ? 'ok' : ''} gear-note">${U.note.html}${U.undo && U.undo.kind === g.kind ? ' <button type="button" class="linkish" data-gear-undo="1">Undo</button>' : ''}</div>` : '';
+    const questTip = `The quests some items wait for (the server checks them as you wield):\n${QUEST_ITEMS.map(([q, names]) => `${q}: ${listText(names)}`).join('\n')}\nTicked, these count as done, and the items as yours to wear. Unticked, Best from my bank leaves them out and the lists mark them.`;
+    const quests = `<label class="check" title="${esc(questTip)}"><input type="checkbox" data-gear-quests="1"${g.quests ? ' checked' : ''}> Quests done</label>`;
+    const undo = U.undo && U.undo.kind === g.kind ? ` <button type="button" class="linkish" data-gear-undo="1">${U.undo.best ? 'Back to what you had' : 'Undo'}</button>` : '';
+    const note = U.note && U.note.kind === g.kind ? `<div class="msg ${U.note.ok ? 'ok' : ''} gear-note">${U.note.html}${undo}</div>` : '';
     return `<div class="card gear-card">
       <div class="bar wrap gear-top">${kindSeg}${best}${quests}</div>
+      ${savedHtml(g)}
       ${note}
       ${levelsHtml(myLevels(g), realLevels(), g.setups[g.kind].potions, 'data-gear-level', Object.keys(g.levels).length ? '<button type="button" class="linkish small-note" data-gear-reset="you">Back to your levels</button>' : '')}
       ${setupBody(g, 'you')}
     </div>`;
+  }
+
+  // (v3.5.1) Your layouts for the setup shown: each one's button wears it (lit while it's what you wear), its ✕
+  // forgets it; and what you wear now saved by a name (the one shown in the box if none's typed)
+  function savedHtml(g) {
+    const list = g.saved[g.kind], st = g.setups[g.kind];
+    const chips = list.map((x, i) => {
+      const on = sameLayout(x.setup, st);
+      const worn = C.SLOTS.filter(sl => x.setup.slots[sl]).map(sl => nameOf(x.setup.slots[sl]));
+      const spell = g.kind === 'magic' && x.setup.spell ? `${C.SPELL.get(x.setup.spell).name}, ` : '';
+      const title = `${on ? 'What you wear now' : 'Wear it'}: ${spell}${worn.length ? listText(worn) : 'nothing worn'}`;
+      return `<span class="chip-group"><button type="button" class="chip${on ? ' on' : ''}" data-gear-load="${i}" aria-pressed="${on}" title="${esc(title)}">${esc(x.name)}</button><button type="button" class="chip chip-x" data-gear-forget="${i}" title="${esc(`Forget ${x.name}`)}" aria-label="${esc(`Forget ${x.name}`)}">✕</button></span>`;
+    }).join('');
+    const form = list.length >= MAX_SAVED ? `<span class="c-faint small-note">(${MAX_SAVED} saved, the most: forget one to save another)</span>`
+      : `<form class="gear-save-f" data-form="gear-save"><input class="input small" name="layout" maxlength="${MAX_NAME}" placeholder="${esc(layoutName(g.kind, st, list))}" aria-label="A name for what you wear now" autocomplete="off" spellcheck="false"><button type="submit" class="btn small" title="Save what you wear now, with its style, prayers and potions, by the name typed (or the one shown)">Save</button></form>`;
+    return `<div class="bar wrap gear-saves"><span class="c-muted small-note">${list.length ? `My ${g.kind} layouts:` : `Save your ${g.kind} layout to wear it again, whatever Best from my bank picks:`}</span>${chips}${form}</div>`;
   }
 
   // The levels a setup is counted at: yours from the hiscores (or a player's), a level typed in a what-if, and
@@ -612,10 +670,10 @@ export function createGearUi(P) {
 
   // ── A monster's page on the NPCs tab: each setup against it ─────────────
   function npcHtml(npcId) {
-    if (!P.account()) return `<div class="plan-sec gear-npc"><h4>You against it</h4><p class="note">Enter your username above, then set up your gear on the Gear tab, to see how you'd do against it.</p></div>`;
+    if (!P.account()) return `<div class="plan-sec gear-npc"><h4>You against it</h4><p class="note">Enter your username above, then set up your gear on the DPS tab, to see how you'd do against it.</p></div>`;
     const g = gearState();
     const kinds = KINDS.filter(k => used(g, k));
-    if (!kinds.length) return `<div class="plan-sec gear-npc"><h4>You against it</h4><p class="note">Set up your melee, ranged or magic gear on the Gear tab (Best from my bank does it from what you have) to see how you'd do against it: your max hit, how often you hit, how long a kill takes and your chance to win. <button type="button" class="linkish" data-gear-open="${g.kind}" data-npc="${npcId}">Open the Gear tab</button></p></div>`;
+    if (!kinds.length) return `<div class="plan-sec gear-npc"><h4>You against it</h4><p class="note">Set up your melee, ranged or magic gear on the DPS tab (Best from my bank does it from what you have) to see how you'd do against it: your max hit, how often you hit, how long a kill takes and your chance to win. <button type="button" class="linkish" data-gear-open="${g.kind}" data-npc="${npcId}">Open the DPS tab</button></p></div>`;
     const rows = kinds.map(k => {
       const st = setupOf(g, k);
       const r = C.vsNpc(st, npcId);
@@ -625,9 +683,9 @@ export function createGearUi(P) {
       return `<tr><td class="l"><span class="sk-cell">${st.slots.weapon ? icon(st.slots.weapon, true) : ''}<b>${KIND_NAME[k]}</b> <span class="c-faint small-note">${esc(what)}</span></span></td>
         <td>${r.off.max}</td><td>${hitPct(r.off.p)}</td><td>${dec(r.dps)}</td><td>${can ? timeText(r.attacks * r.you.speed * 0.6) : 'never'}</td>
         <td>${hitPct(them.p)}</td><td>${them.max}</td><td>${can ? `<b class="${r.fight.win >= 0.5 ? 'c-win' : 'c-lose'}">${winPct(r.fight.win)}</b>` : '–'}</td>
-        <td><button type="button" class="btn small" data-gear-open="${k}" data-npc="${npcId}" title="See it all on the Gear tab, and change what you wear">Gear</button></td></tr>`;
+        <td><button type="button" class="btn small" data-gear-open="${k}" data-npc="${npcId}" title="See it all on the DPS tab, and change what you wear">DPS tab</button></td></tr>`;
     }).join('');
-    return `<div class="plan-sec gear-npc"><h4>You against it <span class="c-faint small-note">(your setups on the Gear tab, at your levels${Object.keys(g.levels).length ? ' and what-ifs' : ''})</span></h4>
+    return `<div class="plan-sec gear-npc"><h4>You against it <span class="c-faint small-note">(your setups on the DPS tab, at your levels${Object.keys(g.levels).length ? ' and what-ifs' : ''})</span></h4>
       <div class="table-wrap"><table class="grid gear-npc-t"><thead><tr><th class="l">Setup</th><th title="Your max hit on it">Max hit</th><th title="Your hits that land on it">You hit</th><th title="Your damage a second">DPS</th><th title="How long a kill takes on average">A kill</th><th title="Its attacks that land on you">It hits</th><th title="Its max hit on you">Its max</th><th title="The chance you win a fight to the death, with no food">You win</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
       <div class="c-faint small-note">A fight to the death with no food, you hitting first, with the prayers and potions each setup has.</div></div>`;
@@ -666,7 +724,7 @@ export function createGearUi(P) {
     const them = theirColumn(r);
     return { p: r.off.p, max: r.off.max, theirP: them.p, theirMax: them.max, mode: C.modesOf(st.slots)[mode], weapon: st.slots.weapon, attackRoll: r.you.attackRoll, defenceRoll: r.off.defenceRoll };
   }
-  // A Magic goal's: a combat spell with your Magic setup (its staff and bonuses), on the Gear tab's monster if
+  // A Magic goal's: a combat spell with your Magic setup (its staff and bonuses), on the DPS tab's monster if
   // one's picked. → { max, p (or null), npc } or null with no account.
   function spellAt(spellId, levels = {}) {
     const g = gearState();
@@ -692,18 +750,37 @@ export function createGearUi(P) {
     if (!any) { U.note = { kind, html: 'Your bank has nothing to wear yet: put in what you have on the Bank tab (typed, or read from screenshots), then try again.' }; U.undo = null; return; }
     const r = C.bestFromBank({ kind, focus, levels, items, npcId, quests: g.quests, prayers: st.prayers, potions: st.potions, spell: st.spell, antifire: st.antifire });
     if (!r) { U.note = { kind, html: kind === 'ranged' ? 'Your bank has no bow, crossbow or thrown weapon your levels can wield, with what it fires.' : 'Nothing in your bank your levels can wield for this.' }; U.undo = null; return; }
-    const before = JSON.parse(JSON.stringify(st));
+    // (v3.5.1) What you had before Best from my bank, kept however often it's picked again (For dps, then
+    // For tanking, ...), till something else is worn
+    const chain = U.undo?.kind === kind && U.undo.best && sameLayout(st, U.undo.after) ? U.undo : null;
+    const before = chain ? chain.setup : JSON.parse(JSON.stringify(st));
     const same = JSON.stringify(Object.entries(r.slots).sort()) === JSON.stringify(Object.entries(st.slots).sort()) && (r.mode === st.mode);
-    update(x => {
+    const after = (update(x => {
       const s = x.setups[kind];
       s.slots = r.slots; s.mode = r.mode;
       if (kind === 'magic' && r.spell) s.spell = r.spell;
-    });
+    }) || g).setups[kind];
     const list = C.SLOTS.filter(s => r.slots[s]).map(s => itemName(r.slots[s]));
     const vs = npcId ? ` against ${esc(MONSTER_BY_ID.get(npcId).name)}` : ' (against no monster in particular: pick one below to fit it to that)';
-    U.note = { kind, ok: true, html: same ? `That's already the best your bank has ${focus === 'tank' ? 'for tanking' : 'for damage'}${npcId ? ` against ${esc(MONSTER_BY_ID.get(npcId).name)}` : ''}.`
-      : `From your bank, ${focus === 'tank' ? 'for tanking' : 'for the most damage'}${vs}: ${listText(list)}${list.length ? '.' : 'nothing.'} Only what's in your bank counts: put in what you wear too.` };
-    U.undo = same ? null : { kind, setup: before };
+    U.note = { kind, ok: true, html: same ? `That's already the best your bank has ${focus === 'tank' ? 'for tanking' : 'for dps'}${npcId ? ` against ${esc(MONSTER_BY_ID.get(npcId).name)}` : ''}.`
+      : `From your bank, ${focus === 'tank' ? 'for tanking' : 'for dps, the most damage a second'}${vs}: ${listText(list)}${list.length ? '.' : 'nothing.'} Only what's in your bank counts: put in what you wear too.` };
+    U.undo = sameLayout(before, after) ? null : { kind, setup: before, best: true, after: JSON.parse(JSON.stringify(after)) };
+  }
+
+  // (v3.5.1) Layouts: save what you wear by a name, wear one again, forget one
+  function saveLayout(typed) {
+    const g = gearState(), kind = g.kind, st = g.setups[kind], list = g.saved[kind];
+    if (isBlank(st)) { U.note = { kind, html: `Wear something first (click a slot, or Best from my bank), then save it.` }; U.undo = null; return; }
+    const name = String(typed || '').trim().slice(0, MAX_NAME);
+    const twin = list.find(x => sameLayout(x.setup, st));
+    if (!name && twin) { U.note = { kind, ok: true, html: `What you wear is saved already, as <b>${esc(twin.name)}</b>.` }; U.undo = null; return; }
+    const was = JSON.parse(JSON.stringify(list));
+    const at = name ? list.findIndex(x => x.name.toLowerCase() === name.toLowerCase()) : -1;
+    if (at < 0 && list.length >= MAX_SAVED) { U.note = { kind, html: `You have ${MAX_SAVED} ${kind} layouts saved, the most: forget one to save another.` }; U.undo = null; return; }
+    const keep = { name: at >= 0 ? list[at].name : name || layoutName(kind, st, list), setup: JSON.parse(JSON.stringify(st)) };
+    update(x => { if (at >= 0) x.saved[kind][at] = keep; else x.saved[kind].push(keep); });
+    U.note = { kind, ok: true, html: `${at >= 0 ? 'Saved over' : 'Saved as'} <b>${esc(keep.name)}</b>: its button wears it again, whatever Best from my bank picks.` };
+    U.undo = { kind, saved: was };
   }
 
   function onClick(e) {
@@ -717,6 +794,31 @@ export function createGearUi(P) {
       return true;
     }
     if (!t.closest('#view-gear')) return false;
+    const load = t.closest('[data-gear-load]');
+    if (load) {
+      const g = gearState(), kind = g.kind, x = g.saved[kind][Number(load.dataset.gearLoad)];
+      if (x) {
+        const before = JSON.parse(JSON.stringify(g.setups[kind]));
+        update(y => { y.setups[kind] = cleanSetup(x.setup); });
+        U.pick = null; U.q = '';
+        U.note = { kind, ok: true, html: `Wearing <b>${esc(x.name)}</b>.` };
+        U.undo = sameLayout(before, x.setup) ? null : { kind, setup: before };
+      }
+      P.redraw();
+      return true;
+    }
+    const forget = t.closest('[data-gear-forget]');
+    if (forget) {
+      const g = gearState(), kind = g.kind, i = Number(forget.dataset.gearForget), x = g.saved[kind][i];
+      if (x) {
+        const was = JSON.parse(JSON.stringify(g.saved[kind]));
+        update(y => { y.saved[kind].splice(i, 1); });
+        U.note = { kind, ok: true, html: `Forgot <b>${esc(x.name)}</b>.` };
+        U.undo = { kind, saved: was };
+      }
+      P.redraw();
+      return true;
+    }
     const kindBtn = t.closest('[data-gear-kind]');
     if (kindBtn) {
       const k = kindBtn.dataset.gearKind;
@@ -754,8 +856,9 @@ export function createGearUi(P) {
     const best = t.closest('[data-gear-best]');
     if (best) { U.pick = null; bestFromBank(best.dataset.gearBest); P.redraw(); return true; }
     if (t.closest('[data-gear-undo]') && U.undo) {
-      const { kind, setup } = U.undo;
-      update(g => { g.setups[kind] = cleanSetup(setup); });
+      // (what was worn, or the layouts as they were)
+      const { kind, setup, saved } = U.undo;
+      update(g => { if (setup) g.setups[kind] = cleanSetup(setup); if (saved) g.saved[kind] = cleanSaved(saved); });
       U.undo = null; U.note = null;
       P.redraw();
       return true;
@@ -826,6 +929,7 @@ export function createGearUi(P) {
 
   function onSubmit(form) {
     if (form.dataset.form === 'gear-npc') { pickMonster(form.npc.value); return true; }
+    if (form.dataset.form === 'gear-save') { U.pick = null; saveLayout(form.layout.value); P.redraw(); return true; }
     if (form.dataset.form === 'gear-pvp') {
       const name = form.name.value.trim();
       const problem = checkName(name);

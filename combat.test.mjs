@@ -256,3 +256,19 @@ test("a fight one side can't win: no damage to the other, no chance; no damage f
   // a monster's shares of attacks add up to one (the data's thirds are 0.333333)
   assert.ok(Math.abs(C.npcAttacksOf(C.npcOf('kalphite_queen_333')).reduce((a, x) => a + x.p, 0) - 1) < 1e-12);
 });
+
+test("the DPS tab's Quests done tick (v3.5.1): every quest the server's wield checks wait for, A to Z, each with what", async () => {
+  const { QUEST_ITEMS } = await import('./gear-ui.js');
+  const quests = new Set(Object.values(EQUIPMENT).map(e => e.quest).filter(Boolean));
+  assert.deepEqual(QUEST_ITEMS.map(([q]) => q).sort(), [...quests].sort());
+  assert.deepEqual(QUEST_ITEMS.map(([q]) => q), ['Dragon Slayer', 'The Fremennik Trials', "Heroes' Quest", "Legends' Quest", 'Lost City', 'Regicide']);
+  const of = Object.fromEntries(QUEST_ITEMS);
+  assert.ok(['Rune platebody', 'Dragonhide body (green)', 'Gilded platebody'].every(n => of['Dragon Slayer'].includes(n)), of['Dragon Slayer']);
+  // (a poisoned dagger and a trimmed platebody once, as the item they're of)
+  assert.deepEqual(of['Lost City'], ['Dragon dagger', 'Dragon longsword']);
+  assert.equal(of['Dragon Slayer'].filter(n => /^Rune platebody/.test(n)).length, 1);
+  assert.deepEqual([of["Heroes' Quest"], of.Regicide, of["Legends' Quest"]], [['Dragon battleaxe', 'Dragon mace'], ['Dragon halberd'], ['Dragon sq shield']]);
+  assert.equal(of['The Fremennik Trials'].length, 4);
+  // (no dragon scimitar in this version: Monkey Madness came later)
+  assert.ok(!QUEST_ITEMS.some(([q, names]) => /Monkey/.test(q) || names.some(n => /scimitar/i.test(n))));
+});

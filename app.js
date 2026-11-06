@@ -1,7 +1,7 @@
 // Planner+ (formerly Skills+, and before that Hiscores+) — the page. Views:
 // Lookup, Compare, Gains, Leaderboard, and the planner: Goals, Bank, Prices,
-// Gear and NPCs (planner-ui.js; the NPCs tab and Slayer goals are npc-ui.js's,
-// the Gear tab gear-ui.js's).
+// DPS and NPCs (planner-ui.js; the NPCs tab and Slayer goals are npc-ui.js's,
+// the DPS tab gear-ui.js's).
 
 import {
   SKILLS, SKILL_BY_ID, SKILL_IDS, COMBAT_IDS, COMBAT_KEYS, MIN_RANKED_LEVEL, MAX_LEVEL, SLAYER, GAME_LAYOUT, GAME_ORDER,
@@ -16,7 +16,7 @@ import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.5.0';
+const VERSION = '3.5.1';
 const MAX_COMPARE = 5;
 
 // How to reach the API:

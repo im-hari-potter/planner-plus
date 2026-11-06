@@ -86,7 +86,7 @@ export function bestGear(kind, level) {
 // One kill of a monster at a Ranged level: { hit (the chance a shot hits), max (max hit), attack, defence
 // (the two rolls), shots (on average) }. mon: { id, hp, defence, rangeDefence }; bonus: what the rest of your
 // gear adds to your Ranged attack bonus. (v3.5) boost: your level with a potion (level => boosted level), and
-// gear's attack and strength the whole of what you wear (the Gear tab's Ranged setup), with bonus 0.
+// gear's attack and strength the whole of what you wear (the DPS tab's Ranged setup), with bonus 0.
 export function killAt(mon, level, { style, gear, bonus = 0, boost = null }) {
   if (boost) level = boost(level);
   const attack = attackRoll(level, style, gear.attack + bonus);

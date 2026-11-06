@@ -488,6 +488,13 @@ export function createNpcUi(P) {
     const inBank = Object.values(banked).some(x => x > 0);
     // (a gp sum, or nothing to sort by where its cell is a ? or a –; what's left on the ground is worth nothing)
     const worth = (x, k) => (!taken(goal, x.slug) ? 0 : untradeable(x.slug) || x.gp == null ? null : k * x.gp);
+    // (v3.5.1) What one drop is worth: as many as a drop is on average, at its price (alched, its high alch), and
+    // that for what's left on the ground too, to see what it would be worth taking
+    const perDrop = x => { const gp = alched(goal, x.slug) ? highAlch(x.slug) : worthOf(x.slug); return untradeable(x.slug) || gp == null ? null : (x.d.q / x.d.p) * gp; };
+    // (v3.5.1) How lucky, to sort by: the share of players you're luckier than, half of those with as much counted
+    // (what every kill drops: as expected if it's all there, else nothing to say, as its cell)
+    const luckOf = x => (!done || !taken(goal, x.slug) ? null : x.d.p >= 1 && x.d.one ? ((got[x.slug] || 0) === x.d.one * done ? 0.5 : null)
+      : (l => (1 + l.fewer - l.more) / 2)(luck(x.d, done, got[x.slug] || 0)));
     const looted = `<th class="wrap${done ? '' : ' sep-l'}" title="Your loot: type it in, or − and + by one drop">Looted</th>`;
     const cols = [
       [`<th title="Take: untick what you leave on the ground. It's left out of the value, the screenshots and your bank.">Take</th>`, null],
@@ -495,13 +502,14 @@ export function createNpcUi(P) {
       ['<th class="l">Item</th>', { key: 'name', value: x => ITEMS[x.slug]?.name || x.slug }],
       ['<th title="The chance a kill drops it, as the drop table has it">A kill</th>', { key: 'chance', desc: true, value: x => x.d.p }],
       ['<th title="How many one drop is">Each drop</th>', null],
+      ['<th class="wrap" title="What one drop is worth, at your prices (alched: its high alch); on average where a drop is more or less">Value<br>per drop</th>', { key: 'drop', desc: true, value: perDrop }],
       [`<th title="How many on average in ${esc(fmt(n))} kills">Expected</th>`, { key: 'expected', desc: true, value: x => x.d.q }],
       [`<th class="wrap" title="The chance of at least one in ${esc(fmt(n))} kills">At least one<br>in ${esc(gpShort(n))}</th>`, { key: 'atleast', desc: true, value: x => atLeastOne(x.d.p, n) }],
       ['<th class="wrap" title="Expected, at your prices (alched: its high alch)">Expected<br>value</th>', { key: 'value', desc: true, value: x => worth(x, x.d.q * n) }],
       ...(done ? [
         [`<th class="wrap sep-l" title="How many on average after the ${esc(fmt(done))} kills you've done">Expected<br>after ${esc(gpShort(done))}</th>`, { key: 'expdone', desc: true, value: x => x.d.q }],
         [looted, { key: 'looted', desc: true, value: x => got[x.slug] || 0 }],
-        ['<th class="l" title="How your loot compares with other players\' after as many kills">Luck</th>', null],
+        ['<th class="l" title="How your loot compares with other players\' after as many kills: green, the share of them who\'d have fewer; red, the share who\'d have more; dry, so many times the kills the drop rate says. Its tooltip has the rest.">Luck</th>', { key: 'luck', desc: true, value: luckOf }],
       ] : [[looted, { key: 'looted', desc: true, value: x => got[x.slug] || 0 }]]),
       ['<th class="wrap" title="What your loot is worth, at your prices (alched: its high alch)">Actual<br>value</th>', { key: 'got', desc: true, value: x => worth(x, got[x.slug] || 0) }],
       ...(inBank ? [['<th class="wrap" title="How much of your loot you\'ve put in your bank (alched: as coins)">Banked</th>', { key: 'banked', desc: true, value: x => banked[x.slug] || 0 }]] : []),
@@ -517,15 +525,17 @@ export function createNpcUi(P) {
       const g = got[slug] || 0;
       const value = !take ? '<span class="c-faint">–</span>' : untradeable(slug) ? '<span class="c-faint">–</span>' : gp == null ? '<span class="c-faint">?</span>' : gpShort(d.q * n * gp);
       const actual = !g ? '<span class="c-faint">–</span>' : gp == null ? '<span class="c-faint">?</span>' : gpShort(g * gp);
-      const luckCell = !take ? '<span class="c-faint">left on the ground</span>' : luckText(slug, d, done, g);
+      const one = perDrop({ slug, d });
+      const oneCell = untradeable(slug) ? '<span class="c-faint">–</span>' : one == null ? '<span class="c-faint">?</span>' : gpShort(one);
+      const luckCell = !take ? '<span class="c-faint" title="Left on the ground">–</span>' : luckText(slug, d, done, g);
       const doneCells = done ? `<td class="sep-l">${amt(d.q * done)}</td><td class="got">${gotBox(slug, g, d)}</td><td class="l small-note luck">${luckCell}</td>` : `<td class="got sep-l">${gotBox(slug, g, d)}</td>`;
       const alchBox = canAlch(slug) ? `<input type="checkbox" data-alch="${slug}"${alch ? ' checked' : ''}${take ? '' : ' disabled'} title="${esc(`High alch it: ${fmt(highAlch(slug))} coins each, and into your bank as coins`)}" aria-label="${esc(`Alch ${ITEMS[slug]?.name || slug}`)}">` : '';
       return `<tr title="${esc(itemTitle(slug, d, goal))}" data-loot="${slug}"${take ? '' : ' class="off"'}>
         <td class="c"><input type="checkbox" data-take="${slug}"${take ? ' checked' : ''} title="Take it: untick what you leave on the ground" aria-label="${esc(`Take ${ITEMS[slug]?.name || slug}`)}"></td>
         <td class="c">${alchBox}</td>
-        <td class="l">${itemLink(slug, d)}${alch ? ' <span class="alch-tag" title="High alched: counted in coins">alched</span>' : ''}${goal.combineKeys && KEY_HALVES.includes(slug) ? ' <span class="alch-tag" title="You make pairs of halves into crystal keys: they go into your bank as keys">into crystal keys</span>' : ''}</td><td>${esc(rateText(d.p))}</td><td>${esc(amountText(d))}</td><td>${amt(d.q * n)}</td><td>${d.p >= 1 ? '–' : chanceText(at1)}</td><td>${value}</td>${doneCells}<td>${actual}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`;
+        <td class="l">${itemLink(slug, d)}${alch ? ' <span class="alch-tag" title="High alched: counted in coins">alched</span>' : ''}${goal.combineKeys && KEY_HALVES.includes(slug) ? ' <span class="alch-tag" title="You make pairs of halves into crystal keys: they go into your bank as keys">into crystal keys</span>' : ''}</td><td class="wr">${wrapAt(rateText(d.p))}</td><td class="wr">${wrapAt(amountText(d))}</td><td>${oneCell}</td><td>${amt(d.q * n)}</td><td>${d.p >= 1 ? '–' : chanceText(at1)}</td><td>${value}</td>${doneCells}<td>${actual}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`;
     };
-    const extraRows = extra.map(slug => `<tr data-loot="${slug}" title="${esc(`${ITEMS[slug]?.name || slug}: not something this monster drops`)}"><td></td><td></td><td class="l"><span class="sk-cell">${itemIcon(slug, true)} ${itemName(slug)} <span class="c-faint small-note">(not its drop)</span></span></td><td colspan="5"></td>${done ? `<td class="sep-l"></td><td class="got">${gotBox(slug, got[slug], null)}</td><td></td>` : `<td class="got sep-l">${gotBox(slug, got[slug], null)}</td>`}<td>${worthOf(slug) != null ? gpShort(worthOf(slug) * got[slug]) : '<span class="c-faint">?</span>'}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`).join('');
+    const extraRows = extra.map(slug => `<tr data-loot="${slug}" title="${esc(`${ITEMS[slug]?.name || slug}: not something this monster drops`)}"><td></td><td></td><td class="l"><span class="sk-cell">${itemIcon(slug, true)} ${itemName(slug)} <span class="c-faint small-note">(not its drop)</span></span></td><td colspan="6"></td>${done ? `<td class="sep-l"></td><td class="got">${gotBox(slug, got[slug], null)}</td><td></td>` : `<td class="got sep-l">${gotBox(slug, got[slug], null)}</td>`}<td>${worthOf(slug) != null ? gpShort(worthOf(slug) * got[slug]) : '<span class="c-faint">?</span>'}</td>${inBank ? `<td class="c-faint">${banked[slug] ? fmt(banked[slug]) : ''}</td>` : ''}</tr>`).join('');
     // (v3.2) Hide unticked loot: what you leave on the ground, out of the table (the one switch every table has)
     const shown = S.hideOff ? sortedList.filter(x => taken(goal, x.slug)) : sortedList;
     const hidden = list.length - shown.length;
@@ -546,6 +556,8 @@ export function createNpcUi(P) {
     const alch = goal && alched(goal, slug) ? `\nHigh alched: ${fmt(highAlch(slug))} coins each` : '';
     return `${name}: ${fromText(d)}${untradeable(slug) ? '\nCan\'t be traded: not counted in the value.' : `\n${priceTip(slug)}`}${alch}${clean}`;
   }
+  // (v3.5.1) "45/2,097,152", "15–3,000": where a narrow table may break them (after the / or the –)
+  const wrapAt = t => esc(t).replace(/([/–])/g, '$1<wbr>');
   // an amount on average: whole numbers as they are, small ones to two places
   const amt = x => (x >= 100 ? fmt(Math.round(x)) : x >= 10 ? x.toFixed(1).replace(/\.0$/, '') : x >= 0.01 ? x.toFixed(2).replace(/\.?0+$/, '') : x > 0 ? x.toPrecision(1) : '0');
   // − and + go a drop at a time: an item every drop of which is the same amount (a rune scimitar), else one
@@ -555,6 +567,8 @@ export function createNpcUi(P) {
     return `<span class="got-box"><button type="button" class="mv" data-got-step="-${stepOf(d)}" data-slug="${slug}" title="One drop fewer" aria-label="One ${esc(name)} drop fewer"${n > 0 ? '' : ' disabled'}>−</button><input class="input small num" data-got="${slug}" inputmode="numeric" value="${n ? fmt(n) : ''}" placeholder="0" aria-label="${esc(name)} looted"><button type="button" class="mv" data-got-step="${stepOf(d)}" data-slug="${slug}" title="One drop more" aria-label="One ${esc(name)} drop more">+</button></span>`;
   }
   // How lucky your loot is, after done kills: in drops where every drop is the same amount, else in the amount.
+  // (v3.5.1: in a few words, the rest in its tooltip) Green: the share of players who'd have fewer; red: the
+  // share who'd have more; none yet, or dry so many times the kills the drop rate says.
   function luckText(slug, d, done, got) {
     if (!done) return '';
     if (d.p >= 1 && d.one) return got === d.one * done ? '<span class="c-faint">every kill</span>' : '';
@@ -562,15 +576,15 @@ export function createNpcUi(P) {
       const dry = dryChance(d.p, done);
       const x = done * d.p;
       const tip = drySentence(ITEMS[slug]?.name || slug, d.p, done);
-      if (x < 1) return `<span class="c-faint" title="${esc(tip)}">none yet: ${chanceText(dry)} go this long</span>`;
-      return `<span class="${dry < 0.1 ? 'c-lose' : ''}" title="${esc(tip)}">dry ${esc(timesText(x))} rate · ${chanceText(dry)} go this dry</span>`;
+      if (x < 1) return `<span class="c-faint" title="${esc(tip)}">none yet</span>`;
+      return `<span class="${dry < 0.1 ? 'c-lose' : ''}" title="${esc(tip)}">dry ${esc(timesText(x).replace(' ×', '×'))}</span>`;
     }
     const l = luck(d, done, got);
     const what = l.drops ? `${fmt(l.count)} drop${l.count === 1 ? '' : 's'} (${amt(l.expectedDrops)} expected)` : `${fmt(got)} (${amt(l.expected)} expected)`;
     const tip = `${what} after ${fmt(done)} kills. ${chanceText(l.fewer)} of players would have fewer, ${chanceText(l.more)} more.`;
-    if (l.fewer > 0.5) return `<span class="c-win" title="${esc(tip)}">luckier than ${chanceText(l.fewer)}</span>`;
-    if (l.more > 0.5) return `<span class="c-lose" title="${esc(tip)}">${chanceText(l.more)} get more</span>`;
-    return `<span title="${esc(tip)}">about as expected</span>`;
+    if (l.fewer > 0.5) return `<span class="c-win" title="${esc(tip)}">${chanceText(l.fewer)}</span>`;
+    if (l.more > 0.5) return `<span class="c-lose" title="${esc(tip)}">${chanceText(l.more)}</span>`;
+    return `<span title="${esc(tip)}">as expected</span>`;
   }
 
   // ── Slayer goals ────────────────────────────────────────────────────────

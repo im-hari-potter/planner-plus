@@ -20,7 +20,7 @@ what those are checked against; where the two differ, the server wins.
 - [Round up my supplies](#round-up-my-supplies)
 - [Prices and gp](#prices-and-gp)
 - [Your bank, and reading it from screenshots](#your-bank-and-reading-it-from-screenshots)
-- [Gear: what you wear, and how it fights](#gear-what-you-wear-and-how-it-fights)
+- [DPS: what you wear, and how it fights](#dps-what-you-wear-and-how-it-fights)
 - [Combat, monsters and loot](#combat-monsters-and-loot)
 - [Useful tips](#useful-tips)
 - [Skill by skill](#skill-by-skill)
@@ -38,7 +38,7 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | **Goals** | Your goals, each with its **Plan (Calculator)**: every skill (Ranged with the ammo it takes), your total level, your combat level, and Slayer (a plan of kills and their loot). |
 | **Bank** | What you have, typed in or read from screenshots: every item in the game, valued. Plans use it first. |
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
-| **Gear** | What you wear and how it fights, like the game's Worn Equipment screen and a DPS calculator: a melee, a Ranged and a Magic setup at your levels, the bonuses they add up to, and how each does against any monster or another player. Best from my bank picks it from what you have. |
+| **DPS** | What you wear and how it fights, like the game's Worn Equipment screen and a DPS calculator: a melee, a Ranged and a Magic setup at your levels, the bonuses they add up to, and how each does against any monster or another player. Best from my bank picks it from what you have, and your own layouts are saved by name. |
 | **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance, and how your gear does against it. |
 
 The tabs stay at the top of the window as you scroll, each with its own icon. An item's name,
@@ -234,8 +234,8 @@ than the coal and ore you put in.
 - **gp/XP**: what each XP costs you (negative: you make money doing it).
 
 Market prices are checked one at a time and kept for 12 hours. Click an item's name anywhere to
-see its price here; here, a name opens it on the market in a new tab (inside LostKit, in your
-browser).
+see its price here; here, a name opens it on the market (inside LostKit it opens in the tool's tab;
+◀ comes back. In a browser, a new tab).
 
 ## Your bank, and reading it from screenshots
 
@@ -271,15 +271,16 @@ like another item gets a drop-down.*
 
 *Eight to a row, as in the game: what one is worth (ea), and what yours come to.*
 
-## Gear: what you wear, and how it fights
+## DPS: what you wear, and how it fights
 
-![The Gear tab: what you wear, your levels, prayers and potions, and the bonuses they add up to](readme-17-gear.png)
+![The DPS tab: what you wear, your layouts, your levels, prayers and potions, and the bonuses they add up to](readme-17-gear.png)
 
 *What you wear, as the game's Worn Equipment screen has it, at your levels, with what it all adds
 up to.*
 
-The Gear tab plans your gear the way the DPS calculators players use do, with the server's own
-sums. There are three setups, **Melee**, **Ranged** and **Magic**, each kept for your account:
+The DPS tab (called Gear in v3.5) plans your gear the way the DPS calculators players use do,
+with the server's own sums. There are three setups, **Melee**, **Ranged** and **Magic**, each kept
+for your account:
 
 - **What you wear**: click a slot, then pick from the list: what's in your bank first, the most use
   to that setup first, and what you can't wield yet marked with the level (or quest) it takes. Type
@@ -291,9 +292,19 @@ sums. There are three setups, **Melee**, **Ranged** and **Magic**, each kept for
   level). A Magic setup picks its spell (Charged for the god spells).
 - **Bonuses**: attack and defence for stab, slash, crush, Magic and Ranged, then strength, Ranged
   strength and prayer, added up the way the server does (arrows only count with a bow).
-- **Best from my bank** puts on the best your bank has, for damage or for tanking, against the
-  monster you've picked. Only what's in your bank counts, so put in what you wear too. **Quests
-  done** says whether items that wait for a quest (a rune platebody: Dragon Slayer) count.
+- **Best from my bank** puts on the best your bank has, **For dps** (the most damage a second) or
+  **For tanking**, against the monster you've picked. Only what's in your bank counts, so put in
+  what you wear too. Try one, then the other: **Back to what you had** puts back what you wore
+  before either.
+- **My layouts**: save what you wear (with its style, prayers and potions) by a name, the weapon's
+  if you type none. Each setup has its own; a layout's button wears it again, and is lit while it's
+  what you wear, whatever Best from my bank picks. Save under a name that's taken to save over it;
+  ✕ forgets one (with an Undo).
+- **Quests done** says whether the items that wait for a quest count as yours to wear. The server
+  checks six: Dragon Slayer (a rune platebody, any kind, and a green dragonhide body), Lost City (a
+  dragon dagger and longsword), Heroes' Quest (a dragon battleaxe and mace), Regicide (a dragon
+  halberd), Legends' Quest (a dragon sq shield) and The Fremennik Trials (the Fremennik helms).
+  Hover the tick for the full list.
 
 ### Against a monster
 
@@ -333,9 +344,9 @@ with its icon (Hitpoints XP, and Prayer XP if you bury the bones), and what its 
 combat level.
 
 An Attack, Strength or Defence goal also says how often your hits land on the monster most of its
-kills go to, and how hard, with your melee setup on the Gear tab in the goal's style (a Defence
+kills go to, and how hard, with your melee setup on the DPS tab in the goal's style (a Defence
 goal, how often it hits you too). A Magic goal training a combat spell says the spell's max hit with
-your Magic gear, and how often it lands on the monster picked on the Gear tab.
+your Magic gear, and how often it lands on the monster picked on the DPS tab.
 
 ### Ranged: the ammo a plan takes
 
@@ -345,7 +356,7 @@ your Magic gear, and how often it lands on the monster picked on the Gear tab.
 it costs.*
 
 A Ranged goal's plan counts the ammo its kills take, by the server's own sums. What you shoot with
-is your **Ranged setup on the Gear tab**: its bow or crossbow and what's in its quiver, or what it
+is your **Ranged setup on the DPS tab**: its bow or crossbow and what's in its quiver, or what it
 throws, with every bonus you wear, its style (Rapid or Accurate; Longrange when the goal is) and a
 ranging potion. With nothing set up there, it counts the best your Ranged level can use. Here you
 say whether you **pick up what drops**.
@@ -385,13 +396,13 @@ and 9 in 10. Drops are worked out for a members world, from the server's own dro
 *A monster's page: its picture, its numbers, where it is, and a minimap drawn from the game's map
 files.*
 
-![You against it: each of your setups on the Gear tab, and the chance you win](readme-20-npc-vs.png)
+![You against it: each of your setups on the DPS tab, and the chance you win](readme-20-npc-vs.png)
 
-*You against it: each of your setups on the Gear tab.*
+*You against it: each of your setups on the DPS tab.*
 
-**You against it**, on every monster's page: each setup you have on the Gear tab, with your max hit,
+**You against it**, on every monster's page: each setup you have on the DPS tab, with your max hit,
 how often you hit, your damage a second, how long a kill takes, how often it hits you and how hard,
-and the chance you win. **Gear** opens it there.
+and the chance you win. **DPS tab** opens it there.
 
 ### Slayer goals: a plan of kills
 
@@ -411,8 +422,9 @@ Its plan has:
   too: see below.
 - **XP**: what the kills give each skill, and the level the ones still to do take you to; then,
   each with its skill's icon too, what burying the bones, alching and cleaning the herbs give.
-- **Loot**: every drop with its chance a kill, how many to expect over your kills, the chance of at
-  least one, and its **Expected value** at your prices.
+- **Loot**: every drop with its chance a kill, how many one drop is and its **Value per drop** at
+  your prices (what it's worth picking up), how many to expect over your kills, the chance of at
+  least one, and its **Expected value**.
   - **Take**: untick what you leave on the ground. It's worth nothing to you, and starts unticked
     when loot is read from screenshots. **Hide unticked loot** takes it out of the table.
   - **Alch**: tick what you high alch. It's counted at its high alch in coins (a fire battlestaff:
@@ -420,9 +432,12 @@ Its plan has:
   - **Herbs**: cleaned, each herb has its own chance (Ranarr weed 209/16,384 a fire giant); kept
     grimy, they're the one Unid herb.
 - **Looted**: your loot, typed in, or − and + a drop at a time. After your kills, each drop says
-  what's to be expected and how lucky you are ("luckier than 54%", "65% get more"), and its
-  **Actual value**. Click a column's name to sort by it. **Banked** is how much of it is in your
-  bank.
+  what's to be expected and how lucky you are under **Luck**: in green the share of players who'd
+  have fewer (54%: luckier than 54% of them), in red the share who'd have more, or how dry you are
+  ("dry 1.56×": 1.56 times the kills the drop rate says, none yet). Its tooltip has the rest. Then
+  its **Actual value**. Click a column's name to sort by it (Luck: the luckiest first). **Banked**
+  is how much of it is in your bank. The table fits LostKit's pane with its side panel open (a long
+  item name takes two lines).
 - **Dryness**: a drop you haven't had says how dry you are, and how many players go that dry.
 
 **Kills from your XP.** When the hiscores show new combat XP, a box above your goals says how much:
@@ -482,8 +497,9 @@ that dry happens to 21% of players**, about 1 in 5. Half of players have one by 
 
 - **Untick what you won't make** (see above). It's the one thing that changes a plan the most.
 - **Refresh XP** after a session: new combat XP is counted as your Slayer goals' kills.
-- **Best from my bank** on the Gear tab is the quickest way to set up your gear: every monster's
-  page then shows how you'd do against it.
+- **Best from my bank** on the DPS tab is the quickest way to set up your gear: every monster's
+  page then shows how you'd do against it. **Save** a layout you made yourself first, and its
+  button puts it back whatever Best from my bank picks.
 - **Check the prices** of what a plan uses before trusting its gp.
 - **Hide table** tucks one plan's table away, and **Hide all tables** every open plan's.
 - A number you're typing is left alone until you enter it (Enter, Tab or a click elsewhere), so
@@ -571,7 +587,7 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   Prices), `npc-ui.js` (the NPCs tab and Slayer goals), `loot.js` (drop chances, expected loot,
   luck and dryness, kills from XP), `ranged.js` (a shot's chance to hit, the shots a kill takes and
   the ammo a plan fires), `combat.js` (a fight: the rolls, max hits, a kill's time and the chance
-  to win, and the best from a bank), `gear-ui.js` (the Gear tab), `prices.js` (the market and high
+  to win, and the best from a bank), `gear-ui.js` (the DPS tab), `prices.js` (the market and high
   alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
   tests), `sortable.js` (dragging), `tablesort.js` (sorting a table by a column's name).
@@ -587,7 +603,8 @@ LostHQ's calculators, from [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices fr
 [markets.lostcity.rs](https://markets.lostcity.rs). Skill icons and RuneScape fonts from
 [LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0). The Slayer icon is the client's own
 (from 2005, when the skill came); the tabs' icons are drawn in the frame of the client's round side
-icons (Gear's tab a rune kiteshield), and the Bank tab's Gear button's is its Worn Equipment icon.
+icons (DPS's a sword, NPCs' the Slayer master's skull from the minimap, Bank's the minimap bank's
+"$" in its golds), and the Bank tab's Gear button's is its Worn Equipment icon.
 RuneScape is © Jagex Ltd.
 
 This is a fan project, not affiliated with Jagex, Lost City or LostHQ. Licensed under GPL-3.0.

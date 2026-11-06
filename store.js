@@ -208,7 +208,7 @@ export function importBackup(text) {
     } else if (key === 'plan.account' && typeof value === 'string' && !store.get(key, null)) {
       store.set(key, value);
     } else if (key.startsWith('gear.') && value && typeof value === 'object' && !store.get(key, null)) {
-      // (v3.5) An account's gear (its setups on the Gear tab): one set up here already stays as it is.
+      // (v3.5) An account's gear (its setups on the DPS tab): one set up here already stays as it is.
       store.set(key, value);
       gear++;
     }

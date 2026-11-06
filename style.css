@@ -92,7 +92,7 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
    v3.3.2: Bank the gold "$" of the game's bank icon on the minimap, the tabs' order with NPCs last). Clear
    of the active tab's gold line under it. Its address carries a stamp of the picture, so a browser fetches
    the new one with these sizes, not an old one it kept. */
-.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=8f0d5ac536'); background-size: 234px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
+.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=6c290e7eb4'); background-size: 234px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
 .tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
 .ti.ti-compare { background-position: -26px 0; }
@@ -852,14 +852,18 @@ table.npc-t td.npc-best .item.sm { margin-right: 2px; }
 @media (max-width: 520px) { .npc-top, .npc-top:not(.has-pic) { grid-template-columns: minmax(0, 1fr); } .npc-pic { --pz: 0.75; } }
 table.xp-t { width: auto; }
 table.xp-t td { padding: 3px 10px 3px 6px; }
-table.loot-t td, table.loot-t th { padding: 3px 6px; }
+table.loot-t td, table.loot-t th { padding: 3px 4px; }
 table.loot-t .sep-l { border-left: 1px solid #000; }
 table.loot-t td.got { white-space: nowrap; }
 /* (v3.1: room for Actual value after Luck) */
 table.loot-t th.wrap { min-width: 0; }
-table.loot-t td.luck { white-space: normal; min-width: 120px; max-width: 180px; line-height: 1.2; }
+/* (v3.5.1) Luck in a few words, on a line; the item's name may wrap, so the whole table fits LostKit's pane */
+table.loot-t td.luck, table.loot-t td.wr { white-space: normal; }
+table.loot-t td.l:not(.luck) { white-space: normal; min-width: 88px; }
 .got-box { display: inline-flex; align-items: center; gap: 2px; }
 .got-box .input.num { width: 72px; text-align: right; }
+table.loot-t .got-box .input.num { width: 50px; }
+table.loot-t .got-box .mv { width: 16px; }
 .got-box .mv { width: 20px; height: 22px; }
 .kills-bar .got-box .input.num { width: 96px; }
 .slayer-plan .nf { padding: 4px 0 6px; border-bottom: 1px solid var(--line); }
@@ -945,11 +949,16 @@ table.prices-t td.pq .input.num { width: 100%; max-width: 90px; margin: 0; }
 table.prices-t td.pcost .input.num { width: 100%; max-width: 104px; margin: 0; }
 .pq-sum { margin: 2px 0 0; font-size: 14px; }
 
-/* ── v3.5: Gear ─────────────────────────────────────────────────────────── */
+/* ── v3.5: Gear (v3.5.1: the DPS tab) ───────────────────────────────────── */
 /* Your setup: which one, Best from my bank, then your levels (a what-if in orange, a potion's boost beside it) */
 .gear-top { gap: 6px 14px; margin-top: 2px; }
 .gear-best { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .gear-note { margin: 4px 0 6px; font-family: var(--small); font-size: 13px; }
+/* (v3.5.1) the DPS tab's layouts: each a chip that wears it (lit while it's what you wear), ✕ forgets it */
+.gear-saves { gap: 4px 6px; margin: 6px 0 2px; }
+.gear-saves .chip.on { border-style: inset; color: #fff; box-shadow: inset 0 -3px 0 var(--gold-hi), inset 0 0 0 40px rgba(0, 0, 0, 0.25); }
+.gear-save-f { display: inline-flex; align-items: center; gap: 4px; }
+.gear-save-f .input { width: 130px; }
 .gear-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; }
 .gear-lv { display: inline-flex; align-items: center; gap: 3px; cursor: text; }
 .gear-lv .input { width: 40px; text-align: center; padding: 3px 2px; }
