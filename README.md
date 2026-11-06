@@ -603,8 +603,8 @@ LostHQ's calculators, from [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices fr
 [markets.lostcity.rs](https://markets.lostcity.rs). Skill icons and RuneScape fonts from
 [LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0). The Slayer icon is the client's own
 (from 2005, when the skill came); the tabs' icons are drawn in the frame of the client's round side
-icons (DPS's a sword, NPCs' the Slayer master's skull from the minimap, Bank's the minimap bank's
-"$" in its golds), and the Bank tab's Gear button's is its Worn Equipment icon.
+icons (DPS's a sword, NPCs' the Slayer master's skull from the minimap, Bank's the minimap's bank
+icon drawn again at that size), and the Bank tab's Gear button's is its Worn Equipment icon.
 RuneScape is © Jagex Ltd.
 
 This is a fan project, not affiliated with Jagex, Lost City or LostHQ. Licensed under GPL-3.0.

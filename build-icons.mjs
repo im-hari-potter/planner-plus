@@ -11,10 +11,12 @@
 // blurry), in the frame of the game's own round side icon: the quest list's (sprites/sideicons.png #2),
 // a light grey disc in a black ring that's heavier at the bottom right, its star painted out, and a
 // symbol drawn on it here pixel by pixel (a magnifying glass, scales, an arrow, a trophy, a bar chart,
-// a "$", coins, a sword, a skull). In the tabs' order (v3.3.2: NPCs last). (v3.5.1) Bank's "$" is drawn
-// here too now, in the three golds of the bank's minimap icon (sprites/mapfunction.png #5) and outlined
-// in black like the others: v3.3.2's was the minimap's own "$" drawn bigger by drawing some of its rows
-// and columns twice, which made it look soft. DPS's (Gear's, v3.5, after Prices) is the sword NPCs had;
+// a "$", coins, a sword, a skull). In the tabs' order (v3.3.2: NPCs last). (v3.5.2) Bank's "$" is the bank's
+// minimap icon's (sprites/mapfunction.png #5) drawn again at this size, pixel by pixel, as the minimap draws
+// it: no outline, its edge gold on the upper left, its bright face, its dark gold under and right of each
+// stroke and down the bar's right, and the disc's grey shadow a pixel down and right of it all. (v3.3.2's was
+// that icon's own "$" made bigger by drawing some rows and columns twice, which looked soft; v3.5.1's a "$" of
+// its own outlined in black.) DPS's (Gear's, v3.5, after Prices) is the sword NPCs had;
 // NPCs' is the Slayer master's skull from the minimap (mapfunction #51 from rev 377 on, the
 // [slayer_master_icon] loc's; not in rev 274, so its yellows are written here), light on the left.
 // gear.webp, rares.webp (v3.3): the Bank and Prices tabs' Gear and Rares buttons: the game's Worn
@@ -69,9 +71,10 @@ const PAL = {
   E: [140, 226, 112], G: [64, 178, 56], D: [20, 96, 20],
   s: [232, 232, 238], m: [160, 160, 170], M: [96, 96, 106],
   q: [110, 130, 255], b: [40, 64, 222], n: [18, 30, 128],
-  // (v3.5.1) the bank's minimap golds, light to dark (bankGolds checks them against the icon), and the
-  // Slayer master's minimap yellows (rev 377's mapfunction #51): its light side, the rest, its nose
-  a: [232, 209, 78], c: [176, 159, 65], e: [117, 100, 3],
+  // (v3.5.1) the bank's minimap golds, its face, its edge and its dark (bankGolds checks them against the icon;
+  // v3.5.2: and its shadow's grey, f), and the Slayer master's minimap yellows (rev 377's mapfunction #51): its
+  // light side, the rest, its nose
+  a: [232, 209, 78], c: [176, 159, 65], e: [117, 100, 3], f: [159, 159, 159],
   u: [248, 255, 157], U: [244, 252, 114], z: [241, 254, 38],
 };
 const SYMBOLS = {
@@ -211,25 +214,25 @@ const SYMBOLS = {
     '....KKKKKKKKK....',
     '.................',
   ],
-  // (v3.5.1) the bank's "$", light at its top and left, dark along its bottoms
+  // (v3.5.2) the bank's "$", as the minimap draws it: c its edge, a its face, e its dark, f the shadow on the disc
   bank: [
-    '........K........',
-    '.....KKKcKKK.....',
-    '....KaaaaaacK....',
-    '...KaaaaaaaacK...',
-    '...KaaaeaeaacK...',
-    '...KaacKcKeeeK...',
-    '...KaacKcKKKK....',
-    '...KaaaaaaaacK...',
-    '...KaaaaaaaacK...',
-    '...KeeeeaeaacK...',
-    '....KKKKcKaacK...',
-    '...KaacKcKaacK...',
-    '...KaaaaaaaacK...',
-    '...KeaaaaaaaeK...',
-    '....KeeeaeeeK....',
-    '.....KKKeKKK.....',
-    '........K........',
+    '.................',
+    '.......ccc.......',
+    '.....cccacccc....',
+    '....ccaaaaaaef...',
+    '....caaeaeeeef...',
+    '....caaeaeffff...',
+    '....caaeaeee.....',
+    '....ccaaaaaeef...',
+    '.....cccaeaaef...',
+    '.......caeaaef...',
+    '........aeaaef...',
+    '........aeaaef...',
+    '....ccccaeaaef...',
+    '....caaaaaaeef...',
+    '....ceeeaeeeff...',
+    '.....ffeeef......',
+    '........fff......',
   ],
   // (two stacks of coins)
   prices: [
@@ -291,6 +294,10 @@ export async function appIcons(content, { partyhat }) {
   }
   const bankGolds = ['a', 'c', 'e'].map(ch => PAL[ch].join());
   if (golds.size !== 3 || bankGolds.some(k => !golds.has(k))) throw new Error(`sprites/mapfunction.png: icon 5 (the bank's) is in the golds ${[...golds].join(' / ')} now, not ${bankGolds.join(' / ')}`);
+  // (v3.5.2: and the grey of its shadow)
+  let shadow = 0;
+  for (let i = 0; i < map.length; i += 4) if (map[i + 3] && map.subarray(i, i + 3).join() === PAL.f.join()) shadow++;
+  if (shadow < 5) throw new Error(`sprites/mapfunction.png: icon 5 (the bank's) has no shadow in ${PAL.f.join()} now`);
   // (the sheet's cells: x 2..27, y 3..26 of the 30 x 30)
   const CW = 26, CH = 24, OX = 2, OY = 3;
   const sheet = Buffer.alloc(TAB_ORDER.length * CW * CH * 4);

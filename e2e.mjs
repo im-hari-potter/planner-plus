@@ -5132,7 +5132,7 @@ await check("bank and prices: items eight to a row as in the game, each with wha
   }
 });
 
-await check('the tabs stay at the top as the page scrolls, each with its icon (v3.2.1: 26 by 24, clear of the gold line; v3.5.1: Gear is DPS, with the sword, NPCs the Slayer master\'s skull, Bank\'s "$" outlined); what a goal scrolls to stops below them (v3.1)', async () => {
+await check('the tabs stay at the top as the page scrolls, each with its icon (v3.2.1: 26 by 24, clear of the gold line; v3.5.1: Gear is DPS, with the sword, NPCs the Slayer master\'s skull; v3.5.2: Bank\'s "$" as the minimap draws it); what a goal scrolls to stops below them (v3.1)', async () => {
   await page.click('.tab[data-tab="npcs"]');
   await page.waitForSelector('#view-npcs:not([hidden]) table.npc-t');
   await page.evaluate(() => window.scrollTo(0, 3000));
@@ -5151,9 +5151,10 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   assert.deepEqual(clear, clear.map(() => [true, true]));
   assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'Bank', 'Prices', 'DPS', 'NPCs']);
   // (v3.3.2) Bank's icon in the game's own golds, the "$" of the bank on the minimap's, and no other gold; in the sheet's
-  // sixth cell, as Bank is the sixth tab. (v3.5.1) Its "$" drawn pixel by pixel and outlined in black like the others
-  // (v3.3.2 drew the minimap's own bigger, some pixels twice, with no outline); DPS's the sword NPCs had, and NPCs'
-  // the Slayer master's skull from the minimap, in its yellows
+  // sixth cell, as Bank is the sixth tab. (v3.5.2) Its "$" drawn pixel by pixel as the minimap draws it: no black
+  // round it, and the disc's grey shadow down and right of it (v3.3.2 drew the minimap's own bigger, some pixels twice;
+  // v3.5.1 outlined one of its own in black); DPS's the sword NPCs had, and NPCs' the Slayer master's skull from the
+  // minimap, in its yellows
   const cellOf = sel => page.evaluate(async sel => {
     const el = document.querySelector(sel);
     const url = getComputedStyle(el).backgroundImage.match(/url\("(.*)"\)/)[1];
@@ -5176,7 +5177,11 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   assert.equal(bankIcon.at, 130, 'the sixth cell');
   const GOLDS = ['232,209,78', '176,159,65', '117,100,3'];
   assert.ok(GOLDS.every(k => count(bankIcon.px, k) >= 10) && count(bankIcon.px, '248,228,110') + count(bankIcon.px, '214,176,52') === 0, `the game's golds only: ${GOLDS.map(k => count(bankIcon.px, k))}`);
-  assert.ok(outlined(bankIcon.px, GOLDS), 'outlined in black, as the other icons are');
+  const touchesBlack = bankIcon.px.some((k, i) => GOLDS.includes(k) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+    const x = (i % 26) + dx, y = Math.floor(i / 26) + dy;
+    return x >= 0 && x < 26 && y >= 0 && y < 24 && bankIcon.px[y * 26 + x] === '0,1,1';
+  }));
+  assert.ok(!touchesBlack && count(bankIcon.px, '159,159,159') >= 10, "as the minimap draws it: no black round it, the disc's grey shadow down and right");
   const dps = await cellOf('.ti.ti-gear'), npcs = await cellOf('.ti.ti-npcs');
   assert.deepEqual([dps.at, npcs.at], [182, 208]);
   assert.ok(count(dps.px, '232,232,238') >= 8 && count(dps.px, '96,96,106') >= 8, "DPS: a sword's blade");
@@ -6157,7 +6162,7 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.5\.1 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.5\.2 · /);
   await page.click('#settings-close');
 });
 

@@ -92,7 +92,7 @@ html { scroll-padding-top: calc(var(--top-h, 52px) + 8px); }
    v3.3.2: Bank the gold "$" of the game's bank icon on the minimap, the tabs' order with NPCs last). Clear
    of the active tab's gold line under it. Its address carries a stamp of the picture, so a browser fetches
    the new one with these sizes, not an old one it kept. */
-.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=6c290e7eb4'); background-size: 234px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
+.ti { display: inline-block; flex: 0 0 auto; width: 26px; height: 24px; margin: -4px 5px -1px -3px; vertical-align: middle; background-image: url('tabicons.png?v=539a936839'); background-size: 234px 24px; background-repeat: no-repeat; image-rendering: pixelated; }
 .tabs .tab { display: inline-flex; align-items: center; }
 .ti.ti-lookup { background-position: 0 0; }
 .ti.ti-compare { background-position: -26px 0; }
