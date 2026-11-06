@@ -16,7 +16,7 @@ import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.5.2';
+const VERSION = '3.5.3';
 const MAX_COMPARE = 5;
 
 // How to reach the API:

@@ -6162,7 +6162,10 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.5\.2 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.5\.3 · /);
+  // (v3.5.3) the stylesheet asked for with the version, so a reload after an update gets the new one and its icons
+  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.5.3');
+  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.5\.3$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
   await page.click('#settings-close');
 });
 

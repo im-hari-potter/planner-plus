@@ -500,6 +500,8 @@ that dry happens to 21% of players**, about 1 in 5. Half of players have one by 
 - **Best from my bank** on the DPS tab is the quickest way to set up your gear: every monster's
   page then shows how you'd do against it. **Save** a layout you made yourself first, and its
   button puts it back whatever Best from my bank picks.
+- **After an update**, reload Planner+ to get it: in LostKit, click into its page and press F5 (or Ctrl+R).
+  Settings shows the version you have.
 - **Check the prices** of what a plan uses before trusting its gp.
 - **Hide table** tucks one plan's table away, and **Hide all tables** every open plan's.
 - A number you're typing is left alone until you enter it (Enter, Tab or a click elsewhere), so
