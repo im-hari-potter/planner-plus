@@ -5132,7 +5132,7 @@ await check("bank and prices: items eight to a row as in the game, each with wha
   }
 });
 
-await check('the tabs stay at the top as the page scrolls, each with its icon (v3.2.1: 26 by 24, clear of the gold line; v3.5.1: Gear is DPS, with the sword, NPCs the Slayer master\'s skull; v3.5.2: Bank\'s "$" as the minimap draws it); what a goal scrolls to stops below them (v3.1)', async () => {
+await check('the tabs stay at the top as the page scrolls, each with its icon (v3.2.1: 26 by 24, clear of the gold line; v3.5.1: Gear is DPS, with the sword, NPCs the Slayer master\'s skull; v3.5.2: Bank\'s "$" as the minimap draws it; v3.6: More three dots, Quests the quest list\'s own icon, Clues a clue scroll); what a goal scrolls to stops below them (v3.1)', async () => {
   await page.click('.tab[data-tab="npcs"]');
   await page.waitForSelector('#view-npcs:not([hidden]) table.npc-t');
   await page.evaluate(() => window.scrollTo(0, 3000));
@@ -5140,16 +5140,18 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   const top = await page.locator('.top').evaluate(el => el.getBoundingClientRect().top);
   assert.ok(Math.abs(top) <= 1, `the tabs at ${top}px`);
   assert.deepEqual(await page.locator('.tabs .tab .ti').evaluateAll(els => els.map(el => getComputedStyle(el).backgroundPosition)),
-    ['0px 0px', '-26px 0px', '-52px 0px', '-78px 0px', '-104px 0px', '-130px 0px', '-156px 0px', '-182px 0px', '-208px 0px']);
+    ['0px 0px', '-26px 0px', '-52px 0px', '-78px 0px', '-104px 0px', '-130px 0px', '-156px 0px', '-182px 0px', '-208px 0px', '-234px 0px', '-260px 0px', '-286px 0px']);
   // (v3.2.1: 26 by 24, drawn at that size; each clear of the active tab's gold line, the bottom 3 pixels inside its border)
   assert.deepEqual(await page.locator('.tabs .tab .ti').first().evaluate(el => [el.offsetWidth, el.offsetHeight]), [26, 24]);
   assert.match(await page.locator('.tabs .tab .ti').first().evaluate(el => getComputedStyle(el).backgroundImage), /\/tabicons\.png\?v=[0-9a-f]{10}"\)$/, 'a stamped address');
+  await page.click('#more-btn');
   const clear = await page.locator('.tabs .tab').evaluateAll(tabs => tabs.map(t => {
     const r = t.getBoundingClientRect(), i = t.querySelector('.ti').getBoundingClientRect(), cs = getComputedStyle(t);
     return [i.top >= r.top + parseFloat(cs.borderTopWidth), i.bottom <= r.bottom - parseFloat(cs.borderBottomWidth) - 3];
   }));
   assert.deepEqual(clear, clear.map(() => [true, true]));
-  assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'Bank', 'Prices', 'DPS', 'NPCs']);
+  assert.deepEqual((await page.locator('.tabs .tab').allInnerTexts()).map(flat), ['Lookup', 'Compare', 'Gains', 'Leaderboard', 'Goals', 'Bank', 'Prices', 'DPS', 'NPCs', 'More', 'Quests', 'Clues']);
+  await page.click('#more-btn');
   // (v3.3.2) Bank's icon in the game's own golds, the "$" of the bank on the minimap's, and no other gold; in the sheet's
   // sixth cell, as Bank is the sixth tab. (v3.5.2) Its "$" drawn pixel by pixel as the minimap draws it: no black
   // round it, and the disc's grey shadow down and right of it (v3.3.2 drew the minimap's own bigger, some pixels twice;
@@ -5173,7 +5175,7 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
     return x >= 0 && x < 26 && y >= 0 && y < 24 && (colours.includes(px[y * 26 + x]) || px[y * 26 + x] === '0,1,1');
   }));
   const bankIcon = await cellOf('.ti.ti-bank');
-  assert.deepEqual(bankIcon.size, [234, 24]);
+  assert.deepEqual(bankIcon.size, [312, 24]);
   assert.equal(bankIcon.at, 130, 'the sixth cell');
   const GOLDS = ['232,209,78', '176,159,65', '117,100,3'];
   assert.ok(GOLDS.every(k => count(bankIcon.px, k) >= 10) && count(bankIcon.px, '248,228,110') + count(bankIcon.px, '214,176,52') === 0, `the game's golds only: ${GOLDS.map(k => count(bankIcon.px, k))}`);
@@ -5188,25 +5190,31 @@ await check('the tabs stay at the top as the page scrolls, each with its icon (v
   const YELLOWS = ['248,255,157', '244,252,114', '241,254,38'];
   assert.ok(YELLOWS.every(k => count(npcs.px, k) >= 3) && count(npcs.px, '232,232,238') === 0, `NPCs: the Slayer master's skull, in the minimap's yellows: ${YELLOWS.map(k => count(npcs.px, k))}`);
   assert.ok(outlined(npcs.px, YELLOWS), 'outlined in black');
+  // (v3.6) More's three dots, black on the disc; Quests the quest list's own blue star; Clues a scroll's parchment and writing
+  const more = await cellOf('.ti.ti-more'), quests = await cellOf('.ti.ti-quests'), clues = await cellOf('.ti.ti-clues');
+  assert.deepEqual([more.at, quests.at, clues.at], [234, 260, 286]);
+  assert.ok(count(more.px, '0,1,1') - count(bankIcon.px, '0,1,1') >= 27, 'More: three black dots');
+  assert.ok(quests.px.filter(k => k && Number(k.split(',')[2]) > 150 && Number(k.split(',')[0]) < 100).length >= 10, 'Quests: blue');
+  assert.ok(count(clues.px, '240,226,182') >= 20 && count(clues.px, '96,62,28') >= 10, 'Clues: parchment and its writing');
   const pad = await page.evaluate(() => [parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop), document.querySelector('.top').offsetHeight]);
   assert.equal(pad[0], pad[1] + 8, 'scrolled-to things stop below the tabs');
   await page.evaluate(() => window.scrollTo(0, 0));
 });
 
-await check("the header: All, Combat and Settings on the tabs' line, or where that's too narrow on the name's line over them, never on a line of their own (v3.3.2; v3.5: with Gear's tab, one line from 1081 px)", async () => {
+await check("the header: All, Combat and Settings on the tabs' line, or where that's too narrow on the name's line over them, never on a line of their own (v3.3.2; v3.5: with Gear's tab, one line from 1081 px; v3.6: with More, from 1120 px)", async () => {
   await page.click('.tab[data-tab="lookup"]');
   try {
-    for (const w of [1300, 1120, 1100, 1090, 1082, 1081, 1080, 1060, 1040, 1020, 1001, 1000, 960, 900, 870, 800, 600]) {
+    for (const w of [1300, 1200, 1140, 1121, 1120, 1119, 1100, 1090, 1081, 1080, 1060, 1040, 1020, 1001, 1000, 960, 900, 870, 800, 600]) {
       await page.setViewportSize({ width: w, height: 900 });
       const at = await page.evaluate(() => {
         const r = el => el.getBoundingClientRect();
         const right = r(document.querySelector('.top-right')), brand = r(document.querySelector('.brand'));
-        const tabs = [...document.querySelectorAll('.tabs .tab')].map(r);
+        const tabs = [...document.querySelectorAll('nav.tabs:not(.more-row) .tab')].map(r);
         const line = (a, b) => a.top < b.bottom && b.top < a.bottom;
         return { withTabs: line(right, tabs[0]), withName: line(right, brand), tabsOneLine: tabs.every(t => line(t, tabs[0])), under: right.top >= tabs.at(-1).bottom - 1 };
       });
       assert.ok(!at.under && (at.withTabs || at.withName), `${w}: ${JSON.stringify(at)}`);
-      if (w > 1080) assert.ok(at.withTabs && at.tabsOneLine, `${w}: all on one line`);
+      if (w >= 1120) assert.ok(at.withTabs && at.tabsOneLine, `${w}: all on one line`);
       else assert.ok(at.withName && !at.withTabs, `${w}: on the name's line, the tabs under them`);
     }
   } finally {
@@ -6155,24 +6163,280 @@ await check("goals (v3.5): an Attack, Strength or Defence goal says how often yo
   }
 });
 
+// ── v3.6: More, Quests and Clues ────────────────────────────────────────────
+const moreRow = () => page.evaluate(() => ({ shown: !document.getElementById('more-row').hidden, pressed: document.getElementById('more-btn').classList.contains('pressed'), lit: document.getElementById('more-btn').classList.contains('active'), expanded: document.getElementById('more-btn').getAttribute('aria-expanded') }));
+async function openMoreTab(tab) {
+  if (await page.locator('#more-row').isHidden()) await page.click('#more-btn');
+  await page.click(`.tab[data-tab="${tab}"]`);
+  await page.waitForSelector(`#view-${tab}:not([hidden])`);
+}
+
+await check("More (v3.6): a button at the end of the tabs shows a row under them with Quests and Clues; lit while one of them is open, and the row stays then; pressed, it stays shown till it's pressed again, after a reload too", async () => {
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('lchs.prefs') || '{}'); p.moreOpen = false; localStorage.setItem('lchs.prefs', JSON.stringify(p)); });
+  await page.reload();
+  await page.click('.tab[data-tab="goals"]');
+  assert.deepEqual(await moreRow(), { shown: false, pressed: false, lit: false, expanded: 'false' });
+  assert.equal(flat(await text('#more-btn')), 'More');
+  assert.deepEqual((await page.locator('#more-row .tab').allInnerTexts()).map(flat), ['Quests', 'Clues']);
+  await page.click('#more-btn');
+  assert.deepEqual(await moreRow(), { shown: true, pressed: true, lit: false, expanded: 'true' });
+  await page.click('.tab[data-tab="quests"]');
+  await page.waitForSelector('#view-quests:not([hidden])');
+  assert.deepEqual(await moreRow(), { shown: true, pressed: false, lit: true, expanded: 'true' });
+  assert.ok(await page.locator('.tab[data-tab="quests"]').evaluate(b => b.classList.contains('active')));
+  assert.equal(await page.evaluate(() => location.hash), '#quests');
+  // (pressed again on Quests: the row stays while Quests is open, then goes)
+  await page.click('#more-btn');
+  assert.deepEqual(await moreRow(), { shown: true, pressed: false, lit: true, expanded: 'true' });
+  await page.click('.tab[data-tab="goals"]');
+  assert.deepEqual(await moreRow(), { shown: false, pressed: false, lit: false, expanded: 'false' });
+  await page.click('#more-btn');
+  await page.reload();
+  await page.waitForSelector('#view-goals:not([hidden])');
+  assert.deepEqual(await moreRow(), { shown: true, pressed: true, lit: false, expanded: 'true' });
+  await page.click('#more-btn');
+  assert.equal((await moreRow()).shown, false);
+  // (an address opens it)
+  await page.evaluate(() => { location.hash = 'clues'; });
+  await page.waitForSelector('#view-clues:not([hidden])');
+  assert.deepEqual(await moreRow(), { shown: true, pressed: false, lit: true, expanded: 'true' });
+  await page.click('.tab[data-tab="goals"]');
+});
+
+await check("quests (v3.6): the server's 63 quests (135 quest points) and the two miniquests, ticked done by hand, kept with the account; filters and a search; a quest opens to where it starts, what it takes (skills against your levels, quests against your ticks, quest points), what to bring, what it gives, short steps and LostHQ's guide", async () => {
+  await page.evaluate(() => { localStorage.removeItem('lchs.quests.old_badger'); localStorage.removeItem('lchs.quests.lowbie'); localStorage.removeItem('lchs.questUi'); });
+  await planAs('old badger', 'Old Badger');
+  try {
+    await openMoreTab('quests');
+    const sum = async () => flat(await text('#quests-body .quest-sum .qs-line'));
+    assert.match(await sum(), /^Quest points 0 of 135 0 of 63 quests done, 0 of 2 miniquests · \d+ you can start now$/);
+    assert.equal(await page.locator('#quests-body tr.q-row').count(), 65);
+    assert.deepEqual((await page.locator('#quests-body tr.q-row .q-name').allInnerTexts()).slice(0, 3).map(flat), ["Black Knight's Fortress", "Cook's Assistant", 'Demon Slayer']);
+    await page.check('[data-quest-done="dragon"]');
+    await page.check('[data-quest-done="cook"]');
+    assert.match(await sum(), /^Quest points 3 of 135 2 of 63 quests done/);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.quests.old_badger')).done), ['cook', 'dragon']);
+    // filters
+    const rows = () => page.locator('#quests-body tr.q-row').count();
+    await page.click('[data-quest-show="free"]'); assert.equal(await rows(), 18);
+    await page.click('[data-quest-status="todo"]'); assert.equal(await rows(), 16);
+    await page.click('[data-quest-status="done"]'); assert.equal(await rows(), 2);
+    await page.click('[data-quest-show="members"]'); assert.equal(await rows(), 0);
+    assert.match(flat(await text('#quests-body .empty')), /No quests like that/);
+    await page.click('[data-quest-status="any"]'); assert.equal(await rows(), 45);
+    await page.click('[data-quest-show="mini"]'); assert.equal(await rows(), 2);
+    await page.click('[data-quest-show="all"]');
+    await page.click('[data-quest-status="ready"]');
+    const ready = await page.locator('#quests-body tr.q-row').evaluateAll(rs => rs.map(r => r.dataset.quest));
+    assert.ok(ready.includes('haunted') && !ready.includes('cook') && !ready.includes('hero') && !ready.includes('legends'), ready.join());
+    await page.click('[data-quest-status="any"]');
+    await page.fill('[data-quest-find]', 'dragon');
+    assert.deepEqual(await page.locator('#quests-body tr.q-row').evaluateAll(rs => rs.map(r => r.dataset.quest)), ['dragon']);
+    await page.fill('[data-quest-find]', '');
+    // Hero's Quest: 53 Cooking (Old Badger has 51), 50 Mining (51), 55 quest points, four quests (Dragon Slayer ticked)
+    assert.match(flat(await page.locator('tr[data-quest="hero"] .q-status').innerText()), /^✗ 53 Cooking, 55 QP, Shield of Arrav, Lost City, Merlin's Crystal$/);
+    await page.click('[data-quest-open="hero"]');
+    const card = page.locator('#quests-body .quest-card');
+    const chips = await card.locator('.q-need').evaluateAll(cs => cs.map(c => [c.textContent.replace(/\s+/g, ' ').trim(), c.className.match(/q-(ok|no|maybe)/)?.[1]]));
+    assert.deepEqual(chips, [['50 Mining ✓', 'ok'], ['25 Herblore ✓', 'ok'], ['53 Cooking ✗', 'no'], ['53 Fishing ✓', 'ok'], ['55 quest points ✗', 'no'], ['Shield of Arrav ✗', 'no'], ['Lost City ✗', 'no'], ["Merlin's Crystal ✗", 'no'], ['Dragon Slayer ✓', 'ok']]);
+    assert.equal(await card.locator('.q-need', { hasText: 'Cooking' }).getAttribute('title'), '53 Cooking: you have 51');
+    assert.equal(await card.locator('.q-steps li').count(), 5);
+    assert.match(flat(await card.locator('.q-gives').innerText()), /^1 quest point 3,075 Attack XP 3,075 Defence XP/);
+    assert.match(flat(await card.innerText()), /Starts North of Taverley/);
+    const guide = card.locator('a.qc-guide');
+    assert.equal(await guide.getAttribute('href'), 'https://2004.losthq.rs/?p=questguides&quest=heros');
+    assert.equal(await guide.getAttribute('target'), '_blank');
+    // (a quest it needs opens from its chip)
+    await card.locator('button.q-need', { hasText: 'Shield of Arrav' }).click();
+    assert.match(flat(await page.locator('#quests-body .quest-card .qc-head').innerText()), /^Shield of Arrav Free/);
+    assert.match(flat(await page.locator('#quests-body .quest-card').innerText()), /Another player who has not done the quest/);
+    // (and the card's own tick)
+    await page.locator('#quests-body .quest-card .qc-tick input').check();
+    assert.match(await sum(), /^Quest points 4 of 135/);
+    // another account: its own
+    await planAs('lowbie', 'Lowbie');
+    await openMoreTab('quests');
+    assert.match(await sum(), /^Quest points 0 of 135/);
+    await planAs('old badger', 'Old Badger');
+    await openMoreTab('quests');
+    assert.match(await sum(), /^Quest points 4 of 135 3 of 63/);
+  } finally {
+    await page.evaluate(() => { localStorage.removeItem('lchs.quests.old_badger'); localStorage.removeItem('lchs.questUi'); });
+  }
+});
+
+await check("clues (v3.6): how many you've done, kept with the account; what to bring; every clue's answer found from its words, an anagram, coordinates or a map's picture, with a minimap; keys, challenge scrolls (the zoo: 32), puzzle boxes and wizards", async () => {
+  await page.evaluate(() => { localStorage.removeItem('lchs.clues.old_badger'); localStorage.removeItem('lchs.clueUi'); });
+  await planAs('old badger', 'Old Badger');
+  try {
+    await openMoreTab('clues');
+    for (let k = 0; k < 3; k++) await page.click('[data-clue-step="1"][data-tier="hard"]');
+    assert.equal(await page.inputValue('[data-clue-n="hard"]'), '3');
+    await page.fill('[data-clue-n="easy"]', '25');
+    await page.press('[data-clue-n="easy"]', 'Enter');
+    await page.click('[data-clue-step="-1"][data-tier="hard"]');
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')).done), { easy: 25, medium: 0, hard: 2 });
+    assert.match(flat(await text('#clues-body .clue-counts')), /27 in all/);
+    assert.match(flat(await text('#clues-body .clue-kit')), /Spade .*Sextant, watch and chart .*can't dig one without all three.*Teleports.*Knife or a slash weapon, for the webs/);
+    await page.click('[data-clue-view="solve"]');
+    // the whole list, then words
+    assert.equal(await page.locator('.clue-row').count(), 186);
+    await page.fill('[data-clue-find]', 'drawers upstairs east ardougne');
+    const openCard = page.locator('.clue-row.is-open .clue-card').first();
+    assert.equal(await page.locator('.clue-row').first().getAttribute('data-clue'), 'easy_vague003');
+    assert.match(flat(await openCard.locator('.cc-answer').innerText()), /^Open the drawers North-west of East Ardougne \(upstairs\)$/);
+    // (its minimap: the clue's cell of the sheet)
+    const want = await page.evaluate(async () => { const { CLUES, CLUE_MAPS } = await import('./cluedata.js'); const c = CLUES.find(x => x.id === 'easy_vague003'); return [CLUE_MAPS.sheet, `${(c.map % CLUE_MAPS.perRow) * CLUE_MAPS.w}`, `${Math.floor(c.map / CLUE_MAPS.perRow) * CLUE_MAPS.h}`]; });
+    const map = await openCard.locator('.npc-map-img').evaluate(el => [el.style.getPropertyValue('--sheet'), el.style.getPropertyValue('--mx'), el.style.getPropertyValue('--my'), getComputedStyle(el).width]);
+    assert.deepEqual(map, [`url('${want[0]}')`, want[1], want[2], '240px']);
+    // an anagram, its letters in any order
+    await page.fill('[data-clue-find]', 'zero op eek');
+    assert.match(flat(await openCard.locator('.cc-answer').innerText()), /^Talk to Zoo keeper Zoo; East Ardougne$/);
+    assert.match(flat(await openCard.innerText()), /"How many animals in total are there in the zoo\?" The answer is 32 \(what worked in the game; the server's files say 40\)/);
+    // coordinates: a Zamorak wizard in the Wilderness
+    await page.fill('[data-clue-find]', '22°35\'N 19°18\'E');
+    assert.equal(await page.locator('.clue-row').count(), 1);
+    assert.match(flat(await openCard.innerText()), /Dig North-west of Lava Maze, Wilderness level 46 .*Digging brings a Zamorak Wizard \(level 65\): kill it, then dig again\. Wilderness level 46: bring a knife/);
+    await page.fill('[data-clue-find]', '22 36 N 19 18 E');
+    assert.match(flat(await text('.clue-solve')), /No clue says exactly those coordinates; these dig nearest where they point/);
+    await page.fill('[data-clue-find]', 'xyzzy plugh');
+    assert.match(flat(await text('.clue-solve .empty')), /No clue says that/);
+    // a locked chest: its key's holder
+    await page.fill('[data-clue-find]', 'central fountain locked chest');
+    assert.match(flat(await openCard.innerText()), /Open the chest .*It's locked: kill Black Heather \(level \d+\) while you have this clue for its key \(Bandit Camp, Wilderness level 23\)/);
+    // a puzzle box: Oziach's opens the solver on its picture
+    await page.fill('[data-clue-find]', 'keeper of melzars');
+    await openCard.locator('[data-clue-puzzle="b"]').click();
+    assert.ok(await page.locator('[data-clue-view="puzzle"]').evaluate(b => b.classList.contains('on')));
+    assert.ok(await page.locator('[data-pz-letter="b"]').evaluate(b => b.classList.contains('on')));
+    // the maps: the pictures, one picked
+    await page.click('[data-clue-view="solve"]');
+    await page.fill('[data-clue-find]', '');
+    await page.click('[data-clue-kind="map"]');
+    assert.equal(await page.locator('.clue-pic-btn').count(), 16);
+    await page.click('.clue-pic-btn[data-clue-open="medium_map004"]');
+    assert.match(flat(await page.locator('.clue-solve .clue-card .cc-answer').innerText()), /^Search the crate McGrubor's Wood$/);
+    await page.click('[data-clue-kind=""]');
+    // a tier and a kind narrow the list
+    await page.click('[data-clue-tier="hard"]');
+    await page.click('[data-clue-kind="coords"]');
+    assert.equal(await page.locator('.clue-row').count(), 31);
+    await page.click('[data-clue-tier=""]');
+    await page.click('[data-clue-kind=""]');
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('lchs.clueUi'));
+  }
+});
+
+await check("clues (v3.6): a casket's rewards as the server's scripts have them: each one's chance a reward and a casket, what you'd have after your clues (rune pieces, dragonhide, magic bows…); what you've had typed in or filled in with what's expected (undone), the rares ticked off, and how lucky", async () => {
+  await planAs('old badger', 'Old Badger');
+  try {
+    await page.evaluate(() => localStorage.setItem('lchs.clues.old_badger', JSON.stringify({ done: { easy: 25, medium: 23, hard: 57 }, got: {} })));
+    await openMoreTab('clues');
+    await page.click('[data-clue-view="rewards"]');
+    await page.click('[data-clue-rtier="hard"]');
+    const card = page.locator('.clue-rewards');
+    assert.match(flat(await card.locator('.note').first().innerText()), /^A hard casket has 4 to 6 rewards \(5 on average\), each one rare 1 in 45: a rare one in 11% of caskets/);
+    assert.deepEqual((await card.locator('.rw-chip').allInnerTexts()).map(flat), ['Rune armour and weapons ≈ 133', 'Dragonhide ≈ 27', 'Magic bows ≈ 27', 'God book pages ≈ 13', 'Rare rewards ≈ 7.8', 'Coins ≈ 39,810']);
+    assert.equal(await card.locator('tbody tr').count(), 73);
+    const row = slug => card.locator(`tbody tr[data-reward="${slug}"]`);
+    const cells = async name => (await row(name).locator('td').allInnerTexts()).map(flat);
+    assert.deepEqual(await cells('rune_platebody'), ['Rune platebody', '1', '1/21.5', '21%', '13', '− +', '']);
+    assert.deepEqual((await cells('coins')).slice(0, 5), ['Coins', '1,000–5,000', '1/21.5', '21%', '39,810']);
+    assert.deepEqual((await cells('rune_full_helm_trim')).slice(0, 5), ['Rune full helm (t) rare', '1', '1/1,395', '0.36%', '0.2']);
+    // nothing typed in: no luck to say
+    assert.equal(flat(await row('rune_platebody').locator('td.luck').innerText()), '');
+    await card.locator('[data-clue-fill="hard"]').click();
+    assert.equal(await row('rune_platebody').locator('[data-clue-got]').inputValue(), '13');
+    assert.equal(await row('magic_longbow').locator('[data-clue-got]').inputValue(), '13');
+    assert.equal(flat(await row('rune_platebody').locator('td.luck').innerText()), 'as expected');
+    assert.equal(await row('coins').locator('[data-clue-got]').inputValue(), '', 'coins and runes are yours to type');
+    await page.click('[data-clue-undo]');
+    assert.equal(await row('rune_platebody').locator('[data-clue-got]').inputValue(), '');
+    // typed in: 6 magic longbows of 13 expected
+    await row('magic_longbow').locator('[data-clue-got]').fill('6');
+    await row('magic_longbow').locator('[data-clue-got]').press('Enter');
+    assert.match(flat(await row('magic_longbow').locator('td.luck').innerText()), /^\d+(\.\d+)?%$/);
+    assert.ok(await row('magic_longbow').locator('td.luck span').evaluate(s => s.classList.contains('c-lose')), 'fewer than most: red');
+    // a rare ticked off, and counted
+    await card.locator('[data-clue-rare="rune_full_helm_trim"]').click();
+    assert.ok(await card.locator('[data-clue-rare="rune_full_helm_trim"]').evaluate(b => b.classList.contains('on')));
+    assert.match(flat(await card.locator('h5', { hasText: 'Rare rewards' }).innerText()), /1 of 41/);
+    assert.match(flat(await card.locator('.rw-chip', { hasText: 'Rare rewards' }).innerText()), /you've 1/);
+    assert.match(flat(await row('rune_full_helm_trim').locator('td.luck').innerText()), /^\d+(\.\d+)?%$/);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')).got.hard), { magic_longbow: 6, rune_full_helm_trim: 1 });
+    await card.locator('[data-clue-rare="rune_full_helm_trim"]').click();
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')).got.hard.rune_full_helm_trim), 0);
+    // easy: the noted fish, its own tier's
+    await page.click('[data-clue-rtier="easy"]');
+    assert.equal(await card.locator('tbody tr').count(), 54);
+    assert.deepEqual((await cells('trout@noted')).slice(0, 3), ['Trout (noted)', '6–10', '1/28.3']);
+  } finally {
+    await page.evaluate(() => { localStorage.removeItem('lchs.clues.old_badger'); localStorage.removeItem('lchs.clueUi'); });
+  }
+});
+
+await check("clues (v3.6): the puzzle box: its picture picked, the pieces clicked in as the game shows them, solved in few moves, and followed a click at a time to the end; one the game can't make is said so", async () => {
+  await openMoreTab('clues');
+  await page.click('[data-clue-view="puzzle"]');
+  await page.click('[data-pz-letter="c"]');
+  assert.equal(await page.locator('.pz-pick-btn').count(), 3);
+  assert.match(flat(await page.locator('[data-pz-letter="b"]').innerText()), /Oziach, Wilough, General Bentnoze/);
+  // a shuffle as the server makes them (101 slides at random from solved)
+  const { slide, SOLVED } = await import('./puzzle.js');
+  let s = SOLVED.slice(), seed = 274;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  for (let k = 0; k < 101; k++) { const gap = s.indexOf(0); const next = [gap - 5, gap + 5, gap % 5 ? gap - 1 : -1, gap % 5 < 4 ? gap + 1 : -1].filter(j => j >= 0 && j < 25); s = slide(s, next[rnd(next.length)]); }
+  await page.click('[data-pz-clear]');
+  for (const p of s) await page.click(`[data-pz-put="${p}"]`);
+  assert.equal(await page.locator('.pz-board .pz-cell.pz-empty').count(), 0);
+  assert.ok(await page.locator('[data-pz-put]:not([disabled])').count() === 0, 'every piece used');
+  // (a piece taken back off, and put back)
+  await page.click('[data-pz-cell="24"]');
+  assert.ok(await page.locator('[data-pz-solve]').isDisabled());
+  await page.click(`[data-pz-put="${s[24]}"]`);
+  await page.click('[data-pz-solve]');
+  await page.waitForSelector('.pz-moves');
+  const n = Number(flat(await text('.pz-side p')).match(/^Move 1 of (\d+):/)[1]);
+  assert.ok(n > 0 && n <= 60, `${n} moves`);
+  assert.equal(await page.locator('.pz-moves span').count(), n);
+  // followed in the game: the piece with the arrow each time
+  await page.click('[data-pz-step="1"]');
+  await page.click('[data-pz-step="-1"]');
+  for (let k = 0; k < n; k++) await page.click('.pz-cell.pz-next');
+  assert.match(flat(await text('.pz-side p')), /^Solved\./);
+  const board = await page.locator('.pz-board .pz-cell .pz-piece').evaluateAll(ps => ps.map(p => Number(p.style.getPropertyValue('--px')) + 1));
+  assert.deepEqual(board, SOLVED.slice(0, 24), 'every piece in its place');
+  // two pieces the other way round: not the game's
+  await page.click('[data-pz-edit]');
+  await page.click('[data-pz-clear]');
+  const swapped = SOLVED.slice(); [swapped[0], swapped[1]] = [swapped[1], swapped[0]];
+  for (const p of swapped) await page.click(`[data-pz-put="${p}"]`);
+  assert.match(flat(await text('.pz-side')), /That can't be the game's: two pieces must be the other way round/);
+  assert.ok(await page.locator('[data-pz-solve]').isDisabled());
+  await page.click('[data-pz-clear]');
+  await page.click('[data-clue-view="solve"]');
+});
+
 await check('Planner+: the name in the title, the header and Settings, the NPCs tab last (v3.3.2; after Goals from v3; v3.5: Gear between Prices and NPCs), and the version (v3)', async () => {
   assert.equal(await page.title(), 'Planner+');
   assert.equal(flat(await text('.brand')), 'Planner+');
-  assert.deepEqual(await page.locator('.tabs .tab').evaluateAll(els => els.map(e => e.dataset.tab)), ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs']);
+  assert.deepEqual(await page.locator('.tabs .tab[data-tab]').evaluateAll(els => els.map(e => e.dataset.tab)), ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs', 'quests', 'clues']);
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.5\.3 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.6\.0 · /);
   // (v3.5.3) the stylesheet asked for with the version, so a reload after an update gets the new one and its icons
-  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.5.3');
-  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.5\.3$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
+  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.6.0');
+  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.6\.0$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
   await page.click('#settings-close');
 });
 
 await check('planner tabs fit a narrow window', async () => {
   await page.setViewportSize({ width: 340, height: 800 });
-  for (const tab of ['goals', 'bank', 'prices', 'gear', 'npcs']) {
-    await page.click(`.tab[data-tab="${tab}"]`);
+  for (const tab of ['goals', 'bank', 'prices', 'gear', 'npcs', 'quests', 'clues']) {
+    if (['quests', 'clues'].includes(tab)) await openMoreTab(tab);
+    else await page.click(`.tab[data-tab="${tab}"]`);
     await page.waitForSelector(`#view-${tab}:not([hidden])`);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(overflow <= 0, `${tab}: horizontal overflow ${overflow}px`);
@@ -6194,15 +6458,23 @@ await check('settings shows totals and makes a backup that restores', async () =
   });
   assert.ok(Object.keys(backup).some(k => k.startsWith('lchs.snap.demo_main')));
   assert.ok(backup['lchs.goals.demo_main'] && backup['lchs.bank.demo_main'], 'goals and bank are stored');
+  // (v3.6) an account's quests and clues go with it
+  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['cook', 'dragon'] })); localStorage.setItem('lchs.clues.demo_main', JSON.stringify({ done: { easy: 1, medium: 2, hard: 3 }, got: { hard: { magic_longbow: 1 } } })); });
   if (await page.locator('#restore-box').isHidden()) await page.click('#backup-restore-toggle');
   const exported = await page.evaluate(async () => (await import('./store.js')).exportBackup());
   const parsed = JSON.parse(exported);
   assert.ok(parsed.data['goals.demo_main']?.length >= 2, 'goals are in the backup');
   assert.equal(parsed.data['bank.demo_main']?.items?.ranarr_weed, 1000, 'the bank is in the backup');
   assert.equal(parsed.data.prices, undefined, 'the price cache is left out');
+  assert.deepEqual([parsed.data['quests.demo_main']?.done, parsed.data['clues.demo_main']?.done?.hard], [['cook', 'dragon'], 3], 'quests and clues are in the backup');
+  // (restored where they're gone: the quests ticked in either kept, the clues as they were)
+  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['sheep'] })); localStorage.removeItem('lchs.clues.demo_main'); });
   await page.fill('#restore-text', exported);
   await page.click('#restore-go');
   assert.match(await text('#settings-msg'), /Restored/);
+  assert.match(flat(await text('#settings-msg')), /1 account's quests and 1 account's clues added/);
+  assert.deepEqual(await page.evaluate(() => [JSON.parse(localStorage.getItem('lchs.quests.demo_main')).done.sort(), JSON.parse(localStorage.getItem('lchs.clues.demo_main')).got.hard]), [['cook', 'dragon', 'sheep'], { magic_longbow: 1 }]);
+  await page.evaluate(() => { localStorage.removeItem('lchs.quests.demo_main'); localStorage.removeItem('lchs.clues.demo_main'); });
 });
 await page.screenshot({ path: `${SHOTS}/7-settings.png` });
 if (!ONLY) await page.click('#settings-close');

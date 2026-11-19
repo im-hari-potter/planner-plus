@@ -127,6 +127,11 @@ const ROTATE = [
   [3, 7, 11, 15, 2, 6, 10, 14, 1, 5, 9, 13, 0, 4, 8, 12],
 ];
 const WALL = 0xeeeeee, DOOR = 0xee0000;
+// (v3.6) a red cross, outlined in black, 9 by 9: where a clue says to dig or search
+const CROSS = (() => {
+  const rows = ['kk.....kk', 'krk...krk', '.krk.krk.', '..krkrk..', '...krk...', '..krkrk..', '.krk.krk.', 'krk...krk', 'kk.....kk'];
+  return { w: 9, h: 9, px: Int32Array.from(rows.join(''), c => (c === 'r' ? 0xff1010 : c === 'k' ? 0x000001 : -1)) };
+})();
 
 // ── Configs ──────────────────────────────────────────────────────────────
 function parseConfig(text) {
@@ -325,7 +330,8 @@ export async function npcPlaces({ content, list, W = 48, H = 36, perRow = 8 }) {
   };
 
   // One window of the map, W by H squares from (x0, z0) at a level, with dots: RGB, 4 pixels a square.
-  async function render(x0, z0, level, spots) {
+  // (v3.6: mark 'x' draws a red cross where to dig or search instead, for a clue's step)
+  async function render(x0, z0, level, spots, mark) {
     for (let mx = (x0 - 5) >> 6; mx <= (x0 + W + 5) >> 6; mx++) for (let mz = (z0 - 5) >> 6; mz <= (z0 + H + 5) >> 6; mz++) await squareAt(mx, mz);
     const PW = W * 4, PH = H * 4, img = new Int32Array(PW * PH);         // (0: black)
     const put = (x, y, rgb) => { if (x >= 0 && y >= 0 && x < PW && y < PH) img[y * PW + x] = rgb; };
@@ -381,12 +387,15 @@ export async function npcPlaces({ content, list, W = 48, H = 36, perRow = 8 }) {
       }
     }
     for (const [x, y, f] of icons) sprite(funcs[f], x - 7, y - 7);
-    for (const [x, z] of spots) sprite(dot, col(x) + 2 - (dot.w >> 1), row(z) + 2 - (dot.h >> 1));
+    for (const [x, z] of spots) {
+      if (mark === 'x') sprite(CROSS, col(x) + 2 - 4, row(z) + 2 - 4);
+      else sprite(dot, col(x) + 2 - (dot.w >> 1), row(z) + 2 - (dot.h >> 1));
+    }
     return img;
   }
 
   const index = new Map(), where = new Map(), windows = new Map(), cells = [], odd = [];
-  for (const { id, spawns } of list) {
+  for (const { id, spawns, mark } of list) {
     if (!spawns?.length) continue;
     // in words: each place, with how many there
     const counts = new Map();
@@ -413,7 +422,7 @@ export async function npcPlaces({ content, list, W = 48, H = 36, perRow = 8 }) {
     for (const [l] of best.inside) levels.set(l, (levels.get(l) || 0) + 1);
     const level = [...levels].sort((a, b) => b[1] - a[1])[0][0];
     const spots = spawns.filter(([l, x, z]) => l === level && x >= x0 && x < x0 + W && z >= z0 && z < z0 + H).map(([, x, z]) => [x, z]);
-    const img = await render(x0, z0, level, spots);
+    const img = await render(x0, z0, level, spots, mark);
     index.set(id, cells.length);
     windows.set(id, { x: x0, z: z0, level, shown: spots.length });
     cells.push(img);

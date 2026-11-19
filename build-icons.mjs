@@ -76,6 +76,8 @@ const PAL = {
   // light side, the rest, its nose
   a: [232, 209, 78], c: [176, 159, 65], e: [117, 100, 3], f: [159, 159, 159],
   u: [248, 255, 157], U: [244, 252, 114], z: [241, 254, 38],
+  // (v3.6) a clue scroll's parchment, light to dark, and its writing
+  i: [240, 226, 182], j: [210, 186, 132], k: [158, 124, 74], o: [96, 62, 28],
 };
 const SYMBOLS = {
   lookup: [
@@ -234,6 +236,46 @@ const SYMBOLS = {
     '.....ffeeef......',
     '........fff......',
   ],
+  // (v3.6) More: three dots
+  more: [
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.KKK...KKK...KKK.',
+    '.KKK...KKK...KKK.',
+    '.KKK...KKK...KKK.',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+    '.................',
+  ],
+  // (v3.6) Clues: a clue scroll, rolled at the top and bottom, with its writing
+  clues: [
+    '.................',
+    '.................',
+    '..KKKKKKKKKKKKK..',
+    '.KjiiiiiiiiiiijK.',
+    '.KkjjjjjjjjjjjkK.',
+    '..KKKKKKKKKKKKK..',
+    '...KiiiiiiiijK...',
+    '...KiooooooijK...',
+    '...KiiiiiiiijK...',
+    '...KioooooiijK...',
+    '...KiiiiiiiijK...',
+    '..KKKKKKKKKKKKK..',
+    '.KjiiiiiiiiiiijK.',
+    '.KkjjjjjjjjjjjkK.',
+    '..KKKKKKKKKKKKK..',
+    '.................',
+    '.................',
+  ],
   // (two stacks of coins)
   prices: [
     '.................',
@@ -255,8 +297,9 @@ const SYMBOLS = {
     '.................',
   ],
 };
-// (the sheet's order: the tabs')
-const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs'];
+// (the sheet's order: the tabs'; v3.6: More, then the tabs on its row. Quests' is the quest list's own side
+// icon, its star kept: the frame the others are drawn in)
+const TAB_ORDER = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs', 'more', 'quests', 'clues'];
 
 // partyhat: the blue partyhat's 32 x 32 item icon, RGBA.
 export async function appIcons(content, { partyhat }) {
@@ -302,7 +345,7 @@ export async function appIcons(content, { partyhat }) {
   const CW = 26, CH = 24, OX = 2, OY = 3;
   const sheet = Buffer.alloc(TAB_ORDER.length * CW * CH * 4);
   TAB_ORDER.forEach((name, k) => {
-    const px = draw(name, SYMBOLS[name]);
+    const px = name === 'quests' ? quest : draw(name, SYMBOLS[name]);
     for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
       if (!px[at(x, y) + 3]) continue;
       const X = x - OX, Y = y - OY;

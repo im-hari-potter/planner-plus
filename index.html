@@ -6,10 +6,10 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; connect-src 'self' https://2004.lostcity.rs https://markets.lostcity.rs; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'">
   <title>Planner+</title>
-  <meta name="description" content="Lost City (2004scape) planner: goals with skill calculators, a gear planner with max hits and fights against monsters and players, an NPC database with drop tables and loot planning, your bank and live market prices, plus hiscores with percentiles, compare, gains and leaderboards. Built to run as a LostKit tool.">
+  <meta name="description" content="Lost City (2004scape) planner: goals with skill calculators, a gear planner with max hits and fights against monsters and players, an NPC database with drop tables and loot planning, your bank and live market prices, a quest tracker, treasure trails (every clue's answer, rewards and a puzzle solver), plus hiscores with percentiles, compare, gains and leaderboards. Built to run as a LostKit tool.">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   <!-- (v3.5.3) the version on the stylesheet, so a reload after an update asks for the new one, and its icons -->
-  <link rel="stylesheet" href="style.css?v=3.5.3">
+  <link rel="stylesheet" href="style.css?v=3.6.0">
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -27,6 +27,12 @@
         <button class="tab plan-tab" data-tab="prices" type="button"><span class="ti ti-prices" aria-hidden="true"></span>Prices</button>
         <button class="tab plan-tab" data-tab="gear" type="button" title="Your damage: what you wear, its bonuses, and how it does against a monster or a player"><span class="ti ti-gear" aria-hidden="true"></span>DPS</button>
         <button class="tab plan-tab" data-tab="npcs" type="button" title="The NPC database: every monster's stats, XP and drops, and plans of kills"><span class="ti ti-npcs" aria-hidden="true"></span>NPCs</button>
+        <!-- (v3.6) More: a second row of tabs under these, so this one isn't squeezed -->
+        <button class="tab more-btn" id="more-btn" type="button" aria-expanded="false" aria-controls="more-row" title="More: Quests and Clues"><span class="ti ti-more" aria-hidden="true"></span>More</button>
+      </nav>
+      <nav class="tabs more-row" id="more-row" aria-label="More views" hidden>
+        <button class="tab plan-tab" data-tab="quests" type="button" title="Every quest: tick what you've done, see what the rest take, with short steps and LostHQ's guides"><span class="ti ti-quests" aria-hidden="true"></span>Quests</button>
+        <button class="tab plan-tab" data-tab="clues" type="button" title="Treasure trails: your clues, every clue's answer, the rewards and the puzzle box"><span class="ti ti-clues" aria-hidden="true"></span>Clues</button>
       </nav>
       <div class="top-right">
         <div class="seg" id="filter-seg" role="group" aria-label="Which skills to show">
@@ -147,6 +153,20 @@
         <div class="msg" id="npcs-msg" hidden></div>
         <div id="npcs-body"></div>
       </section>
+
+      <!-- Quests (v3.6, under More) -->
+      <section class="view" id="view-quests" hidden>
+        <div id="quests-account"></div>
+        <div class="msg" id="quests-msg" hidden></div>
+        <div id="quests-body"></div>
+      </section>
+
+      <!-- Clues (v3.6, under More): treasure trails -->
+      <section class="view" id="view-clues" hidden>
+        <div id="clues-account"></div>
+        <div class="msg" id="clues-msg" hidden></div>
+        <div id="clues-body"></div>
+      </section>
     </main>
 
     <footer class="status">
@@ -195,6 +215,8 @@
         <a href="https://2004.losthq.rs" target="_blank" rel="noopener">LostHQ</a> (GPL-3.0); prices from player listings on
         <a href="https://markets.lostcity.rs" target="_blank" rel="noopener">markets.lostcity.rs</a>. Skill icons and fonts come from
         <a href="https://github.com/LostHQ/LostKit-Electron" target="_blank" rel="noopener">LostKit</a> (GPL-3.0); the Slayer skull is Planner+'s own; RuneScape is © Jagex.</p>
+      <p class="note">Quests and treasure trails are the server's too: its quest list and quest points, and every clue it hands out with where it leads and what a casket gives. What a quest takes, the full quest guides and the map clues' pictures are
+        <a href="https://2004.losthq.rs/?p=questguides" target="_blank" rel="noopener">LostHQ</a>'s; the short steps are Planner+'s own.</p>
       <p class="note" id="about-version"></p>
     </div>
   </dialog>

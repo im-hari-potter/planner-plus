@@ -2,7 +2,7 @@
 
 A planner for [Lost City](https://2004.lostcity.rs) (2004scape), made to run as a
 [LostKit](https://github.com/LostHQ/LostKit-Electron) tool: goals with a calculator for every skill,
-monsters and their loot, your bank, and market prices, with the hiscores alongside.
+monsters and their loot, your bank, market prices, quests and treasure trails, with the hiscores alongside.
 Formerly Skills+ (and before that Hiscores+).
 
 **Open it:** <https://im-hari-potter.github.io/planner-plus/>
@@ -22,6 +22,8 @@ what those are checked against; where the two differ, the server wins.
 - [Your bank, and reading it from screenshots](#your-bank-and-reading-it-from-screenshots)
 - [DPS: what you wear, and how it fights](#dps-what-you-wear-and-how-it-fights)
 - [Combat, monsters and loot](#combat-monsters-and-loot)
+- [Quests](#quests)
+- [Clues: treasure trails](#clues-treasure-trails)
 - [Useful tips](#useful-tips)
 - [Skill by skill](#skill-by-skill)
 - [Technical notes, development and credits](#technical-notes-development-and-credits)
@@ -40,8 +42,10 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
 | **DPS** | What you wear and how it fights, like the game's Worn Equipment screen and a DPS calculator: a melee, a Ranged and a Magic setup at your levels, the bonuses they add up to, and how each does against any monster or another player. Best from my bank picks it from what you have, and your own layouts are saved by name. |
 | **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance, and how your gear does against it. |
+| **More**: **Quests**, **Clues** | A second row of tabs. **Quests**: every quest, ticked off as you do them, with what each takes against your levels, short steps and LostHQ's guide. **Clues**: your clues, every clue's answer with a minimap, the rewards against what you've had, and a puzzle box solver. |
 
-The tabs stay at the top of the window as you scroll, each with its own icon. An item's name,
+The tabs stay at the top of the window as you scroll, each with its own icon. **More**, the last of them, opens a
+second row under them (Quests and Clues), so the first stays on one line. An item's name,
 anywhere, takes you to its price on the Prices tab. Click a column's name to sort a table by it, and
 again for the other way round.
 
@@ -493,6 +497,70 @@ A drop of 1/128 and 200 kills without it is 1.56 × the drop rate, and more to t
 that dry happens to 21% of players**, about 1 in 5. Half of players have one by 89 kills, and 9 in
 10 by 294. Each goal keeps the drop you picked last.
 
+## Quests
+
+![Quests: tick what you've done; what each one takes against your levels and your quests](readme-21-quests.png)
+
+**More**, then **Quests**: every quest on the server's quest list, free and members, with its quest
+points (135 in all), and the two miniquests (Alfred Grimhand's Barcrawl and the Mage Arena).
+
+- **Tick what you've done.** The hiscores don't show quests, so it's up to you. The ticks are kept
+  with the account, and your quest points add up as you go.
+- **What it takes** says what each quest still needs: skills against your levels from the hiscores
+  (✓, ✗, or ? for a skill too low to be on the hiscores), the quests it needs against your ticks,
+  and quest points. **Can start** shows the ones you can do now.
+- **Click a quest** for where it starts, what it takes, what to bring, what it gives (its quest
+  points and XP, the server's), what it unlocks, a few short steps, and **LostHQ's full guide**.
+- **Free**, **Members**, **Miniquests**, **To do**, **Done** and a search pick out the ones you want.
+
+## Clues: treasure trails
+
+![Solving a clue: what it says, the answer and a minimap](readme-22-clues.png)
+
+**More**, then **Clues**.
+
+- **Clues done**: Easy, Medium and Hard, with + and − (or type a number). Count one when you open
+  its casket. It's kept with the account.
+- **Bring**: a spade; the sextant, watch and chart (for medium and hard coordinates: the server won't
+  let you dig one without all three); teleports; and a knife or a slash weapon for the webs on the
+  way to Wilderness steps.
+
+### Solve a clue
+
+Type what your clue says: a few of its words, the anagram (its letters in any order), or the
+coordinates (`22 35 N 19 18 E`, `22°35'N 19°18'E` and so on). Its answer comes up with a minimap: a
+red cross where to dig or search (a square off is near enough to dig), or a yellow dot for who to
+talk to. All 186 clues the server hands out are there, read from its scripts and maps:
+
+- **Maps**: pick the picture your clue has.
+- **Keys**: a locked chest or drawers say who drops the key, and where they are.
+- **Challenge scrolls**: the answer. (The Ardougne zoo is 32, what works in the game; the server's
+  files say 40.)
+- **Puzzle boxes**: who gives one, and a button to solve it.
+- **Coordinates**: digging first brings a Zamorak Wizard in the Wilderness, a Saradomin Wizard
+  elsewhere: kill it, then dig again.
+- A Wilderness step says its level.
+
+### Rewards
+
+![Rewards: what a casket gives, what you'd have after your clues, your rares](readme-23-clue-rewards.png)
+
+What a casket gives, as the server's reward scripts have it: how many rewards a casket has (easy
+2 to 4, medium 3 to 5, hard 4 to 6), the chance each one is rare (1 in 84, 66 and 45), and each
+item's chance a reward and a casket. After your clues, it says what you'd have on average: rune
+armour and weapons, dragonhide, magic bows, god book pages, rares and coins. **Fill in what's
+expected** puts those averages in your **Got** column for the common items (Undo takes them out
+again), so you only change what you remember. Click the rares you've had to tick them off. **Luck**
+compares what you've had with other players' after as many clues, as on a Slayer goal's loot.
+
+### Puzzle box
+
+![The puzzle box: the picture, the pieces as you see them, and each move](readme-24-puzzle.png)
+
+Pick the picture your box has, click its pieces in the order you see them (left to right, top to
+bottom, the gap too), and **Solve**. It finds a short way (about 27 moves for the game's shuffles)
+and takes you through it a move at a time: click the piece with the arrow, in the game and here.
+
 ## Useful tips
 
 - **Untick what you won't make** (see above). It's the one thing that changes a plan the most.
@@ -502,6 +570,9 @@ that dry happens to 21% of players**, about 1 in 5. Half of players have one by 
   button puts it back whatever Best from my bank picks.
 - **After an update**, reload Planner+ to get it: in LostKit, click into its page and press F5 (or Ctrl+R).
   Settings shows the version you have.
+- **Quests**: tick the ones you've done once; **Can start** then shows what you're ready for.
+- **Clues**: + when you open a casket. For the ones you did before, **Fill in what's expected**,
+  then tick the rares you remember.
 - **Check the prices** of what a plan uses before trusting its gp.
 - **Hide table** tucks one plan's table away, and **Hide all tables** every open plan's.
 - A number you're typing is left alone until you enter it (Enter, Tab or a click elsewhere), so
@@ -580,6 +651,19 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   - Ranged ammo: a shot's rolls and max hit are the server's combat scripts' (`player_ranged.rs2`
     and the scripts it calls), and the bows', arrows', knives' and darts' bonuses, levels and the
     1 in 5 that break are read from its item configs and constants.
+  - Quests (`node build-quests.mjs <Content checkout> <LostHQ 2004 checkout>` writes `questdata.js`):
+    the server's quest list (`questlist.if`: which are free and which members), each quest's quest
+    points (what `count_questpoints` adds up) and XP (where it's completed). What a quest takes and
+    where it starts are from LostHQ's quest guides; the quests it needs, the short steps and what it
+    unlocks are written for Planner+ (`quest-steps.mjs`).
+  - Clues (`node build-clues.mjs <Content checkout> <LostHQ 2004 checkout>` writes `cluedata.js`,
+    `cluemaps.webp`, `cluepics.webp` and `puzzles.png`): every clue the server hands out
+    (`trail_<tier>.obj` and `.enum`) and where it leads: the NPC scripts that move it on, the locs
+    searched (named from the map), the locked drawers and chests and who drops their keys, the
+    challenge scrolls, the puzzle boxes and the wizards; the minimaps, drawn as a monster's page's;
+    and each casket's rewards (`trail_clue_<tier>_reward.rs2`, every `random()` followed). The map
+    clues' pictures are LostHQ's; the sliding puzzles' pieces are the game's icons, from LostHQ's
+    item sheet.
   - Gear (`build-gear.mjs`): every item you can wear, its bonuses and what it takes to wield, each
     weapon's styles and speed, the specials, prayers, potions and combat spells, and how each
     monster attacks, read from the server's item configs and combat scripts (`equip_get_bonuses`,
@@ -589,8 +673,9 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   Prices), `npc-ui.js` (the NPCs tab and Slayer goals), `loot.js` (drop chances, expected loot,
   luck and dryness, kills from XP), `ranged.js` (a shot's chance to hit, the shots a kill takes and
   the ammo a plan fires), `combat.js` (a fight: the rolls, max hits, a kill's time and the chance
-  to win, and the best from a bank), `gear-ui.js` (the DPS tab), `prices.js` (the market and high
-  alch), `bankread.js`
+  to win, and the best from a bank), `gear-ui.js` (the DPS tab), `quest-ui.js` (the Quests tab),
+  `clue-ui.js` (the Clues tab), `clues.js` (finding a clue, the sextant, a casket's rewards over many),
+  `puzzle.js` (the puzzle box's solver), `prices.js` (the market and high alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
   tests), `sortable.js` (dragging), `tablesort.js` (sorting a table by a column's name).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own
@@ -601,12 +686,14 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
 **Credits.** Hiscores from the Lost City hiscores API. Levels, XP, item values, monsters and their
 drops, the maps, spell icons, and the bank layout and font the screenshot reader uses, from Lost
 City's server content and client (MIT). Item names and icons, monsters' pictures, and the rows of
-LostHQ's calculators, from [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices from
+LostHQ's calculators, what a quest takes and where it starts, the quest guides linked (RuneHQ's, from
+2004) and the map clues' pictures, from [LostHQ](https://2004.losthq.rs) (GPL-3.0). Prices from
 [markets.lostcity.rs](https://markets.lostcity.rs). Skill icons and RuneScape fonts from
 [LostKit](https://github.com/LostHQ/LostKit-Electron) (GPL-3.0). The Slayer icon is the client's own
 (from 2005, when the skill came); the tabs' icons are drawn in the frame of the client's round side
 icons (DPS's a sword, NPCs' the Slayer master's skull from the minimap, Bank's the minimap's bank
-icon drawn again at that size), and the Bank tab's Gear button's is its Worn Equipment icon.
+icon drawn again at that size, More's three dots, Clues' a clue scroll; Quests' is the quest list's own
+side icon), and the Bank tab's Gear button's is its Worn Equipment icon.
 RuneScape is © Jagex Ltd.
 
 This is a fan project, not affiliated with Jagex, Lost City or LostHQ. Licensed under GPL-3.0.

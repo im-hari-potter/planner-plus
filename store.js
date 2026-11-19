@@ -176,7 +176,7 @@ export function importBackup(text) {
   if (!parsed || parsed.app !== 'lc-hiscores-plus' || typeof parsed.data !== 'object') {
     throw new Error('That does not look like a Planner+ backup (or one from Skills+ or Hiscores+).');
   }
-  let snaps = 0, playersAdded = 0, goals = 0, banks = 0, gear = 0;
+  let snaps = 0, playersAdded = 0, goals = 0, banks = 0, gear = 0, quests = 0, clues = 0;
   for (const [key, value] of Object.entries(parsed.data)) {
     if (key.startsWith('snap.') && Array.isArray(value)) {
       const current = store.get(key, []);
@@ -211,7 +211,15 @@ export function importBackup(text) {
       // (v3.5) An account's gear (its setups on the DPS tab): one set up here already stays as it is.
       store.set(key, value);
       gear++;
+    } else if (key.startsWith('quests.') && Array.isArray(value?.done)) {
+      // (v3.6) An account's quests ticked done: the ones ticked in either
+      const current = store.get(key, null);
+      const done = [...new Set([...(Array.isArray(current?.done) ? current.done : []), ...value.done.filter(k => typeof k === 'string')])];
+      if (done.length !== (current?.done?.length || 0)) { store.set(key, { done, updated: Math.max(value.updated || 0, current?.updated || 0) }); quests++; }
+    } else if (key.startsWith('clues.') && value && typeof value === 'object' && value.done && typeof value.done === 'object') {
+      // (v3.6) An account's clues: one counted here already stays as it is
+      if (!store.get(key, null)) { store.set(key, value); clues++; }
     }
   }
-  return { snaps, playersAdded, goals, banks, gear };
+  return { snaps, playersAdded, goals, banks, gear, quests, clues };
 }

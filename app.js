@@ -16,7 +16,7 @@ import { createPlanner } from './planner-ui.js';
 import { sortable } from './sortable.js';
 import { tableScrolls, restoreTableScrolls } from './tablesort.js';
 
-const VERSION = '3.5.3';
+const VERSION = '3.6.0';
 const MAX_COMPARE = 5;
 
 // How to reach the API:
@@ -37,8 +37,10 @@ const prices = new Prices(LOCAL
   ? { origin: new URL('market', location.href).href, routes: ['page', 'api'], gapMs: 50 }
   : { origin: LIVE_MARKET, routes: isElectron() ? ['page', 'api'] : ['api'] });
 if (LOCAL) window.__skills = { prices };                   // for the test scripts
-const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs'];
-const PLAN_TABS = ['goals', 'bank', 'prices', 'gear', 'npcs'];
+const TABS = ['lookup', 'compare', 'gains', 'leaders', 'goals', 'bank', 'prices', 'gear', 'npcs', 'quests', 'clues'];
+const PLAN_TABS = ['goals', 'bank', 'prices', 'gear', 'npcs', 'quests', 'clues'];
+// (v3.6) the tabs on More's row: shown while one of them is open, or More is pressed
+const MORE_TABS = ['quests', 'clues'];
 
 // ── State ────────────────────────────────────────────────────────────────
 const prefs = store.get('prefs', {});
@@ -75,6 +77,7 @@ const state = {
   // (v3.3) The tile picked out with the gold border (a click picks another): Overall till then.
   tileOn: SKILL_BY_ID.has(prefs.tileOn) ? prefs.tileOn : 0,
   calc: null,              // { levels, source } for the combat calculator
+  moreOpen: !!prefs.moreOpen,   // (v3.6) More pressed: its row stays shown till it's pressed again
 };
 
 function savePrefs() {
@@ -82,6 +85,7 @@ function savePrefs() {
   prefs.lastLookup = state.lookup.profile?.name || prefs.lastLookup || null;
   store.set('prefs', {
     tab: state.tab,
+    moreOpen: state.moreOpen,
     filter: state.filter,
     compare: state.compare.names,
     compareMode: state.compare.mode,
@@ -207,7 +211,13 @@ const planner = createPlanner({
 
 // ── Rendering: shared bits ───────────────────────────────────────────────
 function render() {
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
+  document.querySelectorAll('.tab[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
+  // (v3.6) More: lit while one of its tabs is open; its row shown then, or while it's pressed
+  const onMore = MORE_TABS.includes(state.tab);
+  $('more-btn').classList.toggle('active', onMore);
+  $('more-btn').classList.toggle('pressed', state.moreOpen && !onMore);
+  $('more-btn').setAttribute('aria-expanded', String(state.moreOpen || onMore));
+  $('more-row').hidden = !(state.moreOpen || onMore);
   document.querySelectorAll('#filter-seg button').forEach(b => b.classList.toggle('on', b.dataset.filter === state.filter));
   $('filter-seg').hidden = PLAN_TABS.includes(state.tab);        // All/Combat only means something for the hiscores views
   for (const v of TABS) $('view-' + v).hidden = v !== state.tab;
@@ -1134,9 +1144,15 @@ function applyHash() {
 // ── Events ───────────────────────────────────────────────────────────────
 function wire() {
   wireTileDrag();
-  document.querySelector('.tabs').addEventListener('click', e => {
-    const b = e.target.closest('.tab');
+  for (const nav of document.querySelectorAll('.tabs')) nav.addEventListener('click', e => {
+    const b = e.target.closest('.tab[data-tab]');
     if (b) setTab(b.dataset.tab);
+  });
+  // (v3.6) More: shows or hides its row (while one of its tabs is open, the row stays)
+  $('more-btn').addEventListener('click', () => {
+    state.moreOpen = !state.moreOpen;
+    savePrefs();
+    render();
   });
   $('filter-seg').addEventListener('click', e => {
     const b = e.target.closest('button[data-filter]');
@@ -1351,7 +1367,7 @@ function wire() {
   $('restore-go').addEventListener('click', () => {
     try {
       const res = importBackup($('restore-text').value);
-      showMsg('settings-msg', `Restored: ${res.snaps} snapshots, ${res.playersAdded} saved players, ${res.goals} goals, ${res.banks} bank${res.banks === 1 ? '' : 's'} and ${res.gear} account${res.gear === 1 ? '\'s' : 's\''} gear added.`, 'ok');
+      showMsg('settings-msg', `Restored: ${res.snaps} snapshots, ${res.playersAdded} saved players, ${res.goals} goals, ${res.banks} bank${res.banks === 1 ? '' : 's'}, ${res.gear} account${res.gear === 1 ? '\'s' : 's\''} gear, ${res.quests} account${res.quests === 1 ? '\'s' : 's\''} quests and ${res.clues} account${res.clues === 1 ? '\'s' : 's\''} clues added.`, 'ok');
       renderSettings(); render();
     } catch (err) { showMsg('settings-msg', esc(err.message), 'error'); }
   });

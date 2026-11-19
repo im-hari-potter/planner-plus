@@ -17,6 +17,8 @@ import { sortable } from './sortable.js';
 import { LIVE_MARKET, highAlch } from './prices.js';
 import { createNpcUi, isSlayerGoal } from './npc-ui.js';
 import { createGearUi, hitPct } from './gear-ui.js';
+import { createQuestUi } from './quest-ui.js';
+import { createClueUi } from './clue-ui.js';
 import { styleOfSkillGoal } from './loot.js';
 import { COMBAT_SPELLS, EQUIPMENT } from './geardata.js';
 import { sortTh, sortFrom, savedSort, sortedBy, tableScrolls, restoreTableScrolls } from './tablesort.js';
@@ -450,6 +452,22 @@ export function createPlanner(ctx) {
     openNpc: id => { npc().showNpc(id); ctx.goTab('npcs'); },
     // (a redraw that keeps the field you're in, as every tab's does)
     redraw: () => render('gear'),
+  }));
+
+  // ── The Quests and Clues tabs (v3.6, under More) ──────────────────────────
+  let questUi = null, clueUi = null;
+  const quest = () => questUi || (questUi = createQuestUi({
+    esc, fmt, $, iconImg, itemIcon, store, safe, currentOf, renderAccount,
+    account: () => S.account,
+    profile: () => S.profile,
+    inLostKit: !!ctx.inLostKit,
+    redraw: () => render('quests'),
+  }));
+  const clue = () => clueUi || (clueUi = createClueUi({
+    esc, fmt, $, itemIcon, store, safe, renderAccount, gpShort,
+    account: () => S.account,
+    inLostKit: !!ctx.inLostKit,
+    redraw: () => render('clues'),
   }));
 
   // ── Storage per account ─────────────────────────────────────────────────
@@ -1433,9 +1451,13 @@ export function createPlanner(ctx) {
       ${S.account ? `<span class="acct-status">${status}</span>
       <button type="button" class="linkish" data-act="refresh-xp">Refresh XP</button>` : ''}
       ${where === 'bank' && S.account ? `<span class="c-faint">Each account has its own bank and goals.</span>` : ''}
+      ${where === 'quests' && S.account ? `<span class="c-faint">Each account has its own quests.</span>` : ''}
+      ${where === 'clues' && S.account ? `<span class="c-faint">Each account has its own clues.</span>` : ''}
     </div>`;
     if (!S.account) {
-      el.innerHTML += `<div class="empty">Enter your username to plan goals. Your XP comes from the hiscores; goals and your bank stay in this browser.</div>`;
+      el.innerHTML += where === 'quests' ? `<div class="empty">Enter your username to tick off your quests. Your levels come from the hiscores; what you tick stays in this browser.</div>`
+        : where === 'clues' ? `<div class="empty">Enter your username to count your clues and tick off what they gave you (it stays in this browser). Every clue's answer, the rewards and the puzzle solver are below either way.</div>`
+        : `<div class="empty">Enter your username to plan goals. Your XP comes from the hiscores; goals and your bank stay in this browser.</div>`;
     }
   }
 
@@ -3221,7 +3243,9 @@ export function createPlanner(ctx) {
       // (v3.1)
       'take', 'alch', 'lootN', 'lootShot', 'lootAs', 'lootOne', 'lootAgain', 'lootEarly', 'dep', 'depOn', 'bring', 'bringAdd', 'ses', 'sesNpc', 'sesReduce', 'sesFrom', 'alchN', 'alchKills', 'alchAdd', 'planPick', 'npcHerbs', 'totalSkip', 'priceQ', 'addQ', 'addN', 'pq', 'pcost',
       // (v3.5)
-      'gearLevel', 'gearTheir', 'gearFind', 'gearNpc', 'gearMode', 'gearSpell', 'gearPrayer', 'gearPotion']) {
+      'gearLevel', 'gearTheir', 'gearFind', 'gearNpc', 'gearMode', 'gearSpell', 'gearPrayer', 'gearPotion',
+      // (v3.6)
+      'questFind', 'questDone', 'clueFind', 'clueN', 'clueGot']) {
       if (el.dataset?.[a]) return `[data-${a.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${el.dataset[a]}"]`;
     }
     if (el.dataset?.shotAs) return `[data-shot-as="${el.dataset.shotAs}"]`;
@@ -3241,6 +3265,8 @@ export function createPlanner(ctx) {
     if (tab === 'bank') renderBank();
     if (tab === 'prices') renderPrices();
     if (tab === 'gear') gear().renderGear();
+    if (tab === 'quests') quest().render();
+    if (tab === 'clues') clue().render();
     if (!keep) return;
     const scope = goal ? view.querySelector(`[data-goal="${goal}"]`) : view;
     const el = scope?.querySelector(key);
@@ -3288,7 +3314,7 @@ export function createPlanner(ctx) {
 
   function show(tab) {
     render(tab);
-    if (S.account && (tab === 'goals' || tab === 'bank' || tab === 'npcs' || tab === 'gear')) loadProfile();
+    if (S.account && (tab === 'goals' || tab === 'bank' || tab === 'npcs' || tab === 'gear' || tab === 'quests')) loadProfile();
     // (shows the market's price beside the others. All checks nothing by itself: that's every item there is)
     if (tab === 'prices') wantPriceView();
   }
@@ -3302,7 +3328,7 @@ export function createPlanner(ctx) {
 
   // ── Events ──────────────────────────────────────────────────────────────
   function wire() {
-    for (const id of ['view-goals', 'view-npcs', 'view-bank', 'view-prices', 'view-gear']) {
+    for (const id of ['view-goals', 'view-npcs', 'view-bank', 'view-prices', 'view-gear', 'view-quests', 'view-clues']) {
       const root = $(id);
       root.addEventListener('submit', onSubmit);
       root.addEventListener('click', onClick);
@@ -3314,7 +3340,8 @@ export function createPlanner(ctx) {
         const d = e.target.dataset;
         if (d?.mix || d?.price || d?.bank || d?.gcalc || d?.got || d?.done || d?.dryKills || d?.npcKills
           || d?.lootN || d?.dep || d?.ses || d?.sesNpc || d?.bring || d?.priceQ || d?.addQ || d?.addN || d?.pq || d?.pcost || d?.alchN || d?.alchKills
-          || d?.gearLevel || d?.gearTheir || d?.gearFind || d?.gearNpc || e.target.closest?.('[data-form="gear-pvp"]')) typing = e.target;
+          || d?.gearLevel || d?.gearTheir || d?.gearFind || d?.gearNpc || e.target.closest?.('[data-form="gear-pvp"]')
+          || d?.questFind || d?.clueFind || d?.clueN || d?.clueGot) typing = e.target;
       });
       root.addEventListener('change', e => { if (e.target === typing) typing = null; }, true);
       root.addEventListener('focusout', e => { if (e.target === typing && document.hasFocus()) typing = null; });
@@ -3430,6 +3457,9 @@ export function createPlanner(ctx) {
     // (v3.2: an item's name, anywhere: its line on the Prices tab)
     const pgo = t.closest('[data-price-go]');
     if (pgo) { e.preventDefault(); goPrice(pgo.dataset.priceGo); return; }
+    // (v3.6: the Quests and Clues tabs)
+    if (t.closest('#view-quests') && quest().onClick(e)) return;
+    if (t.closest('#view-clues') && clue().onClick(e)) return;
     // (v3.5: the DPS tab, and a monster page's way to it)
     if (gear().onClick(e)) return;
     // (the NPCs tab, and a Slayer goal's own buttons)
@@ -3644,6 +3674,8 @@ export function createPlanner(ctx) {
     const t = e.target;
     if (t.id === 'shots-file') { if (t.files?.length) readShots(t.files); t.value = ''; return; }      // (emptied: the same file can be picked again)
     if (t.id === 'loot-file') { if (t.files?.length) npc().onLootFiles(t.files); t.value = ''; return; }
+    if (t.closest?.('#view-quests') && quest().onChange(e)) return;
+    if (t.closest?.('#view-clues') && clue().onChange(e)) return;
     if (npc().onChange(e)) return;
     if (gear().onChange(e)) return;
     // The screenshot review: what's ticked, and which look-alike a line is.
@@ -3785,6 +3817,8 @@ export function createPlanner(ctx) {
   let foundTimer = null;
   function onInput(e) {
     const t = e.target;
+    if (t.closest?.('#view-quests') && quest().onInput(e)) return;
+    if (t.closest?.('#view-clues') && clue().onInput(e)) return;
     if (npc().onInput(e)) return;
     if (gear().onInput(e)) return;
     // (v3.1) The Prices tab's search: only the lists are redrawn as you type. A
