@@ -212,10 +212,18 @@ export function importBackup(text) {
       store.set(key, value);
       gear++;
     } else if (key.startsWith('quests.') && Array.isArray(value?.done)) {
-      // (v3.6) An account's quests ticked done: the ones ticked in either
+      // (v3.6) An account's quests ticked done: the ones ticked in either (v3.6.1: and each one's steps)
       const current = store.get(key, null);
       const done = [...new Set([...(Array.isArray(current?.done) ? current.done : []), ...value.done.filter(k => typeof k === 'string')])];
-      if (done.length !== (current?.done?.length || 0)) { store.set(key, { done, updated: Math.max(value.updated || 0, current?.updated || 0) }); quests++; }
+      const steps = { ...(current?.steps || {}) };
+      let more = done.length !== (current?.done?.length || 0);
+      for (const [k, list] of Object.entries(value.steps && typeof value.steps === 'object' ? value.steps : {})) {
+        if (!Array.isArray(list)) continue;
+        const had = new Set(Array.isArray(steps[k]) ? steps[k] : []);
+        const all = [...new Set([...had, ...list.filter(Number.isInteger)])].sort((a, b) => a - b);
+        if (all.length !== had.size) { steps[k] = all; more = true; }
+      }
+      if (more) { store.set(key, { done, steps, updated: Math.max(value.updated || 0, current?.updated || 0) }); quests++; }
     } else if (key.startsWith('clues.') && value && typeof value === 'object' && value.done && typeof value.done === 'object') {
       // (v3.6) An account's clues: one counted here already stays as it is
       if (!store.get(key, null)) { store.set(key, value); clues++; }

@@ -465,6 +465,8 @@ export function createPlanner(ctx) {
   }));
   const clue = () => clueUi || (clueUi = createClueUi({
     esc, fmt, $, itemIcon, store, safe, renderAccount, gpShort,
+    // (v3.6.1) a casket's rewards from screenshots: picked as the Bank tab's are
+    pixelsOf, pickFiles: () => pickFiles('clue-file'),
     account: () => S.account,
     inLostKit: !!ctx.inLostKit,
     redraw: () => render('clues'),
@@ -3245,7 +3247,9 @@ export function createPlanner(ctx) {
       // (v3.5)
       'gearLevel', 'gearTheir', 'gearFind', 'gearNpc', 'gearMode', 'gearSpell', 'gearPrayer', 'gearPotion',
       // (v3.6)
-      'questFind', 'questDone', 'clueFind', 'clueN', 'clueGot']) {
+      'questFind', 'questDone', 'clueFind', 'clueN', 'clueGot',
+      // (v3.6.1)
+      'questStep']) {
       if (el.dataset?.[a]) return `[data-${a.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${el.dataset[a]}"]`;
     }
     if (el.dataset?.shotAs) return `[data-shot-as="${el.dataset.shotAs}"]`;
@@ -3351,9 +3355,11 @@ export function createPlanner(ctx) {
     // left the files you then picked with a button that was no longer there.
     $('view-bank').appendChild(Object.assign(document.createElement('input'),
       { type: 'file', id: 'shots-file', accept: 'image/png,image/*', multiple: true, hidden: true }));
-    // (and a Slayer goal's loot)
+    // (and a Slayer goal's loot, and (v3.6.1) a casket's rewards)
     $('view-goals').appendChild(Object.assign(document.createElement('input'),
       { type: 'file', id: 'loot-file', accept: 'image/png,image/*', multiple: true, hidden: true }));
+    $('view-clues').appendChild(Object.assign(document.createElement('input'),
+      { type: 'file', id: 'clue-file', accept: 'image/png,image/*', multiple: true, hidden: true }));
     bankDrag = sortable({
       root: $('view-bank'),
       item: '#bank-all-grid .bank-cell',
@@ -3398,12 +3404,15 @@ export function createPlanner(ctx) {
     const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
     // (a Slayer goal's card on the Goals tab takes screenshots of loot)
     const lootCard = e => (S.tab === 'goals' && !$('view-goals')?.hidden ? e.target.closest?.('.slayer-goal') : null);
+    // (v3.6.1) and the Clues tab a casket's rewards: dropped on the counts at the top, you say which clue it was
+    const onClues = () => S.tab === 'clues' && !$('view-clues')?.hidden && S.account;
+    const clueZone = e => (onClues() && e.target.closest?.('#view-clues') ? (e.target.closest('.clue-top') ? 'top' : 'bottom') : null);
     document.addEventListener('dragover', e => {
       if (!hasFiles(e)) return;
       e.preventDefault();
       const zone = onBank() && e.target.closest?.('#view-bank');
       const card = lootCard(e);
-      e.dataTransfer.dropEffect = zone || card ? 'copy' : 'none';
+      e.dataTransfer.dropEffect = zone || card || clueZone(e) ? 'copy' : 'none';
       $('bank-shots')?.firstElementChild?.classList.toggle('drag', !!zone);
       for (const c of document.querySelectorAll('.slayer-goal.drag')) if (c !== card) c.classList.remove('drag');
       card?.classList.add('drag');
@@ -3421,11 +3430,15 @@ export function createPlanner(ctx) {
       if (onBank() && e.target.closest?.('#view-bank')) readShots(e.dataTransfer.files);
       const card = lootCard(e);
       if (card) npc().readLoot(card.dataset.goal, e.dataTransfer.files);
+      const where = clueZone(e);
+      if (where) clue().readShots(e.dataTransfer.files, where);
     });
     document.addEventListener('paste', e => {
-      if (!onBank() || e.target.closest?.('input, textarea')) return;
+      if (!(onBank() || onClues()) || e.target.closest?.('input, textarea')) return;
       const files = [...(e.clipboardData?.files || [])].filter(f => /^image\//.test(f.type));
-      if (files.length) { e.preventDefault(); readShots(files); }
+      if (!files.length) return;
+      e.preventDefault();
+      if (onClues()) clue().readShots(files, 'bottom'); else readShots(files);
     });
   }
 
@@ -3674,6 +3687,7 @@ export function createPlanner(ctx) {
     const t = e.target;
     if (t.id === 'shots-file') { if (t.files?.length) readShots(t.files); t.value = ''; return; }      // (emptied: the same file can be picked again)
     if (t.id === 'loot-file') { if (t.files?.length) npc().onLootFiles(t.files); t.value = ''; return; }
+    if (t.id === 'clue-file') { if (t.files?.length) clue().onFiles(t.files); t.value = ''; return; }
     if (t.closest?.('#view-quests') && quest().onChange(e)) return;
     if (t.closest?.('#view-clues') && clue().onChange(e)) return;
     if (npc().onChange(e)) return;

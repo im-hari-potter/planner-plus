@@ -1077,6 +1077,13 @@ tr.q-card-row > td { padding: 0 0 8px; }
 .q-unlocks { color: var(--gold-hi); }
 .q-steps { margin: 2px 0 4px; padding-left: 22px; font-family: var(--small); font-size: 14px; line-height: 1.5; }
 .q-steps li { margin: 2px 0; }
+/* (v3.6.1) a step's tick box; a step ticked dims */
+.q-steps label { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+.q-steps input { flex: 0 0 auto; width: 15px; height: 15px; margin: 3px 0 0; accent-color: var(--gold); cursor: pointer; }
+.q-steps li.on span { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(184, 160, 96, 0.6); }
+.q-all-steps { display: flex; align-items: center; gap: 8px; color: var(--win); }
+.q-going { color: var(--rank); }
+table.quests-t tr.is-going .q-name { color: #ffd27f; }
 .qc-tick { margin-top: 6px; font-size: 14px; }
 @media (max-width: 820px) { .qc-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { table.quests-t th:nth-child(4), table.quests-t td:nth-child(4), table.quests-t th:nth-child(5), table.quests-t td:nth-child(5) { display: none; } }
@@ -1129,6 +1136,25 @@ tr.q-card-row > td { padding: 0 0 8px; }
 .rw-n { position: absolute; top: 0; left: 2px; font-family: var(--small); font-size: 12px; color: #ffff00; }
 .rw-noicon { display: block; font-family: var(--small); font-size: 9px; line-height: 1.1; color: var(--muted); white-space: normal; }
 table.clue-t tr.rw-first-rare td { border-top: 2px solid var(--gold-dim); }
+/* (v3.6.1) A casket's rewards from a screenshot: checked, which clue it was, what was done */
+.clue-counts .btn.small { margin-left: -8px; }
+.clue-shot-bar { margin: 6px 0 2px; }
+.clue-shot { margin: 8px 0 4px; padding: 8px 10px; border: 1px dashed var(--gold-dim); border-radius: 4px; background: rgba(0, 0, 0, 0.2); }
+.clue-shot .busy { font-size: 14px; }
+.cs-head { margin-bottom: 6px; font-size: 14px; }
+.cs-items { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-family: var(--small); font-size: 14px; }
+.cs-item { display: inline-flex; align-items: center; gap: 4px; }
+.cs-item .input.num { width: 64px; }
+.cs-item .input.unsure { border-color: var(--lose); }
+.cs-item select.input { max-width: 190px; }
+.cs-unknown { padding: 0 6px; border: 1px solid var(--gold-dim); border-radius: 3px; color: var(--faint); }
+.clue-shot p.small-note { margin: 6px 0 2px; }
+.cs-add .btn.fits { border-color: var(--gold-hi); }
+.cs-add .btn.lead { background-color: rgba(240, 196, 25, 0.22); color: #fff; }
+.clue-note .msg { margin: 6px 0 2px; }
+.clue-note .msg .linkish { margin-left: 4px; }
+.cs-page { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 6px 0 2px; font-size: 14px; }
+table.grid.clue-t tbody tr.is-new td { background: rgba(98, 196, 98, 0.13); }
 /* The puzzle box */
 .pz-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .pz-pick-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 220px; padding: 4px; background: #241e10; border: 2px solid var(--gold-dim); border-radius: 4px; color: var(--text); font: inherit; cursor: pointer; }

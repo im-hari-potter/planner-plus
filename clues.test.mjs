@@ -201,3 +201,69 @@ test('what a quest takes, against your levels and your ticks', () => {
   assert.equal(needsOf(chompy, { level: () => null, done }).state, 'maybe');
   assert.equal(needsOf(QUEST_BY_KEY.get('cook'), { level: () => null, done: new Set() }).state, 'ok');
 });
+
+// ── (v3.6.1) A casket's rewards from a screenshot ──
+import { readReward, rewardItems, tiersOf, imageHash } from './cluereader.js';
+import { prepareIcons } from './bankread.js';
+import { STACK_FONT } from './bankread-data.js';
+import { CLUE_READ } from './cluedata.js';
+import { fakeReward, clueAtlas } from './cluefake.mjs';
+
+const clueIcons = prepareIcons(clueAtlas, CLUE_READ.icons, CLUE_READ.perRow);
+const readIt = img => { const r = readReward(img, clueIcons, STACK_FONT, CLUE_READ.window); return r.ok ? { r, ...rewardItems(r) } : { r }; };
+const short = items => items.map(i => [i.slug, i.count, ...(i.noted ? ['noted'] : []), ...(i.alts ? [i.alts.length] : [])]);
+const INV = [{ slot: 0, icon: 'coins_100', count: 120 }, { slot: 1, icon: 'lawrune', count: 7 }, { slot: 2, icon: 'rune_platebody' }, { slot: 4, icon: 'cert_lobster', count: 5 }];
+
+test("a casket's rewards read from a screenshot of the game: each one, how many, noted or not, and the kind of clue they fit", () => {
+  // the server's trail_reward.if: 3 by 2 slots of 32 pixels, its first at 243, 93 on the canvas
+  assert.deepEqual(CLUE_READ.window, { cols: 3, rows: 2, pitchX: 32, pitchY: 32, x: 243, y: 93 });
+  const { r, items, unknown } = readIt(fakeReward({ items: [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 3456 }, { icon: 'cert_lobster', count: 13 }, { icon: 'lawrune', count: 42 }, { icon: 'magic_longbow' }, { icon: 'holy_book_s_page1' }], inventory: INV }));
+  assert.deepEqual([r.x, r.y, unknown], [243, 93, 0]);
+  assert.deepEqual(short(items), [['rune_platebody', 1], ['coins', 3456], ['lobster', 13, 'noted'], ['lawrune', 42], ['magic_longbow', 1], ['holy_book_s_page1', 1, 4]]);
+  // (a book's four pages look the same: any of them)
+  assert.deepEqual(items[5].alts, ['holy_book_s_page1', 'holy_book_s_page2', 'holy_book_s_page3', 'holy_book_s_page4']);
+  assert.deepEqual(tiersOf(items), ['hard']);
+  // (the scene behind the icons, not the scroll: found all the same)
+  assert.deepEqual(short(readIt(fakeReward({ items: [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 3456 }], scroll: false, seed: 4 })).items), [['rune_platebody', 1], ['coins', 3456]]);
+  // a darker brightness setting, allowed for
+  const dark = readIt(fakeReward({ items: [{ icon: 'adamant_platebody' }, { icon: 'coins_250', count: 640 }], brightness: 0.8 }));
+  assert.deepEqual(short(dark.items), [['adamant_platebody', 1], ['coins', 640]]);
+  assert.deepEqual(tiersOf(dark.items), ['medium']);
+});
+
+test('a screenshot cut down or bigger than the game: the window found by its icons, not the inventory\'s; and none in a picture without it', () => {
+  // cut down: the window somewhere else, the inventory's items about
+  const cut = readIt(fakeReward({ items: [{ icon: 'black_platebody' }, { icon: 'coins_100', count: 150 }], x: 101, y: 207, inventory: INV, width: 800, height: 520 }));
+  assert.deepEqual([cut.r.x, cut.r.y], [101, 207]);
+  assert.deepEqual(short(cut.items), [['black_platebody', 1], ['coins', 150]]);
+  assert.deepEqual(tiersOf(cut.items), ['easy']);
+  // none: just what's in the inventory, in a picture the game's size or another
+  assert.deepEqual(readIt(fakeReward({ items: [], inventory: INV })).r, { ok: false, why: 'no-window' });
+  assert.deepEqual(readIt(fakeReward({ items: [], inventory: INV, width: 800, height: 520 })).r, { ok: false, why: 'no-window' });
+});
+
+test('the kind of clue rewards fit: each one of its rewards (noted alike), its stack as many rolls as can add up to it, and no more rolls in all than a casket has', () => {
+  const it = (slug, count = 1, more = {}) => ({ slot: 0, slug, noted: false, count, min: count, max: count, alts: null, ...more });
+  assert.deepEqual(tiersOf([it('lawrune', 12), it('naturerune', 12)]), ['easy', 'medium'], 'two rolls of 5 to 10 each, or one of 10 to 20');
+  assert.deepEqual(tiersOf([it('lobster', 12, { noted: true }), it('naturerune', 15)]), ['medium']);
+  assert.deepEqual(tiersOf([it('lobster', 12)]), [], 'lobsters come noted');
+  assert.deepEqual(tiersOf([it('coins', 850)]), ['medium']);
+  assert.deepEqual(tiersOf([it('coins', 640)]), ['easy', 'medium'], 'four easy rolls of coins could make 640');
+  assert.deepEqual(tiersOf([it('rune_longsword'), it('deathrune', 30)]), [], 'a hard reward and a medium one');
+  // easy: 2 to 4 rolls; five things can't be
+  assert.deepEqual(tiersOf(['black_platebody', 'black_platelegs', 'black_full_helm', 'black_battleaxe'].map(s => it(s))), ['easy']);
+  assert.deepEqual(tiersOf(['black_platebody', 'black_platelegs', 'black_full_helm', 'black_battleaxe', 'black_longsword'].map(s => it(s))), []);
+  // a page: any of the book's four
+  assert.deepEqual(tiersOf([it('holy_book_z_page1', 1, { alts: ['holy_book_z_page1', 'holy_book_z_page2', 'holy_book_z_page3', 'holy_book_z_page4'] })]), ['easy', 'medium', 'hard']);
+  assert.deepEqual(tiersOf([]), []);
+});
+
+test('the same screenshot hashed the same; another casket with the same rewards: the same window, not the same picture', () => {
+  const opts = { items: [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 2000 }] };
+  const a = readIt(fakeReward(opts)).r, again = readIt(fakeReward(opts)).r, other = readIt(fakeReward({ ...opts, seed: 2 })).r;
+  assert.equal(a.image, again.image);
+  assert.equal(a.hash, other.hash);
+  assert.notEqual(a.image, other.image);
+  assert.notEqual(a.hash, readIt(fakeReward({ ...opts, items: [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 2001 }] })).r.hash);
+  assert.match(imageHash({ width: 2, height: 1, data: new Uint8Array(8) }), /^2x1:\w+$/);
+});

@@ -170,8 +170,8 @@ export function readBank(img, icons, font, layout) {
   return { ok: true, scroll: best.scroll, ...readSlots(img, icons, font, best.slots, shapeMatches) };
 }
 
-// An icon's outline in the slot at x, y, and the icons of that shape.
-function shapes(img, icons) {
+// An icon's outline in the slot at x, y, and the icons of that shape. (v3.6.1: exported, for a casket's rewards)
+export function shapes(img, icons) {
   const size = icons.size;
   const outlineIn = (x, y) => {
     const out = [];
@@ -196,7 +196,7 @@ function shapes(img, icons) {
 
 // What's in some slots ({ slot, row, col, x, y, outline, set }): the icon, by
 // shape and then colour, and the stack number.
-function readSlots(img, icons, font, all, shapeMatches) {
+export function readSlots(img, icons, font, all, shapeMatches) {
   const size = icons.size;
   // Colour: the closest of the same shape. The brightness setting bends every
   // colour the same way (a power curve); when colours are off overall, the

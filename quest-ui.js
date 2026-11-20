@@ -2,16 +2,17 @@
 // the two miniquests. You tick what you've done (it's kept with the account: the hiscores don't say); what a
 // quest takes is checked against your levels from the hiscores, the quests it needs against your ticks, and its
 // quest points against the ones you've ticked. A quest opens to where it starts, what it takes, what it gives,
-// a few short steps, and LostHQ's full guide.
+// a few short steps, and LostHQ's full guide. (v3.6.1) Each step has a tick box: a quest with some ticked and not
+// done is in progress.
 import { QUESTS, QUEST_POINTS } from './questdata.js';
 import { SKILL_BY_KEY } from './skills.js';
 import { ITEMS } from './gamedata.js';
 
 export const QUEST_BY_KEY = new Map(QUESTS.map(q => [q.key, q]));
 export const guideUrl = q => `https://2004.losthq.rs/?p=questguides&quest=${encodeURIComponent(q.lhq)}`;
-const SHOWS = ['all', 'free', 'members', 'mini'], STATUSES = ['any', 'todo', 'ready', 'done'];
+const SHOWS = ['all', 'free', 'members', 'mini'], STATUSES = ['any', 'todo', 'progress', 'ready', 'done'];
 const SHOW_WORDS = { all: 'All', free: 'Free', members: 'Members', mini: 'Miniquests' };
-const STATUS_WORDS = { any: 'Any', todo: 'To do', ready: 'Can start', done: 'Done' };
+const STATUS_WORDS = { any: 'Any', todo: 'To do', progress: 'In progress', ready: 'Can start', done: 'Done' };
 
 // The quest points of what's ticked
 export const questPoints = done => QUESTS.reduce((t, q) => t + (done.has(q.key) ? q.qp : 0), 0);
@@ -46,12 +47,22 @@ export function createQuestUi(P) {
     find: '',
   };
   const saveUi = () => P.store.set('questUi', { show: U.show, status: U.status, open: U.open });
+  // kept as quests.<account>: { done: [keys], steps: { key: [the steps ticked, from 0] }, updated }
   const key = () => 'quests.' + P.safe();
-  const doneSet = () => {
-    const v = P.safe() ? P.store.get(key(), null) : null;
-    return new Set((Array.isArray(v?.done) ? v.done : []).filter(k => QUEST_BY_KEY.has(k)));
+  const stored = () => (P.safe() ? P.store.get(key(), null) : null);
+  const doneSet = () => new Set((Array.isArray(stored()?.done) ? stored().done : []).filter(k => QUEST_BY_KEY.has(k)));
+  const stepsOf = () => {
+    const out = {};
+    for (const [k, list] of Object.entries(stored()?.steps || {})) {
+      const q = QUEST_BY_KEY.get(k);
+      if (!q || !Array.isArray(list)) continue;
+      const ok = [...new Set(list.filter(i => Number.isInteger(i) && i >= 0 && i < q.steps.length))].sort((a, b) => a - b);
+      if (ok.length) out[k] = ok;
+    }
+    return out;
   };
-  const saveDone = set => P.store.set(key(), { done: QUESTS.map(q => q.key).filter(k => set.has(k)), updated: Date.now() });
+  const save = (set, steps) => P.store.set(key(), { done: QUESTS.map(q => q.key).filter(k => set.has(k)), steps, updated: Date.now() });
+  const saveDone = set => save(set, stepsOf());
   const level = sk => (P.profile() ? P.currentOf(sk) : null);
   // (a link out: in LostKit the tool's own tab, ◀ comes back; in a browser a new tab, as the market's)
   const out = url => `href="${esc(url)}"${P.inLostKit ? '' : ' target="_blank" rel="noopener"'}`;
@@ -70,23 +81,26 @@ export function createQuestUi(P) {
     P.renderAccount('quests-account', 'quests');
     const body = $('quests-body');
     if (!P.account()) { body.innerHTML = ''; return; }
-    const done = doneSet();
+    const done = doneSet(), steps = stepsOf();
     const quests = QUESTS.filter(q => !q.mini), minis = QUESTS.filter(q => q.mini);
     const qp = questPoints(done);
-    const rows = QUESTS.map(q => ({ q, done: done.has(q.key), n: needsOf(q, { level, done }) }));
-    const ready = rows.filter(r => !r.done && r.n.state === 'ok').length;
+    // (in progress: some of its steps ticked, and not done; can start: not started yet, and all it takes there)
+    const rows = QUESTS.map(q => ({ q, done: done.has(q.key), steps: steps[q.key] || [], n: needsOf(q, { level, done }) }))
+      .map(r => ({ ...r, going: !r.done && r.steps.length > 0 }));
+    const ready = rows.filter(r => !r.done && !r.going && r.n.state === 'ok').length;
+    const going = rows.filter(r => r.going).length;
     const terms = U.find.toLowerCase().split(/\s+/).filter(Boolean);
-    const shown = rows.filter(({ q, done: d, n }) => (U.show === 'all' || (U.show === 'mini' ? q.mini : !q.mini && (U.show === 'members') === !!q.members))
-      && (U.status === 'any' || (U.status === 'done' ? d : U.status === 'todo' ? !d : !d && n.state === 'ok'))
+    const shown = rows.filter(({ q, done: d, going: g, n }) => (U.show === 'all' || (U.show === 'mini' ? q.mini : !q.mini && (U.show === 'members') === !!q.members))
+      && (U.status === 'any' || (U.status === 'done' ? d : U.status === 'todo' ? !d : U.status === 'progress' ? g : !d && !g && n.state === 'ok'))
       && terms.every(t => q.name.toLowerCase().includes(t)));
     const pct = Math.round((qp / QUEST_POINTS) * 100);
     const noXp = !P.profile();
     const seg = (list, words, cur, attr) => `<div class="seg" role="group">${list.map(v => `<button type="button" data-${attr}="${v}" class="${v === cur ? 'on' : ''}" aria-pressed="${v === cur}">${words[v]}</button>`).join('')}</div>`;
     body.innerHTML = `<div class="card quest-sum">
         <div class="qs-line"><span class="qs-qp">Quest points <b>${qp}</b> of ${QUEST_POINTS}</span>
-          <span class="c-muted">${quests.filter(q => done.has(q.key)).length} of ${quests.length} quests done${minis.length ? `, ${minis.filter(q => done.has(q.key)).length} of ${minis.length} miniquests` : ''} · <b>${ready}</b> you can start now</span></div>
+          <span class="c-muted">${quests.filter(q => done.has(q.key)).length} of ${quests.length} quests done${minis.length ? `, ${minis.filter(q => done.has(q.key)).length} of ${minis.length} miniquests` : ''} · <b>${going}</b> in progress · <b>${ready}</b> you can start now</span></div>
         <div class="qs-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${QUEST_POINTS}" aria-valuenow="${qp}"><span style="width:${pct}%"></span></div>
-        <p class="note">Tick the quests you've done (the hiscores don't show quests, so it's up to you; they stay with this account). What each one takes is checked against your levels from the hiscores${noXp ? ' once your XP is in' : ''}, the quests it needs against your ticks.</p>
+        <p class="note">Tick the quests you've done (the hiscores don't show quests, so it's up to you; they stay with this account), and a quest's steps as you go: one with some ticked is in progress. What each one takes is checked against your levels from the hiscores${noXp ? ' once your XP is in' : ''}, the quests it needs against your ticks.</p>
       </div>
       <div class="bar wrap quest-filters">${seg(SHOWS, SHOW_WORDS, U.show, 'quest-show')}${seg(STATUSES, STATUS_WORDS, U.status, 'quest-status')}
         <input class="input small" type="search" data-quest-find="1" value="${esc(U.find)}" placeholder="Find a quest" aria-label="Find a quest" spellcheck="false"></div>
@@ -95,23 +109,24 @@ export function createQuestUi(P) {
         <tbody>${shown.map(rowHtml).join('')}</tbody></table></div>` : `<div class="empty">No quests like that.</div>`}`;
   }
 
-  function rowHtml({ q, done: d, n }) {
+  function rowHtml({ q, done: d, steps, going, n }) {
     const open = U.open === q.key;
     const missing = needWords(n);
     const status = d ? '<span class="c-faint">Done</span>'
+      : going ? `<span class="q-going">In progress: ${steps.length} of ${q.steps.length} steps</span>${n.state === 'no' ? ` <span class="c-faint">· still takes ${esc(missing.join(', '))}</span>` : ''}`
       : n.state === 'ok' ? '<span class="q-ok">✓ You can start it</span>'
       : n.state === 'no' ? `<span class="q-no">✗</span> ${esc(missing.join(', '))}`
       : `<span class="q-maybe">?</span> ${esc(missing.join(', ')) || 'Your levels aren\'t in yet'}`;
-    return `<tr class="q-row${d ? ' is-done' : ''}${open ? ' is-open' : ''}" data-quest="${q.key}">
+    return `<tr class="q-row${d ? ' is-done' : ''}${going ? ' is-going' : ''}${open ? ' is-open' : ''}" data-quest="${q.key}">
       <td class="q-done"><input type="checkbox" data-quest-done="${q.key}"${d ? ' checked' : ''} aria-label="${esc(q.name)} done"></td>
       <td><button type="button" class="linkish q-name" data-quest-open="${q.key}" aria-expanded="${open}">${esc(q.name)}</button>${q.mini ? ' <span class="c-faint small-note">miniquest</span>' : q.members ? '' : ' <span class="tag-free">Free</span>'}</td>
       <td class="num">${q.qp || '–'}</td><td>${esc(q.difficulty || '')}</td><td>${esc(q.length || '')}</td>
       <td class="q-status">${status}</td></tr>
-      ${open ? `<tr class="q-card-row"><td colspan="6">${cardHtml(q, n, d)}</td></tr>` : ''}`;
+      ${open ? `<tr class="q-card-row"><td colspan="6">${cardHtml(q, n, d, steps)}</td></tr>` : ''}`;
   }
 
-  function cardHtml(q, n, d) {
-    const done = doneSet();
+  function cardHtml(q, n, d, ticked) {
+    const done = doneSet(), on = new Set(ticked);
     const skillChip = s => {
       const sk = SKILL_BY_KEY.get(s.sk);
       const have = s.have != null ? `you have ${s.have}` : s.lo != null ? `you have ${s.lo}–${s.hi} (not on the hiscores)` : 'no XP yet';
@@ -142,7 +157,8 @@ export function createQuestUi(P) {
           <h5>It gives</h5><p class="q-gives">${gives.map(g => `<span>${g}</span>`).join('') || '<span class="c-faint">No XP</span>'}</p>
           ${q.unlocks ? `<p class="q-unlocks">${esc(q.unlocks)}</p>` : ''}
           ${unlocks.length ? `<p class="c-muted small-note">Needed for ${unlocks.map(o => `<button type="button" class="linkish" data-quest-open="${o.key}">${esc(o.name)}</button>${done.has(o.key) ? ' ✓' : ''}`).join(', ')}</p>` : ''}</div>
-        <div><h5>Steps</h5><ol class="q-steps">${q.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+        <div><h5>Steps <span class="c-faint small-note">${on.size} of ${q.steps.length} ticked</span></h5><ol class="q-steps">${q.steps.map((s, i) => `<li${on.has(i) ? ' class="on"' : ''}><label><input type="checkbox" data-quest-step="${q.key}:${i}"${on.has(i) ? ' checked' : ''} aria-label="Step ${i + 1} done"><span>${esc(s)}</span></label></li>`).join('')}</ol>
+          ${!d && on.size === q.steps.length ? `<p class="q-all-steps">Every step ticked: <button type="button" class="btn small" data-quest-finish="${q.key}">Mark ${esc(q.name)} done</button></p>` : ''}
           <p class="c-faint small-note">The short version: LostHQ's guide has every detail.</p></div>
       </div>
       <label class="check qc-tick"><input type="checkbox" data-quest-done="${q.key}"${d ? ' checked' : ''}> I've done ${esc(q.name)}</label>
@@ -154,11 +170,17 @@ export function createQuestUi(P) {
     if (on) set.add(k); else set.delete(k);
     saveDone(set);
   }
+  function setStep(k, i, on) {
+    const steps = stepsOf(), list = new Set(steps[k] || []);
+    if (on) list.add(i); else list.delete(i);
+    if (list.size) steps[k] = [...list].sort((a, b) => a - b); else delete steps[k];
+    save(doneSet(), steps);
+  }
 
   return {
     render,
     onClick(e) {
-      const t = e.target.closest('[data-quest-open], [data-quest-show], [data-quest-status]');
+      const t = e.target.closest('[data-quest-open], [data-quest-show], [data-quest-status], [data-quest-finish]');
       if (!t || !t.closest('#view-quests')) return false;
       const d = t.dataset;
       if (d.questOpen) {
@@ -169,6 +191,7 @@ export function createQuestUi(P) {
         if (U.open) requestAnimationFrame(() => $('view-quests').querySelector(`tr[data-quest="${U.open}"]`)?.scrollIntoView({ block: 'nearest' }));
         return true;
       }
+      if (d.questFinish) { setDone(d.questFinish, true); P.redraw(); return true; }
       if (d.questShow) { U.show = d.questShow; saveUi(); P.redraw(); return true; }
       if (d.questStatus) { U.status = d.questStatus; saveUi(); P.redraw(); return true; }
       return false;
@@ -176,6 +199,7 @@ export function createQuestUi(P) {
     onChange(e) {
       const t = e.target;
       if (t.dataset?.questDone) { setDone(t.dataset.questDone, t.checked); P.redraw(); return true; }
+      if (t.dataset?.questStep) { const [k, i] = t.dataset.questStep.split(':'); setStep(k, Number(i), t.checked); P.redraw(); return true; }
       return false;
     },
     onInput(e) {

@@ -368,11 +368,59 @@ export async function buildClues(content, lhq) {
   const puzzleSolved = trail('scripts/trail_puzzle.rs2');
   for (const letter of ['b', 'c', 'd']) need(new RegExp(`inv_getobj\\(trail_puzzleinv, 23\\) = trail_slidingpuzzle${letter}24`).test(puzzleSolved), `the ${letter} puzzle is solved differently now`);
 
+  // ── (v3.6.1) Reading a casket's screenshot: the reward window, and every reward's icon ──
+  // The window (trail_reward.if): its items in a grid of 3 by 2 slots of 32 pixels, side by side (no margin), at 239, 89
+  // in the main view; the client draws the main view at 4, 4 on the game canvas. Trail_complete opens it, and the
+  // items go into your inventory only as it closes (trail_give_reward is a normal queue: it waits for the window).
+  const rewardIf = parseConfig(trail('interfaces/trail_reward.if')).get('inv');
+  need(rewardIf?.type === 'inv' && rewardIf.width === '3' && rewardIf.height === '2' && !rewardIf.margin, 'the reward window\'s grid reads differently now');
+  const helper = trail('scripts/trail_clue_helper.rs2');
+  need(/inv_transmit\(trail_rewardinv, trail_reward:inv\);\s*if_openmain\(trail_reward\);\s*queue\(trail_give_reward, 0, 0\);/.test(helper), 'the reward window opens differently now');
+  const window = { cols: 3, rows: 2, pitchX: 32, pitchY: 32, x: 4 + Number(rewardIf.x), y: 4 + Number(rewardIf.y) };
+  // Each reward's look: its own icon; noted, its note's (cert_<item>); coins by how many (the coins' count1 to count9
+  // switch to coins_2 … coins_10000). Rewards that look the same share a cell (also).
+  const looks = new Map(), cells = [], entries = [];
+  const iconOf = slug => {
+    const it = itemDb.get(slug);
+    need(it, `LostHQ has no ${slug}`);
+    const sx = (it.id % perSheetRow) * SIZE, sy = Math.floor(it.id / perSheetRow) * SIZE;
+    if (sy + SIZE > info.height) return null;
+    const px = Buffer.alloc(SIZE * SIZE * 4);
+    for (let y = 0; y < SIZE; y++) sheet.copy(px, y * SIZE * 4, ((sy + y) * info.width + sx) * 4, ((sy + y) * info.width + sx + SIZE) * 4);
+    let outline = 0;
+    for (let i = 0; i < SIZE * SIZE; i++) if (px[i * 4 + 3] && !px[i * 4] && !px[i * 4 + 1] && px[i * 4 + 2] === 1) outline++;
+    return outline >= 8 ? px : null;
+  };
+  const coinLooks = Object.entries(OBJ.get('coins')).filter(([k]) => /^count\d+$/.test(k)).map(([, v]) => v.split(',')[0]);
+  need(coinLooks.length >= 5, 'coins have no countN looks now');
+  const noIcon = [];
+  const add = (look, of, noted) => {
+    const px = iconOf(look);
+    if (!px) { noIcon.push(look); return; }
+    const k = px.toString('base64');
+    if (looks.has(k)) { const e = entries[looks.get(k)]; if (e.of !== of && !(e.also || []).includes(of)) (e.also || (e.also = [])).push(of); return; }
+    looks.set(k, entries.length);
+    entries.push({ slug: look, of, ...(noted ? { noted: 1 } : {}) });
+    cells.push(px);
+  };
+  const seenReward = new Set();
+  for (const tier of TIERS) for (const i of rewards[tier].items) {
+    const k = `${i.slug}${i.noted ? '@noted' : ''}`;
+    if (seenReward.has(k)) continue;
+    seenReward.add(k);
+    if (i.noted) add(`cert_${i.slug}`, i.slug, true);
+    else if (i.slug === 'coins') for (const look of ['coins', ...coinLooks]) add(look, 'coins', false);
+    else add(i.slug, i.slug, false);
+  }
+  const ICON_ROW = 16, iconRows = Math.ceil(cells.length / ICON_ROW), iconSheet = Buffer.alloc(ICON_ROW * SIZE * iconRows * SIZE * 4);
+  cells.forEach((px, n) => { const dx = (n % ICON_ROW) * SIZE, dy = Math.floor(n / ICON_ROW) * SIZE; for (let y = 0; y < SIZE; y++) px.copy(iconSheet, ((dy + y) * ICON_ROW * SIZE + dx) * 4, y * SIZE * 4, (y + 1) * SIZE * 4); });
+
   return {
     clues: out, rewards, odd,
     maps: { sheet: maps.sheet, w: maps.cell.w, h: maps.cell.h, perRow: maps.perRow, count: maps.index.size },
     pics: { sheet: await sharp(picSheet, { raw: { width: picRow * PIC, height: picRows * PIC, channels: 4 } }).webp({ quality: 85, alphaQuality: 100, effort: 6 }).toBuffer(), size: PIC, perRow: picRow },
     puzzles: { sheet: await sharp(pieces, { raw: { width: 24 * SIZE, height: 3 * SIZE, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer(), size: SIZE },
+    read: { window, entries, perRow: ICON_ROW, noIcon, sheet: await sharp(iconSheet, { raw: { width: ICON_ROW * SIZE, height: iconRows * SIZE, channels: 4 } }).png({ compressionLevel: 9, palette: false }).toBuffer() },
   };
 }
 
@@ -393,8 +441,12 @@ export const CLUE_REWARDS = ${JSON.stringify(b.rewards)};
 export const CLUE_MAPS = ${JSON.stringify({ sheet: await stamped('cluemaps.webp', b.maps.sheet), w: b.maps.w, h: b.maps.h, perRow: b.maps.perRow })};
 export const CLUE_PICS = ${JSON.stringify({ sheet: await stamped('cluepics.webp', b.pics.sheet), size: b.pics.size, perRow: b.pics.perRow })};
 export const PUZZLES = ${JSON.stringify({ sheet: await stamped('puzzles.png', b.puzzles.sheet), size: b.puzzles.size })};
+// (v3.6.1) Reading a casket's screenshot: where the reward window's grid is on the game canvas, and every reward's
+// icon as it's drawn there (clueicons.png: of is the reward it is, noted a note of it; also, rewards that look the same)
+export const CLUE_READ = ${JSON.stringify({ window: b.read.window, sheet: await stamped('clueicons.png', b.read.sheet), perRow: b.read.perRow, icons: b.read.entries })};
 `;
   await writeFile(new URL('./cluedata.js', import.meta.url), data);
   console.log(`cluedata.js: ${b.clues.length} clues (${TIERS.map(t => `${b.clues.filter(c => c.tier === t).length} ${t}`).join(', ')}); cluemaps.webp ${b.maps.count} minimaps (${b.maps.sheet.length} bytes); cluepics.webp ${b.pics.sheet.length} bytes; puzzles.png ${b.puzzles.sheet.length} bytes`);
+  console.log(`clueicons.png: ${b.read.entries.length} looks of the rewards${b.read.noIcon.length ? `; no icon on LostHQ's sheet for ${b.read.noIcon.join(', ')}` : ''}; the reward window's grid at ${b.read.window.x}, ${b.read.window.y}`);
   if (b.odd.length) console.log(`notes:\n  ${b.odd.join('\n  ')}`);
 }

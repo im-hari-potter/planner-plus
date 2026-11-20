@@ -42,7 +42,7 @@ what's still to do, what to collect or buy, and what it all comes to in gp.
 | **Prices** | The price each item uses: the market's, high alch, or your own. |
 | **DPS** | What you wear and how it fights, like the game's Worn Equipment screen and a DPS calculator: a melee, a Ranged and a Magic setup at your levels, the bonuses they add up to, and how each does against any monster or another player. Best from my bank picks it from what you have, and your own layouts are saved by name. |
 | **NPCs** | Every monster: its picture, its stats, where it is (with a minimap), the XP of a kill and every drop with its chance, and how your gear does against it. |
-| **More**: **Quests**, **Clues** | A second row of tabs. **Quests**: every quest, ticked off as you do them, with what each takes against your levels, short steps and LostHQ's guide. **Clues**: your clues, every clue's answer with a minimap, the rewards against what you've had, and a puzzle box solver. |
+| **More**: **Quests**, **Clues** | A second row of tabs. **Quests**: every quest, ticked off as you do them (their steps too), with what each takes against your levels, short steps and LostHQ's guide. **Clues**: your clues, counted from a screenshot of a casket's rewards too, every clue's answer with a minimap, the rewards against what you've had, and a puzzle box solver. |
 
 The tabs stay at the top of the window as you scroll, each with its own icon. **More**, the last of them, opens a
 second row under them (Quests and Clues), so the first stays on one line. An item's name,
@@ -511,7 +511,10 @@ points (135 in all), and the two miniquests (Alfred Grimhand's Barcrawl and the 
   and quest points. **Can start** shows the ones you can do now.
 - **Click a quest** for where it starts, what it takes, what to bring, what it gives (its quest
   points and XP, the server's), what it unlocks, a few short steps, and **LostHQ's full guide**.
-- **Free**, **Members**, **Miniquests**, **To do**, **Done** and a search pick out the ones you want.
+- **Tick its steps as you go.** A quest with some of its steps ticked is **In progress**: its row
+  says how many, and so does the top. Every step ticked, it offers to tick the quest done.
+- **Free**, **Members**, **Miniquests**, **To do**, **In progress**, **Can start**, **Done** and a
+  search pick out the ones you want.
 
 ## Clues: treasure trails
 
@@ -520,7 +523,7 @@ points (135 in all), and the two miniquests (Alfred Grimhand's Barcrawl and the 
 **More**, then **Clues**.
 
 - **Clues done**: Easy, Medium and Hard, with + and − (or type a number). Count one when you open
-  its casket. It's kept with the account.
+  its casket, or read it from a screenshot (below). It's kept with the account.
 - **Bring**: a spade; the sextant, watch and chart (for medium and hard coordinates: the server won't
   let you dig one without all three); teleports; and a knife or a slash weapon for the webs on the
   way to Wilderness steps.
@@ -552,6 +555,25 @@ armour and weapons, dragonhide, magic bows, god book pages, rares and coins. **F
 expected** puts those averages in your **Got** column for the common items (Undo takes them out
 again), so you only change what you remember. Click the rares you've had to tick them off. **Luck**
 compares what you've had with other players' after as many clues, as on a Slayer goal's loot.
+
+### A casket from a screenshot
+
+![A screenshot read from the top: you say which clue it was](readme-25-clue-screenshot.png)
+
+Open a casket and take a screenshot while its rewards show (LostKit saves them in **Pictures ›
+LostKit Screenshots**). The rewards are read from it, how many of each too, and counted with the
+clue:
+
+- **On Rewards**, with **Read a screenshot** there (or a screenshot dropped or pasted on the tab):
+  when its rewards can only be from one kind of clue, it's counted there and then: one more clue
+  done, and its rewards added to your **Got** column, marked. **Undo** takes it back off.
+- **At the top**, by **Clues done**: you always say which kind of clue it was. The kinds its rewards
+  fit are marked, but none is picked for you.
+- When it can't tell, it asks: rewards that could be two kinds of clue, a number it couldn't read
+  for sure, or something that isn't a reward. You can change any number first.
+- **God book pages** look the same in a screenshot, so it asks which page it was.
+- **The same screenshot twice** isn't counted twice: it says so. A casket with exactly the same
+  rewards as one counted before asks before it's counted.
 
 ### Puzzle box
 
@@ -663,7 +685,9 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
     challenge scrolls, the puzzle boxes and the wizards; the minimaps, drawn as a monster's page's;
     and each casket's rewards (`trail_clue_<tier>_reward.rs2`, every `random()` followed). The map
     clues' pictures are LostHQ's; the sliding puzzles' pieces are the game's icons, from LostHQ's
-    item sheet.
+    item sheet. For reading a casket from a screenshot (v3.6.1), it writes `clueicons.png` (each
+    reward's icon as the game draws it, noted ones and coins' piles too) and where the reward
+    window's slots are (`trail_reward.if`).
   - Gear (`build-gear.mjs`): every item you can wear, its bonuses and what it takes to wield, each
     weapon's styles and speed, the specials, prayers, potions and combat spells, and how each
     monster attacks, read from the server's item configs and combat scripts (`equip_get_bonuses`,
@@ -677,7 +701,9 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   `clue-ui.js` (the Clues tab), `clues.js` (finding a clue, the sextant, a casket's rewards over many),
   `puzzle.js` (the puzzle box's solver), `prices.js` (the market and high alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
-  tests), `sortable.js` (dragging), `tablesort.js` (sorting a table by a column's name).
+  tests), `cluereader.js` (a casket's rewards from a screenshot, and the kinds of clue they fit;
+  `cluefake.mjs` paints pretend ones), `sortable.js` (dragging), `tablesort.js` (sorting a table by
+  a column's name).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own
   website read it from a browser; LostKit's tool tabs are the exception, and a copy hosted on
   Netlify (see `_redirects`) works in any browser. A GitHub Action refreshes each skill's player

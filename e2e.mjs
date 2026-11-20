@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright'); // resolved from NODE_PATH / global install
 import assert from 'node:assert/strict';
 import { fakeBank, fakeInventory } from './bankfake.mjs';
+import { fakeReward } from './cluefake.mjs';
 import { encodePng } from './testpng.mjs';
 // (the addresses of the icon sheets this build names, and the XP table, to check what the page shows)
 import { ICON_SHEET, ITEMS } from './gamedata.js';
@@ -6209,7 +6210,7 @@ await check("quests (v3.6): the server's 63 quests (135 quest points) and the tw
   try {
     await openMoreTab('quests');
     const sum = async () => flat(await text('#quests-body .quest-sum .qs-line'));
-    assert.match(await sum(), /^Quest points 0 of 135 0 of 63 quests done, 0 of 2 miniquests · \d+ you can start now$/);
+    assert.match(await sum(), /^Quest points 0 of 135 0 of 63 quests done, 0 of 2 miniquests · 0 in progress · \d+ you can start now$/);
     assert.equal(await page.locator('#quests-body tr.q-row').count(), 65);
     assert.deepEqual((await page.locator('#quests-body tr.q-row .q-name').allInnerTexts()).slice(0, 3).map(flat), ["Black Knight's Fortress", "Cook's Assistant", 'Demon Slayer']);
     await page.check('[data-quest-done="dragon"]');
@@ -6425,10 +6426,10 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.6\.0 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.6\.1 · /);
   // (v3.5.3) the stylesheet asked for with the version, so a reload after an update gets the new one and its icons
-  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.6.0');
-  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.6\.0$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
+  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.6.1');
+  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.6\.1$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
   await page.click('#settings-close');
 });
 
@@ -6445,6 +6446,168 @@ await check('planner tabs fit a narrow window', async () => {
   await page.setViewportSize({ width: 1000, height: 900 });
 });
 
+await check("quests (v3.6.1): a quest's short steps ticked as you go: in progress (said in its row and the summary, and a filter of its own), kept with the account; every step ticked offers to tick the quest done", async () => {
+  await page.evaluate(() => { localStorage.removeItem('lchs.quests.old_badger'); localStorage.removeItem('lchs.questUi'); });
+  await planAs('old badger', 'Old Badger');
+  try {
+    await openMoreTab('quests');
+    const sum = async () => flat(await text('#quests-body .quest-sum .qs-line'));
+    await page.click('[data-quest-open="dragon"]');
+    const card = page.locator('#quests-body .quest-card');
+    const n = await card.locator('.q-steps li').count();
+    assert.ok(n >= 4, `${n} steps`);
+    await card.locator('[data-quest-step="dragon:0"]').check();
+    await card.locator('[data-quest-step="dragon:2"]').check();
+    assert.match(flat(await page.locator('tr[data-quest="dragon"] .q-status').innerText()), new RegExp(`^In progress: 2 of ${n} steps`));
+    assert.ok(await page.locator('tr[data-quest="dragon"]').evaluate(r => r.classList.contains('is-going')));
+    assert.match(flat(await card.locator('h5', { hasText: 'Steps' }).innerText()), new RegExp(`2 of ${n} ticked`));
+    assert.ok(await card.locator('.q-steps li').nth(2).evaluate(li => li.classList.contains('on')));
+    assert.match(await sum(), /· 1 in progress · \d+ you can start now$/);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.quests.old_badger')).steps), { dragon: [0, 2] });
+    // its own filter: in progress, and not among those you can start
+    await page.click('[data-quest-status="progress"]');
+    assert.deepEqual(await page.locator('#quests-body tr.q-row').evaluateAll(rs => rs.map(r => r.dataset.quest)), ['dragon']);
+    await page.click('[data-quest-status="ready"]');
+    assert.equal(await page.locator('#quests-body tr[data-quest="dragon"]').count(), 0);
+    await page.click('[data-quest-status="any"]');
+    // a step unticked
+    await card.locator('[data-quest-step="dragon:2"]').uncheck();
+    assert.match(flat(await page.locator('tr[data-quest="dragon"] .q-status').innerText()), new RegExp(`^In progress: 1 of ${n} steps`));
+    // every step: tick the quest done from there
+    for (let i = 0; i < n; i++) await card.locator(`[data-quest-step="dragon:${i}"]`).check();
+    assert.match(flat(await card.locator('.q-all-steps').innerText()), /^Every step ticked: Mark Dragon Slayer done$/);
+    await card.locator('[data-quest-finish="dragon"]').click();
+    assert.match(await sum(), /^Quest points 2 of 135 1 of 63 quests done.* · 0 in progress/);
+    assert.equal(await card.locator('.q-all-steps').count(), 0);
+  } finally {
+    await page.evaluate(() => { localStorage.removeItem('lchs.quests.old_badger'); localStorage.removeItem('lchs.questUi'); });
+  }
+});
+
+// (v3.6.1) A casket's rewards, as the game shows them, for the screenshot checks
+const clueShot = (name, items, opts = {}) => ({ name, mimeType: 'image/png', buffer: encodePng(fakeReward({ items, ...opts })) });
+const pasteShot = async (shot, how = 'paste', where = 'body') => page.evaluate(async ({ b64, name, how, where }) => {
+  const dt = new DataTransfer();
+  dt.items.add(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], name, { type: 'image/png' }));
+  const el = document.querySelector(where);
+  if (how === 'paste') el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  else el.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+}, { b64: shot.buffer.toString('base64'), name: shot.name, how, where });
+
+await check("clues (v3.6.1): a screenshot of a casket's rewards on Rewards: counted by itself, rewards and all, when they can only be from one kind of clue (and undone); the same screenshot again, or one that could be two kinds, waits to be checked; a book's page asks which; pasted too", async () => {
+  await page.evaluate(() => { localStorage.setItem('lchs.clues.old_badger', JSON.stringify({ done: { easy: 25, medium: 23, hard: 57 }, got: { hard: { rune_platebody: 10 } } })); localStorage.removeItem('lchs.clueUi'); });
+  await planAs('old badger', 'Old Badger');
+  try {
+    await openMoreTab('clues');
+    await page.click('[data-clue-view="rewards"]');
+    await page.click('[data-clue-rtier="easy"]');
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')));
+    const card = page.locator('.clue-rewards');
+    const note = card.locator('.clue-note .msg');
+    // a hard one: counted, and shown
+    const hard = clueShot('hard-1.png', [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 3456 }, { icon: 'cert_lobster', count: 13 }, { icon: 'lawrune', count: 42 }, { icon: 'magic_longbow' }]);
+    await page.setInputFiles('#clue-file', [hard]);
+    await note.waitFor();
+    assert.equal(flat(await note.innerText()), 'Counted a hard casket and its 5 rewards. Undo');
+    let d = await saved();
+    assert.deepEqual([d.done, d.got.hard, d.shots.length], [{ easy: 25, medium: 23, hard: 58 }, { rune_platebody: 11, coins: 3456, lobster: 13, lawrune: 42, magic_longbow: 1 }, 1]);
+    assert.ok(await page.locator('[data-clue-rtier="hard"]').evaluate(b => b.classList.contains('on')), 'its kind shown');
+    assert.deepEqual(await card.locator('tbody tr.is-new').evaluateAll(rs => rs.map(r => r.dataset.reward).sort()), ['coins', 'lawrune', 'lobster@noted', 'magic_longbow', 'rune_platebody']);
+    assert.equal(await page.inputValue('[data-clue-n="hard"]'), '58');
+    // undone: as it was
+    await note.locator('[data-clue-undo]').click();
+    d = await saved();
+    assert.deepEqual([d.done.hard, d.got.hard, d.shots.length], [57, { rune_platebody: 10 }, 0]);
+    // counted again; then the same screenshot once more waits, said to be counted already
+    await page.setInputFiles('#clue-file', [hard]);
+    await note.waitFor();
+    await page.setInputFiles('#clue-file', [hard]);
+    const shot = card.locator('.clue-shot');
+    await shot.locator('.cs-items').waitFor();
+    assert.match(flat(await shot.innerText()), /^The screenshot hard-1\.png Rune platebody Coins Lobster \(noted\) Law rune Magic longbow This screenshot is counted already: a hard casket, .+\. Its rewards fit a hard casket\. Which clue was it\? Easy Medium Hard Leave it$/);
+    assert.deepEqual(await shot.locator('[data-clue-shot-n]').evaluateAll(es => es.map(e => e.value)), ['3,456', '13', '42']);
+    assert.equal((await saved()).done.hard, 58);
+    await shot.locator('[data-clue-shot-skip]').click();
+    assert.equal(await card.locator('.clue-shot').count(), 0);
+    // another casket just like it (another screenshot): asks too
+    await page.setInputFiles('#clue-file', [clueShot('hard-2.png', [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 3456 }, { icon: 'cert_lobster', count: 13 }, { icon: 'lawrune', count: 42 }, { icon: 'magic_longbow' }], { seed: 9 })]);
+    await shot.locator('.cs-items').waitFor();
+    assert.match(flat(await shot.innerText()), /A hard casket with just these rewards is counted already \(.+\): count this one only if it's another casket\./);
+    assert.ok(await shot.locator('[data-clue-shot-add="hard"]').evaluate(b => b.classList.contains('fits')));
+    await shot.locator('[data-clue-shot-skip]').click();
+    // two at once: one with a page (counted, the page asked), one that could be easy or medium (checked)
+    const paged = clueShot('page.png', [{ icon: 'rune_kiteshield' }, { icon: 'holy_book_s_page1' }, { icon: 'coins_1000', count: 2100 }, { icon: 'magic_shortbow' }], { seed: 5 });
+    const either = clueShot('either.png', [{ icon: 'lawrune', count: 12 }, { icon: 'naturerune', count: 12 }], { seed: 7 });
+    await page.setInputFiles('#clue-file', [paged, either]);
+    await shot.locator('.cs-items').waitFor();
+    assert.equal(flat(await note.innerText()), 'Counted a hard casket and its 4 rewards. One to check below. Undo');
+    assert.match(flat(await card.locator('.cs-page').innerText()), /^Which torn page \(Saradomin\) was it\? \(a hard casket's: a book's pages look the same in a screenshot\) Page 1 Page 2 Page 3 Page 4 Leave it out$/);
+    assert.match(flat(await shot.innerText()), /^The screenshot either\.png Law rune Nature rune Not counted by itself: it could be more than one kind of clue\. Its rewards could be from an easy or a medium casket\. Which clue was it\?/);
+    assert.deepEqual(await shot.locator('.cs-add .fits').evaluateAll(bs => bs.map(b => b.dataset.clueShotAdd)), ['easy', 'medium']);
+    await card.locator('.cs-page [data-slug="holy_book_s_page3"]').click();
+    assert.equal((await saved()).got.hard.holy_book_s_page3, 1);
+    assert.equal(await card.locator('.cs-page').count(), 0);
+    // (its number changed before it's counted)
+    await shot.locator('[data-clue-shot-n="0"]').fill('14');
+    await shot.locator('[data-clue-shot-n="0"]').press('Enter');
+    await shot.locator('[data-clue-shot-add="medium"]').click();
+    assert.equal(flat(await note.innerText()), 'Counted a medium casket and its 2 rewards. Undo');
+    d = await saved();
+    assert.deepEqual([d.done, d.got.medium], [{ easy: 25, medium: 24, hard: 59 }, { lawrune: 14, naturerune: 12 }]);
+    assert.ok(await page.locator('[data-clue-rtier="medium"]').evaluate(b => b.classList.contains('on')));
+    // pasted, from another view: Rewards opens, and it's counted
+    await page.click('[data-clue-view="solve"]');
+    await pasteShot(clueShot('image.png', [{ icon: 'rune_longsword' }, { icon: 'coins_1000', count: 1500 }], { seed: 11 }));
+    await note.waitFor();
+    assert.equal(flat(await note.innerText()), 'Counted a hard casket and its 2 rewards. Undo');
+    assert.equal((await saved()).got.hard.rune_longsword, 1);
+    // a picture without a casket's rewards
+    await page.setInputFiles('#clue-file', [{ name: 'bank.png', mimeType: 'image/png', buffer: encodePng(fakeBank({ items: [{ slot: 0, icon: 'lawrune', count: 4000 }] })) }]);
+    await note.waitFor();
+    assert.match(flat(await note.innerText()), /^No casket's rewards in bank\.png: take the screenshot while the rewards show, before you close them\.$/);
+    assert.ok(await note.evaluate(m => m.classList.contains('error')));
+  } finally {
+    await page.evaluate(() => { localStorage.removeItem('lchs.clues.old_badger'); localStorage.removeItem('lchs.clueUi'); });
+  }
+});
+
+await check("clues (v3.6.1): from the clues done at the top, a screenshot always waits for you to say which kind of clue it was (none picked for you; the ones its rewards fit marked), then counts it; picked with the file button, or dropped there", async () => {
+  await page.evaluate(() => { localStorage.setItem('lchs.clues.old_badger', JSON.stringify({ done: { easy: 25, medium: 23, hard: 57 }, got: {} })); localStorage.setItem('lchs.clueUi', JSON.stringify({ view: 'solve' })); });
+  await planAs('old badger', 'Old Badger');
+  try {
+    await openMoreTab('clues');
+    await page.click('[data-clue-view="solve"]');
+    const top = page.locator('#clues-body .clue-top');
+    await page.evaluate(() => { window.showOpenFilePicker = undefined; });
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), top.locator('[data-clue-shot="top"]').click()]);
+    await chooser.setFiles([clueShot('top.png', [{ icon: 'black_platebody' }, { icon: 'coins_100', count: 150 }], { seed: 9 })]);
+    const shot = top.locator('.clue-shot');
+    await shot.locator('.cs-items').waitFor();
+    assert.match(flat(await shot.innerText()), /^The screenshot top\.png Black platebody Coins Its rewards fit an easy casket\. Which clue was it\? Easy Medium Hard Leave it$/);
+    assert.equal(await shot.locator('[data-clue-shot-n="1"]').inputValue(), '150');
+    assert.deepEqual(await shot.locator('.cs-add .fits').evaluateAll(bs => bs.map(b => b.dataset.clueShotAdd)), ['easy']);
+    assert.equal(await shot.locator('.cs-add .lead').count(), 0, 'none picked for you');
+    assert.equal((await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')))).done.easy, 25, 'not counted yet');
+    assert.ok(await page.locator('[data-clue-view="solve"]').evaluate(b => b.classList.contains('on')), 'the view stays');
+    await shot.locator('[data-clue-shot-add="easy"]').click();
+    assert.equal(flat(await top.locator('.clue-note .msg').innerText()), 'Counted an easy casket and its 2 rewards. Undo');
+    assert.equal(await page.inputValue('[data-clue-n="easy"]'), '26');
+    assert.deepEqual((await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')))).got.easy, { black_platebody: 1, coins: 150 });
+    // dropped on the counts: the same, even when it could only be one kind
+    await pasteShot(clueShot('drop.png', [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 2000 }], { seed: 13 }), 'drop', '#clues-body .clue-counts');
+    await shot.locator('.cs-items').waitFor();
+    assert.match(flat(await shot.innerText()), /^The screenshot drop\.png Rune platebody Coins Its rewards fit a hard casket\./);
+    // (said to be another kind: what isn't that kind's reward left out)
+    await shot.locator('[data-clue-shot-add="medium"]').click();
+    assert.equal(flat(await top.locator('.clue-note .msg').innerText()), "Counted a medium casket and its reward (one isn't a medium casket's: left out). Undo");
+    await top.locator('.clue-note [data-clue-undo]').click();
+    const d = await page.evaluate(() => JSON.parse(localStorage.getItem('lchs.clues.old_badger')));
+    assert.deepEqual([d.done, d.got.medium, d.shots.length], [{ easy: 26, medium: 23, hard: 57 }, {}, 1]);
+  } finally {
+    await page.evaluate(() => { delete window.showOpenFilePicker; localStorage.removeItem('lchs.clues.old_badger'); localStorage.removeItem('lchs.clueUi'); });
+  }
+});
+
 await check('settings shows totals and makes a backup that restores', async () => {
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
@@ -6459,7 +6622,7 @@ await check('settings shows totals and makes a backup that restores', async () =
   assert.ok(Object.keys(backup).some(k => k.startsWith('lchs.snap.demo_main')));
   assert.ok(backup['lchs.goals.demo_main'] && backup['lchs.bank.demo_main'], 'goals and bank are stored');
   // (v3.6) an account's quests and clues go with it
-  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['cook', 'dragon'] })); localStorage.setItem('lchs.clues.demo_main', JSON.stringify({ done: { easy: 1, medium: 2, hard: 3 }, got: { hard: { magic_longbow: 1 } } })); });
+  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['cook', 'dragon'], steps: { hero: [0, 2] } })); localStorage.setItem('lchs.clues.demo_main', JSON.stringify({ done: { easy: 1, medium: 2, hard: 3 }, got: { hard: { magic_longbow: 1 } }, shots: [{ w: 'a1', i: '765x503:b2', t: 'hard', at: 1 }] })); });
   if (await page.locator('#restore-box').isHidden()) await page.click('#backup-restore-toggle');
   const exported = await page.evaluate(async () => (await import('./store.js')).exportBackup());
   const parsed = JSON.parse(exported);
@@ -6467,13 +6630,14 @@ await check('settings shows totals and makes a backup that restores', async () =
   assert.equal(parsed.data['bank.demo_main']?.items?.ranarr_weed, 1000, 'the bank is in the backup');
   assert.equal(parsed.data.prices, undefined, 'the price cache is left out');
   assert.deepEqual([parsed.data['quests.demo_main']?.done, parsed.data['clues.demo_main']?.done?.hard], [['cook', 'dragon'], 3], 'quests and clues are in the backup');
-  // (restored where they're gone: the quests ticked in either kept, the clues as they were)
-  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['sheep'] })); localStorage.removeItem('lchs.clues.demo_main'); });
+  // (restored where they're gone: the quests ticked in either kept, (v3.6.1) and their steps, the clues as they were)
+  await page.evaluate(() => { localStorage.setItem('lchs.quests.demo_main', JSON.stringify({ done: ['sheep'], steps: { hero: [1] } })); localStorage.removeItem('lchs.clues.demo_main'); });
   await page.fill('#restore-text', exported);
   await page.click('#restore-go');
   assert.match(await text('#settings-msg'), /Restored/);
   assert.match(flat(await text('#settings-msg')), /1 account's quests and 1 account's clues added/);
   assert.deepEqual(await page.evaluate(() => [JSON.parse(localStorage.getItem('lchs.quests.demo_main')).done.sort(), JSON.parse(localStorage.getItem('lchs.clues.demo_main')).got.hard]), [['cook', 'dragon', 'sheep'], { magic_longbow: 1 }]);
+  assert.deepEqual(await page.evaluate(() => [JSON.parse(localStorage.getItem('lchs.quests.demo_main')).steps, JSON.parse(localStorage.getItem('lchs.clues.demo_main')).shots.length]), [{ hero: [0, 1, 2] }, 1]);
   await page.evaluate(() => { localStorage.removeItem('lchs.quests.demo_main'); localStorage.removeItem('lchs.clues.demo_main'); });
 });
 await page.screenshot({ path: `${SHOTS}/7-settings.png` });

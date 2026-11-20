@@ -95,7 +95,7 @@ export function fakeInventory({ items, bank = null, width = 765, height = 503, x
   return img;
 }
 
-function drawString(text, x, y, colour, set, clip) {
+export function drawString(text, x, y, colour, set, clip) {
   y -= STACK_FONT.height;
   for (const ch of text) {
     const g = STACK_FONT.glyphs[ch];
