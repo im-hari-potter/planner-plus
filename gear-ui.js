@@ -54,7 +54,8 @@ const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 const aWord = name => (/^[aeiou]/i.test(name) ? 'an' : 'a');
 const listText = (list, and = 'and') => (list.length > 1 ? `${list.slice(0, -1).join(', ')} ${and} ${list[list.length - 1]}` : list[0] || '');
 // (v3.5.1) The quests items wait for (the server's levelrequire_…_quest checks, as build-gear.mjs reads them),
-// A to Z, each with what: what the Quests done tick counts as done. [[quest, [item names]]]
+// A to Z, each with what. [[quest, [item names]]] (v3.6.2) Each counts as done when it's ticked on the Quests tab
+// (ITEM_QUEST_KEYS: its key there).
 export const QUEST_ITEMS = (() => {
   const by = new Map();
   for (const [id, e] of Object.entries(EQUIPMENT)) {
@@ -64,6 +65,7 @@ export const QUEST_ITEMS = (() => {
   }
   return [...by].sort(([a], [b]) => a.replace(/^The /, '').localeCompare(b.replace(/^The /, ''))).map(([q, names]) => [q, [...names].sort()]);
 })();
+export const ITEM_QUEST_KEYS = { 'Dragon Slayer': 'dragon', 'The Fremennik Trials': 'viking', "Heroes' Quest": 'hero', "Legends' Quest": 'legends', 'Lost City': 'zanaris', Regicide: 'regicide' };
 // Layouts saved: so many a setup, names this long
 const MAX_SAVED = 12, MAX_NAME = 24;
 
@@ -150,7 +152,8 @@ export function createGearUi(P) {
       kind: KINDS.includes(raw.kind) ? raw.kind : 'melee',
       setups: Object.fromEntries(KINDS.map(k => [k, cleanSetup(raw.setups?.[k])])),
       levels: {},
-      quests: raw.quests !== false,
+      // (v3.6.2: the quests items wait for that are ticked done on the Quests tab; not kept here)
+      quests: questsDone(),
       vs: raw.vs === 'player' ? 'player' : 'npc',
       npc: MONSTER_BY_ID.has(raw.npc) ? raw.npc : null,
       pvp: {
@@ -166,7 +169,12 @@ export function createGearUi(P) {
     if (!g.migrated) migrate(g);
     return g;
   }
-  const saveGear = g => store.set(storeKey(), g);
+  const saveGear = ({ quests, ...g }) => store.set(storeKey(), g);
+  function questsDone() {
+    const v = store.get('quests.' + P.safe(), null);
+    const done = new Set(Array.isArray(v?.done) ? v.done : []);
+    return new Set(QUEST_ITEMS.map(([q]) => q).filter(q => done.has(ITEM_QUEST_KEYS[q])));
+  }
   function update(fn) {
     const g = gearState();
     if (!g) return null;
@@ -322,8 +330,10 @@ export function createGearUi(P) {
     const best = `<span class="gear-best"><span class="c-muted small-note">Best from my bank:</span>
         <button type="button" class="btn small" data-gear-best="damage" title="${esc(`Wear what in your bank does the most damage a second${g.vs === 'npc' && g.npc ? ` to ${MONSTER_BY_ID.get(g.npc).name}` : ''}, that your levels can wield`)}">For dps</button>
         <button type="button" class="btn small" data-gear-best="tank" title="${esc(`Wear what in your bank takes the least damage${g.vs === 'npc' && g.npc ? ` from ${MONSTER_BY_ID.get(g.npc).name}` : ''} (then does the most), that your levels can wield`)}">For tanking</button></span>`;
-    const questTip = `The quests some items wait for (the server checks them as you wield):\n${QUEST_ITEMS.map(([q, names]) => `${q}: ${listText(names)}`).join('\n')}\nTicked, these count as done, and the items as yours to wear. Unticked, Best from my bank leaves them out and the lists mark them.`;
-    const quests = `<label class="check" title="${esc(questTip)}"><input type="checkbox" data-gear-quests="1"${g.quests ? ' checked' : ''}> Quests done</label>`;
+    // (v3.6.2) the quests items wait for, as ticked on the Quests tab
+    const qs = QUEST_ITEMS.map(([q, names]) => ({ q, names, done: g.quests.has(q) }));
+    const questTip = `The quests some items wait for (the server checks them as you wield), as ticked on the Quests tab:\n${qs.map(x => `${x.done ? '✓' : '✗'} ${x.q}: ${listText(x.names)}`).join('\n')}\nOne that isn't ticked: Best from my bank leaves its items out, and the lists mark them.`;
+    const quests = `<span class="gear-quests" title="${esc(questTip)}"><span class="c-muted small-note">Quests done:</span> <b>${qs.filter(x => x.done).length}</b> of ${qs.length} <button type="button" class="linkish small-note" data-gear-quests="1">tick them on Quests</button></span>`;
     const undo = U.undo && U.undo.kind === g.kind ? ` <button type="button" class="linkish" data-gear-undo="1">${U.undo.best ? 'Back to what you had' : 'Undo'}</button>` : '';
     const note = U.note && U.note.kind === g.kind ? `<div class="msg ${U.note.ok ? 'ok' : ''} gear-note">${U.note.html}${undo}</div>` : '';
     return `<div class="card gear-card">
@@ -371,10 +381,10 @@ export function createGearUi(P) {
     const levels = full.levels;
     const stats = C.playerStats(full);
     const bonus = C.bonusesOf(st.slots);
-    const warn = warnings(g, kind, st, full, stats);
+    const warn = warnings(g, kind, st, full, stats, side);
     return `<div class="gear-body">
       <div class="gear-left">
-        ${wornHtml(st.slots, side, levels, g.quests)}
+        ${wornHtml(st.slots, side, levels, side === 'them' ? true : g.quests)}
         <div class="c-faint small-note gear-hint">${U.pick?.side === side ? `Pick what to wear on your ${SLOT_NAME[U.pick.slot].toLowerCase()}.` : 'Click a slot to wear something.'}</div>
       </div>
       <div class="gear-right">${U.pick?.side === side ? pickerHtml(g, side, kind, st, levels) : `
@@ -402,7 +412,7 @@ export function createGearUi(P) {
     const slot = U.pick.slot;
     const have = P.bank().items || {};
     const rows = Object.entries(EQUIPMENT).filter(([id, e]) => e.s === slot && ITEMS[id] && (slot !== 'weapon' || fitsKind(kind, id)))
-      .map(([id, e]) => ({ id, e, n: have[id] || 0, bad: C.wieldProblem(id, levels, { quests: g.quests }), score: relevance(kind, e) }))
+      .map(([id, e]) => ({ id, e, n: have[id] || 0, bad: C.wieldProblem(id, levels, { quests: side === 'them' ? true : g.quests }), score: relevance(kind, e) }))
       .sort((a, b) => (!a.bad - !b.bad) * -1 || b.score - a.score || nameOf(a.id).localeCompare(nameOf(b.id)));
     const line = r => `<button type="button" class="gear-opt${r.id === st.slots[slot] ? ' on' : ''}${r.bad ? ' bad' : ''}" data-gear-wear="${esc(r.id)}" data-find="${esc(nameOf(r.id).toLowerCase())}" title="${esc(`${nameOf(r.id)}\n${bonusText(r.id)}${r.bad ? `\nNeeds ${needText(r.bad)}` : ''}${r.n ? `\nYou have ${fmt(r.n)}` : ''}`)}">
         ${icon(r.id, true)}<span class="go-name">${itemName(r.id)}</span><span class="go-b">${esc(bonusLine(kind, r.e))}</span>${r.bad ? `<span class="go-need">${esc(needText(r.bad))}</span>` : ''}${r.n ? `<span class="go-n">${fmt(r.n)} in bank</span>` : ''}</button>`;
@@ -485,10 +495,11 @@ export function createGearUi(P) {
   }
 
   // What's wrong with a setup, said plainly: what you can't wield yet, ammo a weapon won't fire, a spell you can't cast
-  function warnings(g, kind, st, full, stats) {
+  function warnings(g, kind, st, full, stats, side) {
     const out = [];
     for (const s of C.SLOTS) {
-      const id = st.slots[s], bad = id && C.wieldProblem(id, full.levels, { quests: g.quests });
+      // (another player's: the quests they wear things for are theirs, done)
+      const id = st.slots[s], bad = id && C.wieldProblem(id, full.levels, { quests: side === 'them' ? true : g.quests });
       if (bad) out.push(`${esc(nameOf(id))} needs ${esc(needText(bad, full.levels))} to wear: it's counted as if you could.`);
     }
     const w = EQUIPMENT[st.slots.weapon];
@@ -794,6 +805,8 @@ export function createGearUi(P) {
       return true;
     }
     if (!t.closest('#view-gear')) return false;
+    // (v3.6.2) the quests items wait for are ticked on the Quests tab
+    if (t.closest('[data-gear-quests]')) { P.goTab('quests'); window.scrollTo({ top: 0 }); return true; }
     const load = t.closest('[data-gear-load]');
     if (load) {
       const g = gearState(), kind = g.kind, x = g.saved[kind][Number(load.dataset.gearLoad)];
@@ -887,7 +900,6 @@ export function createGearUi(P) {
     const t = e.target, d = t.dataset;
     if (!t.closest('#view-gear')) return false;
     const st = g => (d.side === 'them' || d.gearMode === 'them' || d.gearSpell === 'them' || d.gearCharge === 'them' || d.gearAntifire === 'them' ? g.pvp.setup : g.setups[g.kind]);
-    if (d.gearQuests) { update(g => { g.quests = t.checked; }); P.redraw(); return true; }
     if (d.gearMode) { update(g => { const s = st(g); if (s) s.mode = Number(t.value) || 0; }); P.redraw(); return true; }
     if (d.gearSpell != null && t.tagName === 'SELECT') { update(g => { const s = st(g); if (s) s.spell = C.SPELL.has(t.value) ? t.value : null; }); P.redraw(); return true; }
     if (d.gearCharge) { update(g => { const s = st(g); if (s) s.charge = t.checked; }); P.redraw(); return true; }

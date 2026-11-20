@@ -3,6 +3,7 @@
 // rewards a casket gives (the server's tables) against what you've had, and a solver for the puzzle box.
 // (v3.6.1) A casket counted from a screenshot of its rewards (cluereader.js): from the counts at the top you say
 // which kind of clue it was; from Rewards it's counted by itself when its rewards can only be from one kind.
+// (v3.6.2) And a puzzle box's puzzle read from a screenshot, and solved from there.
 import { CLUES, CLUE_MAPS, CLUE_PICS, PUZZLES, CLUE_READ, CLUE_REWARDS } from './cluedata.js';
 import { ITEMS } from './gamedata.js';
 import { luck, dryChance } from './loot.js';
@@ -29,7 +30,8 @@ export function createClueUi(P) {
     kind: KIND_GROUPS.includes(ui.kind) ? ui.kind : null,
     rtier: TIERS.includes(ui.rtier) ? ui.rtier : 'hard',
     find: '', open: null,
-    pz: { letter: LETTERS.includes(ui.pz) ? ui.pz : 'b', cells: Array(25).fill(null), moves: null, step: 0, busy: false, msg: '' },
+    // (v3.6.2 note: what reading a screenshot of it found; unsure: slots it couldn't be sure of)
+    pz: { letter: LETTERS.includes(ui.pz) ? ui.pz : 'b', cells: Array(25).fill(null), moves: null, step: 0, busy: false, msg: '', note: null, unsure: [], reading: false },
     undo: null,
     // (v3.6.1) screenshots, each place's own (top: from the counts; bottom: Rewards): being read ({ busy }) or
     // waiting to be checked ({ queue }); what was done with them (note), pages that look alike to say which
@@ -212,7 +214,9 @@ export function createClueUi(P) {
   function puzzleHtml() {
     const pz = U.pz, L = pz.letter;
     const givers = l => [...new Set(CLUES.filter(c => c.puzzle === l).map(c => c.npc))];
-    const pick = `<div class="pz-pick">${LETTERS.map(l => `<button type="button" class="pz-pick-btn${l === L ? ' on' : ''}" data-pz-letter="${l}" aria-pressed="${l === L}" title="${esc(`From ${givers(l).join(', ')}`)}">${solvedPic(l, 0.36)}<span class="c-faint small-note">${esc(givers(l).join(', '))}</span></button>`).join('')}</div>`;
+    const pick = `<div class="pz-pick">${LETTERS.map(l => `<button type="button" class="pz-pick-btn${l === L ? ' on' : ''}" data-pz-letter="${l}" aria-pressed="${l === L}" title="${esc(`From ${givers(l).join(', ')}`)}">${solvedPic(l, 0.36)}<span class="c-faint small-note">${esc(givers(l).join(', '))}</span></button>`).join('')}</div>
+      <div class="bar wrap pz-shot-bar"><button type="button" class="btn small" data-clue-shot="puzzle"${pz.reading ? ' disabled' : ''}>${pz.reading ? 'Reading…' : 'Read a screenshot'}</button><span class="c-faint small-note">of the puzzle as the game shows it: its picture and pieces are read, and it's solved from there. Or drop or paste one here.</span></div>
+      ${pz.note ? `<div class="msg ${pz.note.error ? 'error' : 'ok'} pz-note">${pz.note.html}</div>` : ''}`;
     if (pz.moves) {
       const state = playTo(pz.step);
       const next = pz.moves[pz.step];
@@ -228,7 +232,8 @@ export function createClueUi(P) {
     }
     const cells = pz.cells, placed = new Set(cells.filter(v => v != null));
     const full = cells.every(v => v != null);
-    const board = `<div class="pz-board" role="grid" aria-label="Your puzzle as it is">${cells.map((p, at) => `<button type="button" class="pz-cell${p == null ? ' pz-empty' : ''}" data-pz-cell="${at}" title="${p == null ? 'Empty: click a piece below' : 'Click to take it back off'}">${p == null ? '' : pieceHtml(L, p)}</button>`).join('')}</div>`;
+    const unsure = new Set(pz.unsure || []);
+    const board = `<div class="pz-board" role="grid" aria-label="Your puzzle as it is">${cells.map((p, at) => `<button type="button" class="pz-cell${p == null ? ' pz-empty' : ''}${unsure.has(at) ? ' pz-unsure' : ''}" data-pz-cell="${at}" title="${p == null ? 'Empty: click a piece below' : `${unsure.has(at) ? 'Read from the screenshot, but not for sure: check it. ' : ''}Click to take it back off`}">${p == null ? '' : pieceHtml(L, p)}</button>`).join('')}</div>`;
     const palette = `<div class="pz-palette">${SOLVED.map(p => `<button type="button" class="pz-cell${placed.has(p) ? ' used' : ''}" data-pz-put="${p}"${placed.has(p) ? ' disabled' : ''} title="${p ? `Piece ${p}` : 'The gap'}">${pieceHtml(L, p)}</button>`).join('')}</div>`;
     const bad = full && !solvable(cells);
     return `<div class="card pz">${pick}
@@ -245,10 +250,10 @@ export function createClueUi(P) {
   }
   function puzzleClick(t) {
     const pz = U.pz, d = t.dataset;
-    if (d.pzLetter) { if (pz.letter !== d.pzLetter) { pz.letter = d.pzLetter; saveUi(); } return true; }
-    if (d.pzPut != null) { const at = pz.cells.indexOf(null); if (at >= 0) pz.cells[at] = Number(d.pzPut); pz.msg = ''; return true; }
-    if (d.pzCell != null) { pz.cells[Number(d.pzCell)] = null; pz.msg = ''; return true; }
-    if (d.pzClear) { pz.cells = Array(25).fill(null); pz.msg = ''; return true; }
+    if (d.pzLetter) { if (pz.letter !== d.pzLetter) { pz.letter = d.pzLetter; pz.note = null; saveUi(); } return true; }
+    if (d.pzPut != null) { const at = pz.cells.indexOf(null); if (at >= 0) { pz.cells[at] = Number(d.pzPut); pz.unsure = pz.unsure.filter(x => x !== at); } pz.msg = ''; return true; }
+    if (d.pzCell != null) { pz.cells[Number(d.pzCell)] = null; pz.unsure = pz.unsure.filter(x => x !== Number(d.pzCell)); pz.msg = ''; return true; }
+    if (d.pzClear) { pz.cells = Array(25).fill(null); pz.unsure = []; pz.note = null; pz.msg = ''; return true; }
     if (d.pzEdit) { pz.moves = null; pz.step = 0; return true; }
     if (d.pzStep) { pz.step = Math.max(0, Math.min(pz.moves.length, pz.step + Number(d.pzStep))); return true; }
     if (d.pzPlay != null) { if (Number(d.pzPlay) === pz.moves[pz.step]) pz.step++; return true; }
@@ -269,25 +274,77 @@ export function createClueUi(P) {
 
   // ── Screenshots of a casket's rewards (v3.6.1) ──
   // The reader (cluereader.js, the rewards' icons and the stack numbers' font) loads the first time it's used.
-  let reader = null;
+  let reader = null, puzzleReader = null;
+  const loadSheet = src => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(P.pixelsOf(img, img.naturalWidth, img.naturalHeight));
+    img.onerror = () => reject(new Error('The icons for reading screenshots didn\'t load. Reload the page and try again.'));
+    img.src = src;
+  });
   async function getReader() {
     if (reader) return reader;
     const [R, B, D] = await Promise.all([import('./cluereader.js'), import('./bankread.js'), import('./bankread-data.js')]);
-    const atlas = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(P.pixelsOf(img, img.naturalWidth, img.naturalHeight));
-      img.onerror = () => reject(new Error('The icons for reading screenshots didn\'t load. Reload the page and try again.'));
-      img.src = CLUE_READ.sheet;
-    });
+    const atlas = await loadSheet(CLUE_READ.sheet);
     reader = { R, icons: B.prepareIcons(atlas, CLUE_READ.icons, CLUE_READ.perRow), font: D.STACK_FONT };
     return reader;
+  }
+  // (v3.6.2) the puzzles' pieces, as icons
+  async function getPuzzleReader() {
+    if (puzzleReader) return puzzleReader;
+    const [R, B] = await Promise.all([import('./cluereader.js'), import('./bankread.js')]);
+    const atlas = await loadSheet(PUZZLES.sheet);
+    puzzleReader = { R, icons: B.prepareIcons(atlas, R.PUZZLE_PIECES, 24) };
+    return puzzleReader;
   }
   // The screenshot button: the newer file picker where there is one, else the plain file button (whose change
   // event brings the files to onFiles)
   async function pick(from) {
     U.pickFrom = from;
     const files = await P.pickFiles();
-    if (Array.isArray(files) && files.length) readFiles(files, from);
+    if (Array.isArray(files) && files.length) gotFiles(files, from);
+  }
+  // Screenshots to read: a casket's (from the top, or Rewards) or (v3.6.2) a puzzle's
+  function gotFiles(files, from) {
+    if (from === 'puzzle') readPuzzleShot(files); else readFiles(files, from === 'top' ? 'top' : 'bottom');
+  }
+  // (v3.6.2) A puzzle from a screenshot (the latest, of several): its picture and pieces, then solved. One that
+  // couldn't all be read waits for you to click in what's missing.
+  async function readPuzzleShot(files) {
+    const pz = U.pz;
+    const list = [...files].filter(f => f && (/^image\//.test(f.type) || /\.png$/i.test(f.name || ''))).sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+    if (U.view !== 'puzzle') { U.view = 'puzzle'; saveUi(); }
+    if (!list.length) { pz.note = { error: true, html: 'That isn\'t a picture. Use the PNG screenshots LostKit saves.' }; P.redraw(); return; }
+    const f = list[0], name = `<b>${esc(f.name || 'the pasted picture')}</b>`;
+    pz.reading = true;
+    pz.note = null;
+    P.redraw();
+    let r;
+    try {
+      const { R, icons } = await getPuzzleReader();
+      let img = null;
+      try { const bmp = await createImageBitmap(f); img = P.pixelsOf(bmp, bmp.width, bmp.height); bmp.close?.(); } catch { /* not a picture it can open */ }
+      r = img ? R.readPuzzle(img, icons, PUZZLES.window) : { ok: false, why: 'unreadable' };
+    } catch (e) {
+      r = { ok: false, why: 'error', message: e?.message || String(e) };
+    }
+    pz.reading = false;
+    if (!r.ok) {
+      pz.note = { error: true, html: r.why === 'no-puzzle' ? `No puzzle in ${name}: take the screenshot while the puzzle shows.` : r.why === 'unreadable' ? `Couldn't open ${name}.` : esc(r.message) };
+      P.redraw();
+      return;
+    }
+    Object.assign(pz, { letter: r.letter, cells: r.cells, unsure: r.unsure, moves: null, step: 0, msg: '' });
+    saveUi();
+    const missing = r.cells.filter(v => v == null).length;
+    const check = r.unsure.length ? ` ${r.unsure.length === 1 ? 'One piece was' : `${r.unsure.length} pieces were`} hard to be sure of: if the arrows don't match the game, change the pieces (marked).` : '';
+    if (missing) pz.note = { html: `Read from ${name}: ${missing === 1 ? 'one slot' : `${missing} slots`} couldn't be read. Click in the piece${missing === 1 ? ' it holds' : 's they hold'} (or the gap), then Solve.` };
+    else {
+      const moves = solve(r.cells);
+      if (!moves) pz.note = { error: true, html: `Read from ${name}, but it can't be solved as read: check the pieces.` };
+      else if (!moves.length) pz.note = { html: `Read from ${name}: it's solved already.` };
+      else { Object.assign(pz, { start: r.cells.slice(), moves, step: 0 }); pz.note = { html: `Read from ${name}: ${moves.length} moves to solve it.${check}` }; }
+    }
+    P.redraw();
   }
   // Each screenshot read: { name, ok, why } or { name, ok, items, unknown, tiers, w, i, pick: { slot: slug } }.
   // From the top, every one waits for you to say which clue it was; from Rewards, one whose rewards can only be
@@ -579,8 +636,10 @@ export function createClueUi(P) {
     },
     // (v3.6.1) screenshots from the plain file button, or dropped (on the counts at the top: you say which clue)
     // or pasted (as if on Rewards)
-    onFiles(files) { readFiles(files, U.pickFrom); },
-    readShots(files, from) { readFiles(files, from === 'top' ? 'top' : 'bottom'); },
+    onFiles(files) { gotFiles(files, U.pickFrom); },
+    // (dropped on the counts at the top: a casket you say the kind of; elsewhere, (v3.6.2) on the puzzle box a
+    // puzzle, else a casket on Rewards)
+    readShots(files, from) { gotFiles(files, from === 'top' ? 'top' : U.view === 'puzzle' ? 'puzzle' : 'bottom'); },
     // (for the tests and the README's pictures)
     _state: () => U,
   };

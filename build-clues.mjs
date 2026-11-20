@@ -367,6 +367,12 @@ export async function buildClues(content, lhq) {
   });
   const puzzleSolved = trail('scripts/trail_puzzle.rs2');
   for (const letter of ['b', 'c', 'd']) need(new RegExp(`inv_getobj\\(trail_puzzleinv, 23\\) = trail_slidingpuzzle${letter}24`).test(puzzleSolved), `the ${letter} puzzle is solved differently now`);
+  // (v3.6.2) The puzzle as it shows (trail_puzzle.if): its pieces in a grid of 5 by 5 slots of 32 pixels, 5 apart,
+  // at 171, 54 in the main view (the main view is drawn at 4, 4 on the game canvas); the gap is an empty slot
+  const puzzleIf = parseConfig(trail('interfaces/trail_puzzle.if')).get('com_2');
+  need(puzzleIf?.type === 'inv' && puzzleIf.width === '5' && puzzleIf.height === '5' && puzzleIf.margin === '5,5', 'the puzzle\'s grid reads differently now');
+  need(/inv_transmit\(trail_puzzleinv, trail_puzzle:com_2\);[\s\S]*if_openmain\(trail_puzzle\);/.test(puzzleSolved), 'the puzzle opens differently now');
+  const puzzleWindow = { cols: 5, rows: 5, pitchX: 37, pitchY: 37, x: 4 + Number(puzzleIf.x), y: 4 + Number(puzzleIf.y) };
 
   // ── (v3.6.1) Reading a casket's screenshot: the reward window, and every reward's icon ──
   // The window (trail_reward.if): its items in a grid of 3 by 2 slots of 32 pixels, side by side (no margin), at 239, 89
@@ -419,7 +425,7 @@ export async function buildClues(content, lhq) {
     clues: out, rewards, odd,
     maps: { sheet: maps.sheet, w: maps.cell.w, h: maps.cell.h, perRow: maps.perRow, count: maps.index.size },
     pics: { sheet: await sharp(picSheet, { raw: { width: picRow * PIC, height: picRows * PIC, channels: 4 } }).webp({ quality: 85, alphaQuality: 100, effort: 6 }).toBuffer(), size: PIC, perRow: picRow },
-    puzzles: { sheet: await sharp(pieces, { raw: { width: 24 * SIZE, height: 3 * SIZE, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer(), size: SIZE },
+    puzzles: { sheet: await sharp(pieces, { raw: { width: 24 * SIZE, height: 3 * SIZE, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer(), size: SIZE, window: puzzleWindow },
     read: { window, entries, perRow: ICON_ROW, noIcon, sheet: await sharp(iconSheet, { raw: { width: ICON_ROW * SIZE, height: iconRows * SIZE, channels: 4 } }).png({ compressionLevel: 9, palette: false }).toBuffer() },
   };
 }
@@ -440,7 +446,7 @@ if (process.argv[1]?.endsWith('build-clues.mjs')) {
 export const CLUE_REWARDS = ${JSON.stringify(b.rewards)};
 export const CLUE_MAPS = ${JSON.stringify({ sheet: await stamped('cluemaps.webp', b.maps.sheet), w: b.maps.w, h: b.maps.h, perRow: b.maps.perRow })};
 export const CLUE_PICS = ${JSON.stringify({ sheet: await stamped('cluepics.webp', b.pics.sheet), size: b.pics.size, perRow: b.pics.perRow })};
-export const PUZZLES = ${JSON.stringify({ sheet: await stamped('puzzles.png', b.puzzles.sheet), size: b.puzzles.size })};
+export const PUZZLES = ${JSON.stringify({ sheet: await stamped('puzzles.png', b.puzzles.sheet), size: b.puzzles.size, window: b.puzzles.window })};
 // (v3.6.1) Reading a casket's screenshot: where the reward window's grid is on the game canvas, and every reward's
 // icon as it's drawn there (clueicons.png: of is the reward it is, noted a note of it; also, rewards that look the same)
 export const CLUE_READ = ${JSON.stringify({ window: b.read.window, sheet: await stamped('clueicons.png', b.read.sheet), perRow: b.read.perRow, icons: b.read.entries })};

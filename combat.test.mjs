@@ -272,3 +272,21 @@ test("the DPS tab's Quests done tick (v3.5.1): every quest the server's wield ch
   // (no dragon scimitar in this version: Monkey Madness came later)
   assert.ok(!QUEST_ITEMS.some(([q, names]) => /Monkey/.test(q) || names.some(n => /scimitar/i.test(n))));
 });
+
+test("(v3.6.2) the DPS tab's quests follow the Quests tab: each quest items wait for is one of its quests; one done, its items can be worn", async () => {
+  const { QUEST_ITEMS, ITEM_QUEST_KEYS } = await import('./gear-ui.js');
+  const { QUEST_BY_KEY } = await import('./quest-ui.js');
+  for (const [q] of QUEST_ITEMS) assert.ok(QUEST_BY_KEY.has(ITEM_QUEST_KEYS[q]), `${q}: no quest ${ITEM_QUEST_KEYS[q]}`);
+  assert.deepEqual(QUEST_ITEMS.map(([q]) => QUEST_BY_KEY.get(ITEM_QUEST_KEYS[q]).name), ['Dragon Slayer', 'The Fremennik Trials', "Hero's Quest", 'Legends Quest', 'Lost City', 'Regicide']);
+  // which are done: a set of them
+  const lv = { attack: 60, defence: 60 };
+  assert.equal(C.wieldProblem('dragon_longsword', lv, { quests: new Set(['Lost City']) }), null);
+  assert.deepEqual(C.wieldProblem('dragon_longsword', lv, { quests: new Set(['Dragon Slayer']) }), { short: {}, quest: 'Lost City' });
+  assert.deepEqual(C.wieldProblem('rune_platebody', lv, { quests: new Set() }), { short: {}, quest: 'Dragon Slayer' });
+  assert.equal(C.wieldProblem('rune_platebody', lv, { quests: true }), null);
+  // Best from my bank: the dragon longsword only with Lost City done
+  const items = { dragon_longsword: 1, rune_longsword: 1 };
+  const levels = { attack: 60, strength: 60, defence: 60, hitpoints: 60, ranged: 1, magic: 1, prayer: 1 };
+  assert.equal(C.bestFromBank({ kind: 'melee', levels, items, quests: new Set(['Lost City']) }).slots.weapon, 'dragon_longsword');
+  assert.equal(C.bestFromBank({ kind: 'melee', levels, items, quests: new Set(['Dragon Slayer']) }).slots.weapon, 'rune_longsword');
+});

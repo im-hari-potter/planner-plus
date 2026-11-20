@@ -267,3 +267,48 @@ test('the same screenshot hashed the same; another casket with the same rewards:
   assert.notEqual(a.hash, readIt(fakeReward({ ...opts, items: [{ icon: 'rune_platebody' }, { icon: 'coins_1000', count: 2001 }] })).r.hash);
   assert.match(imageHash({ width: 2, height: 1, data: new Uint8Array(8) }), /^2x1:\w+$/);
 });
+
+// ── (v3.6.2) A puzzle box's puzzle from a screenshot ──
+import { readPuzzle, PUZZLE_PIECES, assign } from './cluereader.js';
+import { fakePuzzle, puzzleAtlas } from './cluefake.mjs';
+import { PUZZLES } from './cluedata.js';
+
+const pieceIcons = prepareIcons(puzzleAtlas, PUZZLE_PIECES, 24);
+const shuffled = (seed, n = 101) => {
+  let st = SOLVED.slice();
+  const rnd = k => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % k; };
+  for (let k = 0; k < n; k++) { const gap = st.indexOf(0); const nb = [gap - 5, gap + 5, gap % 5 ? gap - 1 : -1, gap % 5 < 4 ? gap + 1 : -1].filter(j => j >= 0 && j < 25); st = slide(st, nb[rnd(nb.length)]); }
+  return st;
+};
+
+test("a puzzle box's puzzle read from a screenshot: the server's grid, its picture, every piece and the gap, darker or cut down too", () => {
+  // trail_puzzle.if: 5 by 5 slots of 32 pixels, 5 apart, at 171, 54 in the main view (drawn at 4, 4)
+  assert.deepEqual(PUZZLES.window, { cols: 5, rows: 5, pitchX: 37, pitchY: 37, x: 175, y: 58 });
+  for (const [letter, seed] of [['b', 3], ['c', 11], ['d', 29]]) {
+    const cells = shuffled(seed);
+    for (const opts of [{}, { brightness: 0.8, seed: 2 }, { x: 60, y: 40, width: 600, height: 400, inventory: INV }]) {
+      const r = readPuzzle(fakePuzzle({ letter, cells, ...opts }), pieceIcons, PUZZLES.window);
+      assert.deepEqual([r.ok, r.letter, r.cells, r.unsure], [true, letter, cells, []], `${letter} ${JSON.stringify(opts)}`);
+    }
+  }
+  // none: a casket's rewards, or nothing
+  assert.deepEqual(readPuzzle(fakeReward({ items: [{ icon: 'rune_platebody' }], inventory: INV }), pieceIcons, PUZZLES.window), { ok: false, why: 'no-puzzle' });
+});
+
+test("a puzzle piece that can't be seen: the one left over goes where the puzzle can still be solved, else it's left to you", () => {
+  let inferred = 0, left = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const cells = shuffled(seed), hidden = cells.findIndex(v => v === 7);
+    const r = readPuzzle(fakePuzzle({ letter: 'c', cells, cover: [hidden] }), pieceIcons, PUZZLES.window);
+    if (r.cells.every(v => v != null)) { inferred++; assert.deepEqual([r.cells, r.unsure], [cells, [hidden]]); assert.ok(solvable(r.cells)); }
+    else { left++; assert.deepEqual(r.cells.map((v, i) => (v == null ? i : -1)).filter(i => i >= 0).sort((a, b) => a - b), [hidden, cells.indexOf(0)].sort((a, b) => a - b)); }
+  }
+  assert.ok(inferred && left, `${inferred} inferred, ${left} left to click in`);
+});
+
+test('each piece once, the cheapest way round (the Hungarian method)', () => {
+  assert.deepEqual(assign([[4, 1, 3], [2, 0, 5], [3, 2, 2]]), [1, 0, 2]);
+  assert.deepEqual(assign([[1, 2, 3], [2, 4, 6]]), [1, 0], 'fewer rows than columns');
+  // two slots both nearest one piece: the second nearest for one of them
+  assert.deepEqual(assign([[0.5, 1.9], [0.7, 4]]), [1, 0]);
+});

@@ -958,6 +958,7 @@ table.prices-t td.pcost .input.num { width: 100%; max-width: 104px; margin: 0; }
 /* Your setup: which one, Best from my bank, then your levels (a what-if in orange, a potion's boost beside it) */
 .gear-top { gap: 6px 14px; margin-top: 2px; }
 .gear-best { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.gear-quests { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 4px; font-size: 14px; }
 .gear-note { margin: 4px 0 6px; font-family: var(--small); font-size: 13px; }
 /* (v3.5.1) the DPS tab's layouts: each a chip that wears it (lit while it's what you wear), ✕ forgets it */
 .gear-saves { gap: 4px 6px; margin: 6px 0 2px; }
@@ -1175,6 +1176,10 @@ table.grid.clue-t tbody tr.is-new td { background: rgba(98, 196, 98, 0.13); }
 .pz-moves { font-size: 18px; line-height: 1.6; word-spacing: 2px; }
 .pz-moves .pz-done { color: var(--faint); }
 .pz-moves .pz-now { color: #ffff00; text-decoration: underline; }
+/* (v3.6.2) the puzzle from a screenshot */
+.pz-shot-bar { margin: 2px 0 6px; }
+.pz .pz-note { margin: 0 0 8px; }
+.pz-cell.pz-unsure { border: 2px solid var(--lose); }
 @media (max-width: 560px) { .clue-row-head { grid-template-columns: auto minmax(0, 1fr); } .cr-ans { grid-column: 1 / -1; white-space: normal; }
   .clue-solve .seg, .quest-filters .seg { flex-wrap: wrap; flex-shrink: 1; }
   table.clue-t th:nth-child(3), table.clue-t td:nth-child(3) { display: none; }

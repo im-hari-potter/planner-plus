@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright'); // resolved from NODE_PATH / global install
 import assert from 'node:assert/strict';
 import { fakeBank, fakeInventory } from './bankfake.mjs';
-import { fakeReward } from './cluefake.mjs';
+import { fakeReward, fakePuzzle } from './cluefake.mjs';
 import { encodePng } from './testpng.mjs';
 // (the addresses of the icon sheets this build names, and the XP table, to check what the page shows)
 import { ICON_SHEET, ITEMS } from './gamedata.js';
@@ -4911,7 +4911,8 @@ await check("goals: every skill's table has a tick box, Chop, Mine, Catch, Steal
 
 await check("ranged: a Ranged goal's plan counts its ammo, shot with the DPS tab's Ranged setup (v3.5; with nothing there to shoot, the best your level can use, as it started in v3.4): each monster's shots and what's fired, lost and costs, by the server's sums; what you can't wield, and arrows a bow can't fire, said; a Shots column (v3.4; v3.4.1: the tip one short line, the server's rolls in its tooltip)", async () => {
   await planAs('old badger', 'Old Badger');
-  await page.evaluate(() => localStorage.removeItem('lchs.gear.old_badger'));
+  // (v3.6.2: the quests items wait for, a green dragonhide body's Dragon Slayer among them, ticked on the Quests tab)
+  await page.evaluate(() => { localStorage.removeItem('lchs.gear.old_badger'); localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['dragon', 'viking', 'hero', 'legends', 'zanaris', 'regicide'] })); });
   // Old Badger: Ranged 55 (166,736 XP); a goal of 60 on moss giants (60 hitpoints, Defence 30, no ranged defence: 240 XP a kill)
   await addGoal('ranged', 60);
   const card = goalCard('Ranged');
@@ -5768,7 +5769,8 @@ const attacks = n => `${n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toF
 
 await check("gear (v3.5): a tab after Prices with three setups, at your levels from the hiscores (one typed in is a what-if); what you wear as the Worn Equipment screen has it, picked from a list with your bank's first and what you can't wield yet marked; a two-handed weapon and a shield; the bonuses as the server adds them up; prayers and a potion's boost; kept for each account", async () => {
   await planAs('old badger', 'Old Badger');
-  await page.evaluate(b => { localStorage.removeItem('lchs.gear.old_badger'); localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: b, updated: Date.now() })); }, GEAR_BANK);
+  // (v3.6.2: the quests items wait for are ticked on the Quests tab: all of them, for the checks till the one that unticks one)
+  await page.evaluate(b => { localStorage.removeItem('lchs.gear.old_badger'); localStorage.setItem('lchs.bank.old_badger', JSON.stringify({ items: b, updated: Date.now() })); localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['dragon', 'viking', 'hero', 'legends', 'zanaris', 'regicide'] })); }, GEAR_BANK);
   await page.click('.tab[data-tab="gear"]');
   await page.waitForSelector('#view-gear:not([hidden]) .gear-worn');
   assert.deepEqual(await page.locator('#gear-body [data-gear-kind][data-side="you"]').allInnerTexts(), ['Melee', 'Ranged', 'Magic']);
@@ -5948,12 +5950,14 @@ await check("gear (v3.5): Best from my bank, for dps or for tanking (v3.5.1: For
   assert.deepEqual(g.setups.melee.slots, want.slots);
   assert.deepEqual([want.slots.body, want.slots.shield, want.slots.head], ['rune_platebody', 'rune_kiteshield', 'rune_full_helm']);
   assert.match(await page.locator('#gear-body [data-gear-mode="you"] option:checked').innerText(), /defensive/);
-  // Dragon Slayer not done: no rune platebody
-  await page.uncheck('#gear-body [data-gear-quests]');
+  // Dragon Slayer not done (v3.6.2: not ticked on the Quests tab): no rune platebody
+  await page.evaluate(() => localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['viking', 'hero', 'legends', 'zanaris', 'regicide'] })));
   await page.click('#gear-body [data-gear-best="tank"]');
   assert.equal((await gearSaved('old_badger')).setups.melee.slots.body, undefined);
-  assert.deepEqual((await gearSaved('old_badger')).setups.melee.slots, best('melee', 'tank', false).slots);
-  await page.check('#gear-body [data-gear-quests]');
+  assert.deepEqual((await gearSaved('old_badger')).setups.melee.slots, best('melee', 'tank', new Set(["The Fremennik Trials", "Heroes' Quest", "Legends' Quest", 'Lost City', 'Regicide'])).slots);
+  assert.equal(flat(await page.locator('#gear-body .gear-quests').innerText()), 'Quests done: 5 of 6 tick them on Quests');
+  assert.equal((await gearSaved('old_badger')).quests, undefined, 'not kept with the gear');
+  await page.evaluate(() => localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['dragon', 'viking', 'hero', 'legends', 'zanaris', 'regicide'] })));
   await page.click('#gear-body [data-gear-best="damage"]');
   // ranged: a magic shortbow (Ranged 50) and rune arrows; magic: the staff of fire, its spell the strongest Magic 50 casts
   await page.click('#gear-body [data-gear-kind="ranged"][data-side="you"]');
@@ -6045,13 +6049,25 @@ await check("gear (v3.5.1): layouts of your own, each setup's, saved by a name: 
   await saves.locator('[data-gear-load="0"]').click();
   await page.locator('#gear-body .gear-note', { hasText: 'Wearing Slayer' }).waitFor();
   assert.deepEqual((await gearSaved('old_badger')).setups.melee, mine);
-  // Quests done: every quest an item waits for, each with what (no dragon scimitar in this version)
-  const tip = await page.locator('#gear-body label:has([data-gear-quests])').getAttribute('title');
+  // Quests done: every quest an item waits for, each with what (no dragon scimitar in this version); (v3.6.2) as
+  // ticked on the Quests tab
+  await page.evaluate(() => localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['dragon', 'zanaris'] })));
+  await page.click('.tab[data-tab="gear"]');
+  const tip = await page.locator('#gear-body .gear-quests').getAttribute('title');
   assert.deepEqual(QUEST_ITEMS.map(([q]) => q), ['Dragon Slayer', 'The Fremennik Trials', "Heroes' Quest", "Legends' Quest", 'Lost City', 'Regicide']);
-  assert.equal(tip, `The quests some items wait for (the server checks them as you wield):\n${QUEST_ITEMS.map(([q, names]) => `${q}: ${names.slice(0, -1).join(', ')}${names.length > 1 ? ' and ' : ''}${names.at(-1)}`).join('\n')}\nTicked, these count as done, and the items as yours to wear. Unticked, Best from my bank leaves them out and the lists mark them.`);
-  assert.match(tip, /\nDragon Slayer: [^\n]*Rune platebody/);
-  assert.match(tip, /\nLost City: Dragon dagger and Dragon longsword\n/);
+  const ticked = ['Dragon Slayer', 'Lost City'];
+  assert.equal(tip, `The quests some items wait for (the server checks them as you wield), as ticked on the Quests tab:\n${QUEST_ITEMS.map(([q, names]) => `${ticked.includes(q) ? '✓' : '✗'} ${q}: ${names.slice(0, -1).join(', ')}${names.length > 1 ? ' and ' : ''}${names.at(-1)}`).join('\n')}\nOne that isn't ticked: Best from my bank leaves its items out, and the lists mark them.`);
+  assert.match(tip, /\n✓ Dragon Slayer: [^\n]*Rune platebody/);
+  assert.match(tip, /\n✓ Lost City: Dragon dagger and Dragon longsword\n/);
+  assert.match(tip, /\n✗ Regicide: Dragon halberd\n/);
   assert.doesNotMatch(tip, /Monkey Madness|scimitar/);
+  assert.equal(flat(await page.locator('#gear-body .gear-quests').innerText()), 'Quests done: 2 of 6 tick them on Quests');
+  // (its link: the Quests tab)
+  await page.click('#gear-body [data-gear-quests]');
+  await page.waitForSelector('#view-quests:not([hidden]) #quests-body .quest-sum');
+  assert.match(flat(await text("#quests-body .quest-sum .qs-line")), /^Quest points 5 of 135 2 of 63 quests done/);
+  await page.evaluate(() => localStorage.setItem('lchs.quests.old_badger', JSON.stringify({ done: ['dragon', 'viking', 'hero', 'legends', 'zanaris', 'regicide'] })));
+  await page.click('.tab[data-tab="gear"]');
 });
 
 await check("gear (v3.5): against a player, looked up on the hiscores (their levels what-ifs too): wearing what you do, or their own; each side's max hit, how often it lands and the rolls, a protect prayer taking 40% off the max; the chance you win; specials, the magic shortbow's against its own wearer's Ranged defence", async () => {
@@ -6426,10 +6442,10 @@ await check('Planner+: the name in the title, the header and Settings, the NPCs 
   await page.click('#settings-btn');
   await page.waitForSelector('#settings[open]');
   assert.match(flat(await text('#settings')), /Planner\+ \(formerly Skills\+, and before that Hiscores\+\) reads the Lost City hiscores API/);
-  assert.match(flat(await text('#about-version')), /^Version 3\.6\.1 · /);
+  assert.match(flat(await text('#about-version')), /^Version 3\.6\.2 · /);
   // (v3.5.3) the stylesheet asked for with the version, so a reload after an update gets the new one and its icons
-  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.6.1');
-  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.6\.1$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
+  assert.equal(await page.evaluate(() => document.querySelector('link[rel="stylesheet"][href^="style.css"]')?.getAttribute('href')), 'style.css?v=3.6.2');
+  assert.ok(await page.evaluate(() => [...document.styleSheets].some(s => /style\.css\?v=3\.6\.2$/.test(s.href || '') && s.cssRules.length > 100)), 'and it loads');
   await page.click('#settings-close');
 });
 
@@ -6605,6 +6621,57 @@ await check("clues (v3.6.1): from the clues done at the top, a screenshot always
     assert.deepEqual([d.done, d.got.medium, d.shots.length], [{ easy: 26, medium: 23, hard: 57 }, {}, 1]);
   } finally {
     await page.evaluate(() => { delete window.showOpenFilePicker; localStorage.removeItem('lchs.clues.old_badger'); localStorage.removeItem('lchs.clueUi'); });
+  }
+});
+
+await check("clues (v3.6.2): the puzzle box from a screenshot of the puzzle: its picture and pieces read, and solved from there (picked, or pasted on the puzzle box); a piece that can't be seen is clicked in; a screenshot without a puzzle is said so", async () => {
+  await page.evaluate(() => localStorage.removeItem('lchs.clueUi'));
+  await openMoreTab('clues');
+  await page.click('[data-clue-view="puzzle"]');
+  await page.click('[data-pz-letter="b"]');
+  await page.click('[data-pz-clear]');
+  // a shuffle of the d picture, as the server makes them
+  const { slide, SOLVED } = await import('./puzzle.js');
+  let s = SOLVED.slice(), seed = 62;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  for (let k = 0; k < 101; k++) { const gap = s.indexOf(0); const next = [gap - 5, gap + 5, gap % 5 ? gap - 1 : -1, gap % 5 < 4 ? gap + 1 : -1].filter(j => j >= 0 && j < 25); s = slide(s, next[rnd(next.length)]); }
+  const shot = (name, opts) => ({ name, mimeType: 'image/png', buffer: encodePng(fakePuzzle({ letter: 'd', cells: s, ...opts })) });
+  // picked with the button (the plain file button here)
+  await page.evaluate(() => { window.showOpenFilePicker = undefined; });
+  try {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.pz [data-clue-shot="puzzle"]')]);
+    await chooser.setFiles([shot('puzzle.png', {})]);
+    await page.waitForSelector('.pz-moves');
+    assert.ok(await page.locator('[data-pz-letter="d"]').evaluate(b => b.classList.contains('on')), 'its picture picked');
+    const n = Number(flat(await text('.pz-side p')).match(/^Move 1 of (\d+):/)[1]);
+    assert.equal(flat(await text('.pz .pz-note')), `Read from puzzle.png: ${n} moves to solve it.`);
+    const read = await page.evaluate(() => [...document.querySelectorAll('.pz-board .pz-cell')].map(c => { const p = c.querySelector('.pz-piece'); return p ? Number(p.style.getPropertyValue('--px')) + 1 : 0; }));
+    assert.deepEqual(read, s, 'the pieces as the game shows them');
+    for (let k = 0; k < n; k++) await page.click('.pz-cell.pz-next');
+    assert.match(flat(await text('.pz-side p')), /^Solved\./);
+    // pasted on the puzzle box: a piece that can't be seen (something in front of it) is the one left over
+    const hidden = s.indexOf(7);
+    await pasteShot(shot('image.png', { cover: [hidden], brightness: 0.85, seed: 5 }));
+    await page.waitForSelector('.pz .pz-note');
+    await page.waitForFunction(() => /Read from/.test(document.querySelector('.pz .pz-note')?.textContent || ''));
+    // (the gap and the piece it couldn't see are both empty slots: which is which, the puzzle being one the game can
+    // make tells, or you click them in)
+    assert.match(flat(await text('.pz .pz-note')), /^Read from image\.png: (\d+ moves to solve it\. One piece was hard to be sure of: .+|(one slot|2 slots) couldn't be read\. Click in .+, then Solve\.)$/);
+    if (await page.locator('.pz-moves').count()) await page.click('[data-pz-edit]');
+    assert.ok(await page.locator(`[data-pz-cell="${hidden}"]`).evaluate(c => c.classList.contains('pz-unsure') || c.classList.contains('pz-empty')), 'the slot it couldn\'t see marked');
+    const empty = await page.evaluate(() => [...document.querySelectorAll('.pz-board .pz-cell')].map((c, i) => (c.classList.contains('pz-empty') ? i : -1)).filter(i => i >= 0));
+    for (const at of empty) await page.click(`[data-pz-put="${s[at]}"]`);
+    const board = await page.evaluate(() => [...document.querySelectorAll('.pz-board .pz-cell')].map(c => { const p = c.querySelector('.pz-piece'); return p ? Number(p.style.getPropertyValue('--px')) + 1 : c.classList.contains('pz-empty') ? null : 0; }));
+    assert.deepEqual(board, s);
+    // a screenshot without a puzzle
+    await pasteShot({ name: 'casket.png', buffer: encodePng(fakeReward({ items: [{ icon: 'rune_platebody' }] })) });
+    await page.waitForFunction(() => /No puzzle/.test(document.querySelector('.pz .pz-note')?.textContent || ''));
+    assert.equal(flat(await text('.pz .pz-note')), 'No puzzle in casket.png: take the screenshot while the puzzle shows.');
+    assert.ok(await page.locator('.pz .pz-note').evaluate(m => m.classList.contains('error')));
+  } finally {
+    await page.evaluate(() => { delete window.showOpenFilePicker; localStorage.removeItem('lchs.clueUi'); });
+    await page.click('[data-pz-clear]').catch(() => {});
+    await page.click('[data-clue-view="solve"]');
   }
 });
 

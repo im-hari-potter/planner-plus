@@ -3404,8 +3404,9 @@ export function createPlanner(ctx) {
     const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
     // (a Slayer goal's card on the Goals tab takes screenshots of loot)
     const lootCard = e => (S.tab === 'goals' && !$('view-goals')?.hidden ? e.target.closest?.('.slayer-goal') : null);
-    // (v3.6.1) and the Clues tab a casket's rewards: dropped on the counts at the top, you say which clue it was
-    const onClues = () => S.tab === 'clues' && !$('view-clues')?.hidden && S.account;
+    // (v3.6.1) and the Clues tab a casket's rewards: dropped on the counts at the top, you say which clue it was;
+    // (v3.6.2) on the puzzle box, a puzzle (no account needed for that one)
+    const onClues = () => S.tab === 'clues' && !$('view-clues')?.hidden;
     const clueZone = e => (onClues() && e.target.closest?.('#view-clues') ? (e.target.closest('.clue-top') ? 'top' : 'bottom') : null);
     document.addEventListener('dragover', e => {
       if (!hasFiles(e)) return;

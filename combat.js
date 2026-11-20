@@ -47,13 +47,15 @@ export function ammoProblem(slots) {
   if ((a.power ?? 0) > (w.power ?? 0)) return 'weak';
   return null;
 }
-// The levels an item takes to wield, and the quest: { short: { skill: level }, quest }
+// The levels an item takes to wield, and the quest: { short: { skill: level }, quest }. quests: whether the quests
+// items wait for are done (true, false), or (v3.6.2) which are (a Set of their names)
 export function wieldProblem(id, levels, { quests = true } = {}) {
   const e = EQUIPMENT[id];
   if (!e) return null;
   const short = {};
   for (const [sk, lv] of Object.entries(e.need || {})) if ((levels?.[sk] ?? 1) < lv) short[sk] = lv;
-  const quest = e.quest && !quests ? e.quest : null;
+  const done = quests instanceof Set ? quests.has(e.quest) : !!quests;
+  const quest = e.quest && !done ? e.quest : null;
   return Object.keys(short).length || quest ? { short, quest } : null;
 }
 

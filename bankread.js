@@ -388,7 +388,7 @@ export function sumReads(reads) {
   }
   return { items: [...items.values()], others, unknown, seen, complete: false };
 }
-const curve = (c, k) => (k === 1 ? c : 256 * Math.pow(c / 256, k));
+export const curve = (c, k) => (k === 1 ? c : 256 * Math.pow(c / 256, k));
 
 // ── Several screenshots ───────────────────────────────────────────────────
 // Slots are the bank's own, so screenshots that overlap don't count twice. A

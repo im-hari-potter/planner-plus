@@ -304,11 +304,13 @@ for your account:
   if you type none. Each setup has its own; a layout's button wears it again, and is lit while it's
   what you wear, whatever Best from my bank picks. Save under a name that's taken to save over it;
   ✕ forgets one (with an Undo).
-- **Quests done** says whether the items that wait for a quest count as yours to wear. The server
-  checks six: Dragon Slayer (a rune platebody, any kind, and a green dragonhide body), Lost City (a
-  dragon dagger and longsword), Heroes' Quest (a dragon battleaxe and mace), Regicide (a dragon
-  halberd), Legends' Quest (a dragon sq shield) and The Fremennik Trials (the Fremennik helms).
-  Hover the tick for the full list.
+- **Quests done** follows your ticks on the **Quests** tab: an item that waits for a quest is yours
+  to wear once that quest is ticked done there. The server checks six: Dragon Slayer (a rune
+  platebody, any kind, and a green dragonhide body), Lost City (a dragon dagger and longsword),
+  Heroes' Quest (a dragon battleaxe and mace), Regicide (a dragon halberd), Legends' Quest (a dragon
+  sq shield) and The Fremennik Trials (the Fremennik helms). It says how many of them you've ticked;
+  hover it for which, and its link opens the Quests tab. A quest that isn't ticked: Best from my
+  bank leaves its items out, and the lists mark them.
 
 ### Against a monster
 
@@ -505,7 +507,8 @@ that dry happens to 21% of players**, about 1 in 5. Half of players have one by 
 points (135 in all), and the two miniquests (Alfred Grimhand's Barcrawl and the Mage Arena).
 
 - **Tick what you've done.** The hiscores don't show quests, so it's up to you. The ticks are kept
-  with the account, and your quest points add up as you go.
+  with the account, and your quest points add up as you go. The DPS tab follows them too: an item
+  that waits for a quest is yours to wear once it's ticked.
 - **What it takes** says what each quest still needs: skills against your levels from the hiscores
   (✓, ✗, or ? for a skill too low to be on the hiscores), the quests it needs against your ticks,
   and quest points. **Can start** shows the ones you can do now.
@@ -577,11 +580,17 @@ clue:
 
 ### Puzzle box
 
-![The puzzle box: the picture, the pieces as you see them, and each move](readme-24-puzzle.png)
+![The puzzle box: read from a screenshot, and each move](readme-24-puzzle.png)
 
 Pick the picture your box has, click its pieces in the order you see them (left to right, top to
 bottom, the gap too), and **Solve**. It finds a short way (about 27 moves for the game's shuffles)
 and takes you through it a move at a time: click the piece with the arrow, in the game and here.
+
+Or **Read a screenshot** of the puzzle as the game shows it (or drop or paste one on the puzzle
+box): its picture and every piece are read from it, and it's solved there and then. A piece it
+can't see (something in front of it) is worked out when it can be; otherwise its slot is left empty
+for you to click in. Pieces it wasn't sure of are marked: if the arrows don't match the game,
+**Change the pieces**.
 
 ## Useful tips
 
@@ -687,7 +696,8 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
     clues' pictures are LostHQ's; the sliding puzzles' pieces are the game's icons, from LostHQ's
     item sheet. For reading a casket from a screenshot (v3.6.1), it writes `clueicons.png` (each
     reward's icon as the game draws it, noted ones and coins' piles too) and where the reward
-    window's slots are (`trail_reward.if`).
+    window's slots are (`trail_reward.if`); for reading a puzzle box (v3.6.2), where the puzzle's
+    slots are (`trail_puzzle.if`).
   - Gear (`build-gear.mjs`): every item you can wear, its bonuses and what it takes to wield, each
     weapon's styles and speed, the specials, prayers, potions and combat spells, and how each
     monster attacks, read from the server's item configs and combat scripts (`equip_get_bonuses`,
@@ -701,8 +711,8 @@ Plain HTML, CSS and JavaScript, with no build step for the site.
   `clue-ui.js` (the Clues tab), `clues.js` (finding a clue, the sextant, a casket's rewards over many),
   `puzzle.js` (the puzzle box's solver), `prices.js` (the market and high alch), `bankread.js`
   (reading the bank and the inventory from screenshots; `bankfake.mjs` paints pretend ones for the
-  tests), `cluereader.js` (a casket's rewards from a screenshot, and the kinds of clue they fit;
-  `cluefake.mjs` paints pretend ones), `sortable.js` (dragging), `tablesort.js` (sorting a table by
+  tests), `cluereader.js` (a casket's rewards from a screenshot, and the kinds of clue they fit; a puzzle
+  box's puzzle; `cluefake.mjs` paints pretend ones), `sortable.js` (dragging), `tablesort.js` (sorting a table by
   a column's name).
 - The hiscores API allows one request every 2 seconds, so lookups queue up. It only lets its own
   website read it from a browser; LostKit's tool tabs are the exception, and a copy hosted on
